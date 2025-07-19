@@ -1,0 +1,22 @@
+# MMDetection config
+
+dataset:
+  train_ann: ./data/detection/train/annotations.json
+  train_img_dir: ./data/detection/train/images
+  val_ann: ./data/detection/val/annotations.json
+  val_img_dir: ./data/detection/val/images
+  num_classes: 2
+
+model:
+  config_file: ./models/detection/mmdet_config.py
+  checkpoint: null
+
+train:
+  batch_size: 8
+  epochs: 40
+  optimizer: AdamW
+  lr: 0.001
+  img_size: 512
+
+export:
+  onnx: true 

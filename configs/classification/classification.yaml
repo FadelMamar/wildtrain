@@ -1,0 +1,28 @@
+# Classification config
+
+dataset:
+  train_dir: ./data/classification/train
+  val_dir: ./data/classification/val
+  test_dir: ./data/classification/test
+  num_classes: 10
+
+model:
+  backbone: resnet18  # resnet18, efficientnet_b0, etc.
+  pretrained: true
+
+train:
+  batch_size: 32
+  epochs: 30
+  optimizer: Adam
+  lr: 0.001
+  img_size: 224
+  augment: true
+
+checkpoint:
+  monitor: val_acc
+  save_top_k: 1
+  mode: max
+
+tune:
+  enabled: true
+  n_trials: 20 

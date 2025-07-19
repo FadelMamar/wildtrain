@@ -1,0 +1,22 @@
+# YOLOv8 detection config
+
+dataset:
+  train_path: ./data/detection/train
+  val_path: ./data/detection/val
+  test_path: ./data/detection/test
+  num_classes: 2
+
+model:
+  name: yolov8n
+  pretrained: true
+
+train:
+  batch_size: 16
+  epochs: 50
+  optimizer: SGD
+  lr: 0.01
+  img_size: 640
+  augment: true
+
+export:
+  onnx: true 
