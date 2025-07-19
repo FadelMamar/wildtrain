@@ -1,11 +1,116 @@
 import os
-from typing import Any, Optional
+from typing import Any, Optional, Tuple, Union
 import torch
 from torch.utils.data import DataLoader, ConcatDataset
 import lightning as L
 from torchvision import transforms as T
 from wildata.datasets.roi import load_all_splits_concatenated, ROIDataset
 from pathlib import Path
+import numpy as np
+from tqdm import tqdm
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+def compute_dataset_stats(dataset: Union[ROIDataset, ConcatDataset], 
+                         batch_size: int = 32, 
+                         num_workers: int = 0,) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute mean and standard deviation of images in a dataset.
+    
+    Args:
+        dataset: ROIDataset or ConcatDataset containing images
+        batch_size: Batch size for processing
+        num_workers: Number of workers for data loading
+        max_samples: Maximum number of samples to use (None for all samples)
+    
+    Returns:
+        Tuple of (mean, std) tensors with shape (C,) where C is number of channels
+    """
+    # Create a dataloader with the existing dataset
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=num_workers,
+        drop_last=False
+    )
+    
+    # Initialize accumulators
+    mean_acc = torch.zeros(3)  # Assuming RGB images
+    std_acc = torch.zeros(3)
+    total_pixels = 0
+    num_samples = 0
+    
+    logger.info("Computing dataset statistics...")
+    for batch in tqdm(dataloader, desc="Computing mean/std"):
+        if isinstance(batch, (list, tuple)):
+            images = batch[0]  # Assume first element is images
+        else:
+            images = batch
+            
+        if not isinstance(images, torch.Tensor):
+            continue
+            
+        # Ensure images are in the right format (B, C, H, W)
+        if images.dim() == 3:
+            images = images.unsqueeze(0)  # Add batch dimension
+            
+        batch_size_actual = images.size(0)
+                    
+        # Compute mean for this batch
+        batch_mean = images.mean(dim=[0, 2, 3])  # Mean across batch, height, width
+        batch_pixels = images.size(0) * images.size(2) * images.size(3)
+        
+        # Accumulate mean
+        mean_acc += batch_mean * batch_pixels
+        total_pixels += batch_pixels
+        num_samples += batch_size_actual
+    
+    # Compute final mean
+    mean = mean_acc / total_pixels
+    
+    # Reset for std computation
+    logger.info("Computing standard deviation...")
+    dataloader = DataLoader(
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=num_workers,
+        drop_last=False
+    )
+    
+    for batch in tqdm(dataloader, desc="Computing std"):
+        if isinstance(batch, (list, tuple)):
+            images = batch[0]
+        else:
+            images = batch
+            
+        if not isinstance(images, torch.Tensor):
+            continue
+            
+        if images.dim() == 3:
+            images = images.unsqueeze(0)
+            
+        batch_size_actual = images.size(0)
+        
+        # Compute variance for this batch
+        batch_var = ((images - mean.view(1, 3, 1, 1)) ** 2).mean(dim=[0, 2, 3])
+        batch_pixels = images.size(0) * images.size(2) * images.size(3)
+        
+        # Accumulate variance
+        std_acc += batch_var * batch_pixels
+        num_samples += batch_size_actual
+    
+    # Compute final std
+    std = torch.sqrt(std_acc / total_pixels)
+    
+    logger.info(f"Dataset statistics computed from {num_samples} samples:")
+
+    
+    return mean, std
+
 
 class ClassificationDataModule(L.LightningDataModule):
     """
@@ -21,17 +126,7 @@ class ClassificationDataModule(L.LightningDataModule):
         self.test_dataset: ROIDataset|ConcatDataset
         self.class_mapping: dict[int, str] = dict()
 
-        if transforms is not None:
-            self.transforms = transforms
-
-        else:
-            self.transforms = {
-                'train': T.Compose([
-                    T.ToTensor(),
-                ]),
-                'val': T.Compose([
-                    T.ToTensor(),])
-            }
+        self.transforms = transforms
     
     def _get_class_mapping(self, dataset: ROIDataset|ConcatDataset):
         if isinstance(dataset, ConcatDataset):
