@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import lightning as L
+import torchvision.transforms.v2 as T
 import timm
 from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC
 from typing import Any, Optional, Tuple
@@ -21,7 +22,11 @@ class GenericClassifier(nn.Module):
     backbone_source: str = 'timm', 
     pretrained: bool = True, 
     dropout: float = 0.2,
-    freeze_backbone: bool = True):
+    freeze_backbone: bool = True,
+    input_size: int = 224,
+    mean: list[float] = [0.554, 0.469, 0.348],
+    std: list[float] = [0.203, 0.173, 0.144],
+    ):
 
         super().__init__()
         self.backbone = self._get_backbone(backbone, backbone_source, pretrained)
@@ -31,6 +36,11 @@ class GenericClassifier(nn.Module):
             torch.nn.Dropout(p=dropout),
             torch.nn.LazyLinear(num_classes),
         )
+        self.preprocessing = torch.nn.Sequential(
+            T.Resize(input_size,interpolation=T.InterpolationMode.NEAREST),
+            T.Normalize(mean=mean, std=std),
+        )
+
         self.freeze_backbone = freeze_backbone
         self.num_classes = num_classes
         self.label_to_class_map = label_to_class_map
@@ -49,6 +59,7 @@ class GenericClassifier(nn.Module):
             raise ValueError(f"Unsupported backbone source: {source}")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.preprocessing(x)
         x = self.backbone(x)
         x = self.fc(x)
         return x

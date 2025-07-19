@@ -124,7 +124,11 @@ def run_classification(cfg: DictConfig) -> None:
     Run image classification training or evaluation based on config.
     """
     load_dotenv(ROOT/".env",override=True)
-    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
+    MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+    if MLFLOW_TRACKING_URI is None:
+        raise ValueError("MLFLOW_TRACKING_URI is not set")
+
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
     # DataModule
     data_cfg = cfg.dataset
@@ -147,7 +151,10 @@ def run_classification(cfg: DictConfig) -> None:
     backbone_source=model_cfg.backbone_source,
     label_to_class_map=datamodule.class_mapping,
     dropout=model_cfg.dropout,
-    freeze_backbone=model_cfg.freeze_backbone
+    freeze_backbone=model_cfg.freeze_backbone,
+    input_size=model_cfg.input_size,
+    mean=model_cfg.mean,
+    std=model_cfg.std
     )
     model = Classifier(epochs=cfg.train.epochs, 
                         model=cls_model, lr=cfg.train.lr,
@@ -180,7 +187,7 @@ def run_classification(cfg: DictConfig) -> None:
             run_name=cfg.mlflow.run_name,
             log_model=False,
             checkpoint_path_prefix="classification",
-            tracking_uri=os.getenv("MLFLOW_TRACKING_URI"),
+            tracking_uri=MLFLOW_TRACKING_URI,
         )
 
     trainer = Trainer(
@@ -188,8 +195,8 @@ def run_classification(cfg: DictConfig) -> None:
         accelerator=cfg.train.accelerator,
         precision=cfg.train.precision,
         logger=mlf_logger,
-        limit_train_batches=10,
-        limit_val_batches=10,
+        #limit_train_batches=10,
+        #limit_val_batches=10,
         callbacks=[checkpoint_callback, early_stopping, lr_callback],
     )
 
