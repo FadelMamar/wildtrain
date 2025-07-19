@@ -18,6 +18,7 @@ from ..data.classification_datamodule import ClassificationDataModule
 from ..utils.logging import ROOT
 from ..utils.logging import get_logger
 from ..utils.dvc_tracker import DVCTracker
+from .base import ModelTrainer
 
 logger = get_logger(__name__)
 
@@ -119,118 +120,147 @@ def track_dataset(cfg: DictConfig) -> None:
     except Exception:
         logger.warning(f"Failed to track dataset with DVC: {traceback.format_exc()}")
 
-def run_classification(cfg: DictConfig) -> None:
+class ClassifierTrainer(ModelTrainer):
     """
-    Run image classification training or evaluation based on config.
-    """
-    load_dotenv(ROOT/".env",override=True)
-    MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
-    if MLFLOW_TRACKING_URI is None:
-        raise ValueError("MLFLOW_TRACKING_URI is not set")
-
-    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
-
-    # DataModule
-    data_cfg = cfg.dataset
-    batch_size = cfg.train.batch_size
+    Trainer class for image classification models.
     
-    datamodule = ClassificationDataModule(
-        root_data_directory=data_cfg.root_data_directory,
-        batch_size=batch_size,
-        transforms=create_transforms(cfg.dataset.transforms)
-    )
-    datamodule.setup(stage='fit')
-    num_classes = len(datamodule.class_mapping)
-    example_input,_ = next(iter(datamodule.train_dataloader()))
+    This class handles the training and evaluation of classification models
+    using PyTorch Lightning and MLflow for experiment tracking.
+    """
 
-    # Model
-    model_cfg = cfg.model
-    cls_model = GenericClassifier(num_classes=num_classes, 
-    backbone=model_cfg.backbone, 
-    pretrained= model_cfg.pretrained, 
-    backbone_source=model_cfg.backbone_source,
-    label_to_class_map=datamodule.class_mapping,
-    dropout=model_cfg.dropout,
-    freeze_backbone=model_cfg.freeze_backbone,
-    input_size=model_cfg.input_size,
-    mean=model_cfg.mean,
-    std=model_cfg.std
-    )
-    model = Classifier(epochs=cfg.train.epochs, 
-                        model=cls_model, lr=cfg.train.lr,
-                        threshold=cfg.train.threshold, 
-                        label_smoothing=cfg.train.label_smoothing, 
-                        weight_decay=cfg.train.weight_decay,
-                        lrf=cfg.train.lrf
-                                )
-    model.example_input_array = example_input
+    def get_callbacks(self) -> list[Any]:
+        """
+        Get the callbacks for the trainer.
+        """
+        load_dotenv(ROOT/".env",override=True)
+        MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
+        if MLFLOW_TRACKING_URI is None:
+            raise ValueError("MLFLOW_TRACKING_URI is not set")
 
-    # Callbacks
-    checkpoint_callback = ModelCheckpoint(
-        monitor=cfg.checkpoint.monitor,
-        save_top_k=cfg.checkpoint.save_top_k,
-        save_last=cfg.checkpoint.save_last,
-        mode=cfg.checkpoint.mode,
-        dirpath=ROOT / cfg.checkpoint.dirpath,
-        filename=cfg.checkpoint.filename,
-        save_weights_only=cfg.checkpoint.save_weights_only
-    )
-    lr_callback = LearningRateMonitor(logging_interval="epoch")
-    early_stopping = EarlyStopping(
-        monitor=cfg.checkpoint.monitor,
-        patience=cfg.checkpoint.patience,
-        mode=cfg.checkpoint.mode,
-        min_delta=cfg.checkpoint.min_delta,
-    )
-    mlf_logger = MLFlowLogger(
-            experiment_name=cfg.mlflow.experiment_name,
-            run_name=cfg.mlflow.run_name,
-            log_model=False,
-            checkpoint_path_prefix="classification",
-            tracking_uri=MLFLOW_TRACKING_URI,
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+         # Callbacks
+        checkpoint_callback = ModelCheckpoint(
+            monitor=self.config.checkpoint.monitor,
+            save_top_k=self.config.checkpoint.save_top_k,
+            save_last=self.config.checkpoint.save_last,
+            mode=self.config.checkpoint.mode,
+            dirpath=ROOT / self.config.checkpoint.dirpath,
+            filename=self.config.checkpoint.filename,
+            save_weights_only=self.config.checkpoint.save_weights_only
+        )
+        lr_callback = LearningRateMonitor(logging_interval="epoch")
+        early_stopping = EarlyStopping(
+            monitor=self.config.checkpoint.monitor,
+            patience=self.config.checkpoint.patience,
+            mode=self.config.checkpoint.mode,
+            min_delta=self.config.checkpoint.min_delta,
+        )
+        self.mlflow_logger = MLFlowLogger(
+                experiment_name=self.config.mlflow.experiment_name,
+                run_name=self.config.mlflow.run_name,
+                log_model=False,
+                checkpoint_path_prefix="classification",
+                tracking_uri=MLFLOW_TRACKING_URI,
+            )
+        return [checkpoint_callback, early_stopping, lr_callback]
+    
+    def log_model(self,model: Classifier) -> None:
+        if model.mlflow_run_id:
+            try:
+                with mlflow.start_run(run_id=model.mlflow_run_id):
+                    ckpt = ROOT / self.config.checkpoint.dirpath / "best.ckpt"
+                    best_model = Classifier.load_from_checkpoint(checkpoint_path=ckpt, model=model.model).model.to("cpu")
+                    path = Path(ckpt).with_suffix(".pt")
+                    torch.save(best_model, path)
+                    mlflow.log_artifact(str(path), "checkpoint")
+
+                    cfg_path = Path(ckpt).with_name("config.yaml")
+                    OmegaConf.save(self.config, cfg_path)
+                    mlflow.log_artifact(str(cfg_path), "config")
+                    
+                    #path = Path(ckpt).with_suffix(".torchscript")
+                    #best_model.to_torchscript(file_path=path)
+                    #mlflow.log_artifact(str(path), "checkpoint")
+
+                    if self.config.get('track_dataset'):
+                        track_dataset(self.config)
+
+            except Exception as e:
+                logger.error(f"Error logging model: {e}")
+
+    def run(self,debug: bool = False) -> None:
+        """
+        Run image classification training or evaluation based on config.
+        """
+        self.validate_config()
+        
+        # DataModule
+        data_cfg = self.config.dataset
+        batch_size = self.config.train.batch_size
+        
+        datamodule = ClassificationDataModule(
+            root_data_directory=data_cfg.root_data_directory,
+            batch_size=batch_size,
+            transforms=create_transforms(self.config.dataset.transforms)
+        )
+        datamodule.setup(stage='fit')
+        num_classes = len(datamodule.class_mapping)
+        example_input,_ = next(iter(datamodule.train_dataloader()))
+
+        # Model
+        model_cfg = self.config.model
+        cls_model = GenericClassifier(num_classes=num_classes, 
+        backbone=model_cfg.backbone, 
+        pretrained= model_cfg.pretrained, 
+        backbone_source=model_cfg.backbone_source,
+        label_to_class_map=datamodule.class_mapping,
+        dropout=model_cfg.dropout,
+        freeze_backbone=model_cfg.freeze_backbone,
+        input_size=model_cfg.input_size,
+        mean=model_cfg.mean,
+        std=model_cfg.std
+        )
+        model = Classifier(epochs=self.config.train.epochs, 
+                            model=cls_model, lr=self.config.train.lr,
+                            threshold=self.config.train.threshold, 
+                            label_smoothing=self.config.train.label_smoothing, 
+                            weight_decay=self.config.train.weight_decay,
+                            lrf=self.config.train.lrf
+                                    )
+        model.example_input_array = example_input
+        
+        trainer = Trainer(
+            max_epochs=self.config.train.epochs,
+            accelerator=self.config.train.accelerator,
+            precision=self.config.train.precision,
+            logger=self.mlflow_logger,
+            limit_train_batches=10 if debug else None,
+            limit_val_batches=10 if debug else None,
+            callbacks=self.get_callbacks(),
         )
 
-    trainer = Trainer(
-        max_epochs=cfg.train.epochs,
-        accelerator=cfg.train.accelerator,
-        precision=cfg.train.precision,
-        logger=mlf_logger,
-        #limit_train_batches=10,
-        #limit_val_batches=10,
-        callbacks=[checkpoint_callback, early_stopping, lr_callback],
-    )
+        if self.config.mode == 'train':
+            trainer.fit(model, datamodule=datamodule)
+        elif self.config.mode == 'evaluate':
+            trainer.validate(model, datamodule=datamodule)
+            trainer.test(model, datamodule=datamodule)
+        else:
+            raise ValueError(f"Unknown mode: {self.config.mode}") 
+        
+        if self.config.mlflow.log_model:
+            self.log_model(model)
 
-    if cfg.mode == 'train':
-        trainer.fit(model, datamodule=datamodule)
-    elif cfg.mode == 'evaluate':
-        trainer.validate(model, datamodule=datamodule)
-        trainer.test(model, datamodule=datamodule)
-    else:
-        raise ValueError(f"Unknown mode: {cfg.mode}") 
+# Legacy function for backward compatibility
+def run_classification(cfg: DictConfig,debug: bool = False) -> None:
+    """
+    Run image classification training or evaluation based on config.
     
-    if model.mlflow_run_id and cfg.mlflow.log_model:
-        try:
-            with mlflow.start_run(run_id=model.mlflow_run_id):
-                ckpt = ROOT / cfg.checkpoint.dirpath / "best.ckpt"
-                best_model = Classifier.load_from_checkpoint(ckpt,model=model.model).model.to("cpu")
-                path = Path(ckpt).with_suffix(".pt")
-                torch.save(best_model, path)
-                mlflow.log_artifact(str(path), "checkpoint")
-
-                cfg_path = Path(ckpt).with_name("config.yaml")
-                OmegaConf.save(cfg, cfg_path)
-                mlflow.log_artifact(str(cfg_path), "config")
-                
-
-                #path = Path(ckpt).with_suffix(".torchscript")
-                #best_model.to_torchscript(file_path=path, example_inputs=example_input)
-                #mlflow.log_artifact(str(path), "checkpoint")
-
-                if cfg.get('track_dataset'):
-                    track_dataset(cfg)
-
-        except Exception as e:
-            logger.error(f"Error logging model: {e}")
+    This function is kept for backward compatibility. New code should use
+    ClassifierTrainer class directly.
+    """
+    trainer = ClassifierTrainer(cfg)
+    trainer.run(debug=debug) 
+    
 
 
 
