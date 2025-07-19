@@ -56,8 +56,8 @@ class GenericClassifier(nn.Module):
 class Classifier(L.LightningModule):
     def __init__(
         self,
-        epochs: int,
         model: GenericClassifier,
+        epochs: int=20,
         threshold: float = 0.5,
         label_smoothing: float = 0.0,
         lr: float = 1e-3,

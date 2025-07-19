@@ -1,15 +1,25 @@
+import traceback
+import os
 from omegaconf import DictConfig
+from omegaconf import OmegaConf
 from typing import Any
 import mlflow
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import MLFlowLogger
+from pathlib import Path
+import torch
+from torchvision.transforms import v2
+from wildata.pipeline import PathManager
+from dotenv import load_dotenv
 
 from ..models.classifier import Classifier,GenericClassifier
 from ..data.classification_datamodule import ClassificationDataModule
 from ..utils.logging import ROOT
+from ..utils.logging import get_logger
+from ..utils.dvc_tracker import DVCTracker
 
-
+logger = get_logger(__name__)
 
 def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
     """
@@ -26,7 +36,6 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
     """
     from torchvision import transforms as T
     import torchvision.transforms.functional as F
-    from omegaconf import DictConfig
     
     def create_transform_list(transform_configs: list) -> T.Compose:
         """Create a list of transforms from configuration."""
@@ -97,13 +106,30 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
     
     return result
 
+def track_dataset(cfg: DictConfig) -> None:
+    """
+    Track the dataset with DVC and log the dataset information to MLflow.
+    """
+    dvc_tracker = DVCTracker(ROOT/"dvc")
+    path_manager = PathManager(cfg.dataset.root_data_directory)
+    dataset_path = path_manager.get_framework_dir("roi").resolve()
+    dataset_name = cfg.get('dataset_name', dataset_path.name)
+    try:
+        dvc_tracker.track_dataset_for_training(dataset_path, dataset_name,link_to_mlflow=True)
+    except Exception:
+        logger.warning(f"Failed to track dataset with DVC: {traceback.format_exc()}")
+
 def run_classification(cfg: DictConfig) -> None:
     """
     Run image classification training or evaluation based on config.
     """
+    load_dotenv(ROOT/".env",override=True)
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
+
     # DataModule
     data_cfg = cfg.dataset
     batch_size = cfg.train.batch_size
+    
     datamodule = ClassificationDataModule(
         root_data_directory=data_cfg.root_data_directory,
         batch_size=batch_size,
@@ -111,6 +137,7 @@ def run_classification(cfg: DictConfig) -> None:
     )
     datamodule.setup(stage='fit')
     num_classes = len(datamodule.class_mapping)
+    example_input,_ = next(iter(datamodule.train_dataloader()))
 
     # Model
     model_cfg = cfg.model
@@ -123,12 +150,13 @@ def run_classification(cfg: DictConfig) -> None:
     freeze_backbone=model_cfg.freeze_backbone
     )
     model = Classifier(epochs=cfg.train.epochs, 
-                                    model=cls_model, lr=cfg.train.lr,
-                                    threshold=cfg.train.threshold, 
-                                    label_smoothing=cfg.train.label_smoothing, 
-                                    weight_decay=cfg.train.weight_decay,
-                                    lrf=cfg.train.lrf
+                        model=cls_model, lr=cfg.train.lr,
+                        threshold=cfg.train.threshold, 
+                        label_smoothing=cfg.train.label_smoothing, 
+                        weight_decay=cfg.train.weight_decay,
+                        lrf=cfg.train.lrf
                                 )
+    model.example_input_array = example_input
 
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
@@ -150,9 +178,9 @@ def run_classification(cfg: DictConfig) -> None:
     mlf_logger = MLFlowLogger(
             experiment_name=cfg.mlflow.experiment_name,
             run_name=cfg.mlflow.run_name,
-            tracking_uri=cfg.mlflow.tracking_uri,
-            log_model=cfg.mlflow.log_model,
+            log_model=False,
             checkpoint_path_prefix="classification",
+            tracking_uri=os.getenv("MLFLOW_TRACKING_URI"),
         )
 
     trainer = Trainer(
@@ -160,6 +188,8 @@ def run_classification(cfg: DictConfig) -> None:
         accelerator=cfg.train.accelerator,
         precision=cfg.train.precision,
         logger=mlf_logger,
+        limit_train_batches=10,
+        limit_val_batches=10,
         callbacks=[checkpoint_callback, early_stopping, lr_callback],
     )
 
@@ -171,7 +201,33 @@ def run_classification(cfg: DictConfig) -> None:
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}") 
     
-    #if model.mlflow_run_id:
-    #    with mlflow.start_run(run_id=model.mlflow_run_id):
-    #        ckpt = ROOT / cfg.checkpoint.dirpath / "best.ckpt"
-    #        Classifier.load_from_checkpoint(ckpt)
+    if model.mlflow_run_id and cfg.mlflow.log_model:
+        try:
+            with mlflow.start_run(run_id=model.mlflow_run_id):
+                ckpt = ROOT / cfg.checkpoint.dirpath / "best.ckpt"
+                best_model = Classifier.load_from_checkpoint(ckpt,model=model.model).model.to("cpu")
+                path = Path(ckpt).with_suffix(".pt")
+                torch.save(best_model, path)
+                mlflow.log_artifact(str(path), "checkpoint")
+
+                cfg_path = Path(ckpt).with_name("config.yaml")
+                OmegaConf.save(cfg, cfg_path)
+                mlflow.log_artifact(str(cfg_path), "config")
+                
+
+                #path = Path(ckpt).with_suffix(".torchscript")
+                #best_model.to_torchscript(file_path=path, example_inputs=example_input)
+                #mlflow.log_artifact(str(path), "checkpoint")
+
+                if cfg.get('track_dataset'):
+                    track_dataset(cfg)
+
+        except Exception as e:
+            logger.error(f"Error logging model: {e}")
+
+
+
+
+
+
+
