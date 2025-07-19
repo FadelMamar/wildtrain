@@ -2,10 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import lightning as L
-from contextlib import nullcontext
-
+import timm
 from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC
 from typing import Any, Optional, Tuple
+
+from ..utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 class GenericClassifier(nn.Module):
     """
@@ -18,7 +21,7 @@ class GenericClassifier(nn.Module):
     backbone_source: str = 'timm', 
     pretrained: bool = True, 
     dropout: float = 0.2,
-    no_grad_backbone: bool = True):
+    freeze_backbone: bool = True):
 
         super().__init__()
         self.backbone = self._get_backbone(backbone, backbone_source, pretrained)
@@ -28,29 +31,25 @@ class GenericClassifier(nn.Module):
             torch.nn.Dropout(p=dropout),
             torch.nn.LazyLinear(num_classes),
         )
-        self.no_grad_backbone = no_grad_backbone
+        self.freeze_backbone = freeze_backbone
         self.num_classes = num_classes
         self.label_to_class_map = label_to_class_map
 
+        if freeze_backbone:
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+            self.backbone.eval()
+            logger.info(f"Backbone {backbone} frozen")
+
     def _get_backbone(self, backbone: str, source: str, pretrained: bool)->nn.Module:
         if source == 'timm':
-            import timm
-            model = timm.create_model(backbone, pretrained=pretrained, num_classes=0, global_pool='avg')
-            return model
-        elif source == 'mmpretrain':
-            from mmpretrain import get_model
-            model = get_model(backbone, pretrained=pretrained)
-            if hasattr(model, 'head'):
-                model.head = nn.Identity()
-            else:
-                raise ValueError("MMPretrain model does not have a 'head' attribute.")
+            model = timm.create_model(backbone, pretrained=pretrained, num_classes=0)
             return model
         else:
             raise ValueError(f"Unsupported backbone source: {source}")
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        with torch.no_grad() if self.no_grad_backbone else nullcontext():
-            x = self.backbone(x)
+        x = self.backbone(x)
         x = self.fc(x)
         return x
 
@@ -67,11 +66,14 @@ class Classifier(L.LightningModule):
     ):
         super().__init__()
 
-        self.save_hyperparameters(ignore=["threshold", "model"])
+        self.save_hyperparameters(ignore=["model"])
 
         self.model = model
         self.num_classes = model.num_classes
         self.label_to_class_map = model.label_to_class_map
+
+        self.mlflow_run_id = None 
+        self.mlflow_experiment_id = None
 
         # metrics
         cfg = dict(task="multiclass", num_classes=self.num_classes, average=None)
@@ -128,6 +130,16 @@ class Classifier(L.LightningModule):
         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
 
     def on_validation_epoch_end(self):
+        if self.mlflow_run_id is None:
+            self.mlflow_run_id = getattr(self.logger, "run_id", None)
+            self.mlflow_experiment_id = getattr(self.logger, "experiment_id", None)
+            if self.mlflow_run_id is not None:
+                logger.info(f"MLflow run_id: {self.mlflow_run_id}")
+                logger.info(f"MLflow experiment_id: {self.mlflow_experiment_id}")
+            else:
+                logger.warning("No mlflow logger found")
+                self.mlflow_run_id = "None"
+
         for name, metric in self.metrics.items():
             score = metric.compute().cpu()
             self.log(f"val_{name}", score.mean())
@@ -135,7 +147,6 @@ class Classifier(L.LightningModule):
                 cls_name = self.label_to_class_map.get(i, i)
                 self.log(f"val_{name}_class_{cls_name}", score)
 
-    
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(
             params=self.model.parameters(),

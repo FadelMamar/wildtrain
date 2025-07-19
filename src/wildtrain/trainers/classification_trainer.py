@@ -1,10 +1,13 @@
 from omegaconf import DictConfig
 from typing import Any
+import mlflow
 from lightning import Trainer
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, LearningRateMonitor
 from lightning.pytorch.loggers import MLFlowLogger
+
 from ..models.classifier import Classifier,GenericClassifier
 from ..data.classification_datamodule import ClassificationDataModule
+from ..utils.logging import ROOT
 
 
 
@@ -73,11 +76,7 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
                 transform_list.append(transform_instance)
             except Exception as e:
                 raise ValueError(f"Failed to create transform {transform_name} with params {params}: {e}")
-        
-        # Always add ToTensor at the end if not already present
-        if not any(isinstance(t, T.ToTensor) for t in transform_list):
-            transform_list.append(T.ToTensor())
-        
+                
         return T.Compose(transform_list)
     
     result = {}
@@ -118,9 +117,10 @@ def run_classification(cfg: DictConfig) -> None:
     cls_model = GenericClassifier(num_classes=num_classes, 
     backbone=model_cfg.backbone, 
     pretrained= model_cfg.pretrained, 
+    backbone_source=model_cfg.backbone_source,
     label_to_class_map=datamodule.class_mapping,
     dropout=model_cfg.dropout,
-    no_grad_backbone=model_cfg.no_grad_backbone
+    freeze_backbone=model_cfg.freeze_backbone
     )
     model = Classifier(epochs=cfg.train.epochs, 
                                     model=cls_model, lr=cfg.train.lr,
@@ -133,32 +133,32 @@ def run_classification(cfg: DictConfig) -> None:
     # Callbacks
     checkpoint_callback = ModelCheckpoint(
         monitor=cfg.checkpoint.monitor,
-        save_top_k=1,
-        save_last=True,
+        save_top_k=cfg.checkpoint.save_top_k,
+        save_last=cfg.checkpoint.save_last,
         mode=cfg.checkpoint.mode,
-        dirpath=cfg.checkpoint.dirpath,
-        filename='best',
-        save_weights_only=True
+        dirpath=ROOT / cfg.checkpoint.dirpath,
+        filename=cfg.checkpoint.filename,
+        save_weights_only=cfg.checkpoint.save_weights_only
     )
     lr_callback = LearningRateMonitor(logging_interval="epoch")
     early_stopping = EarlyStopping(
         monitor=cfg.checkpoint.monitor,
         patience=cfg.checkpoint.patience,
         mode=cfg.checkpoint.mode,
-        min_delta=1e-4,
+        min_delta=cfg.checkpoint.min_delta,
     )
     mlf_logger = MLFlowLogger(
             experiment_name=cfg.mlflow.experiment_name,
             run_name=cfg.mlflow.run_name,
             tracking_uri=cfg.mlflow.tracking_uri,
             log_model=cfg.mlflow.log_model,
-            checkpoint_path_prefix="checkpoints",
+            checkpoint_path_prefix="classification",
         )
 
     trainer = Trainer(
         max_epochs=cfg.train.epochs,
-        accelerator='auto',
-        precision="bf16-mixed",
+        accelerator=cfg.train.accelerator,
+        precision=cfg.train.precision,
         logger=mlf_logger,
         callbacks=[checkpoint_callback, early_stopping, lr_callback],
     )
@@ -170,3 +170,8 @@ def run_classification(cfg: DictConfig) -> None:
         trainer.test(model, datamodule=datamodule)
     else:
         raise ValueError(f"Unknown mode: {cfg.mode}") 
+    
+    #if model.mlflow_run_id:
+    #    with mlflow.start_run(run_id=model.mlflow_run_id):
+    #        ckpt = ROOT / cfg.checkpoint.dirpath / "best.ckpt"
+    #        Classifier.load_from_checkpoint(ckpt)

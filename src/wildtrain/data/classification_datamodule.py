@@ -1,7 +1,7 @@
 import os
 from typing import Any, Optional
 import torch
-from torch.utils.data import DataLoader, Dataset, ConcatDataset
+from torch.utils.data import DataLoader, ConcatDataset
 import lightning as L
 from torchvision import transforms as T
 from wildata.datasets.roi import load_all_splits_concatenated, ROIDataset
@@ -48,6 +48,7 @@ class ClassificationDataModule(L.LightningDataModule):
             self.train_dataset = data.pop('train')
             self.val_dataset = data.pop('val')
             self.class_mapping = self._get_class_mapping(self.train_dataset)
+            assert self.class_mapping == self._get_class_mapping(self.val_dataset), "Class mapping mismatch between train and val datasets"
         elif stage == "validate":
             self.val_dataset = load_all_splits_concatenated(self.root_data_directory, splits=['val'], transform=self.transforms)['val']
             self.class_mapping = self._get_class_mapping(self.val_dataset)

@@ -45,23 +45,29 @@ model:
   freeze_backbone: true
 
 train:
-  batch_size: 16
-  epochs: 30
-  lr: 0.001
+  batch_size: 8
+  epochs: 1
+  lr: 0.0001
   threshold: 0.5
   label_smoothing: 0.0
   weight_decay: 0.0001
-  lrf: 0.01
+  lrf: 0.1
+  precision: bf16-mixed
+  accelerator: auto
 
 checkpoint:
-  monitor: val_acc
+  monitor: val_f1score
   save_top_k: 1
   mode: max
-  dirpath: "./checkpoints/classification"
+  save_last: true
+  dirpath: "checkpoints/classification"
   patience: 10
+  save_weights_only: true
+  filename: "best"
+  min_delta: 0.001
 
 mlflow:
   experiment_name: wildtrain_classification
-  run_name: resnet18_basic
-  tracking_uri: "file:./mlruns"
-  log_model: true 
+  run_name: demo
+  tracking_uri: "file:mlruns"
+  log_model: false 

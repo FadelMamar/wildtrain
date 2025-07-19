@@ -1,7 +1,36 @@
-from omegaconf import DictConfig
+import logging 
+import sys
+from typing import Optional
+from pathlib import Path
 
-def setup_logging(cfg: DictConfig) -> None:
+ROOT = Path(__file__).parents[3]
+
+def setup_logging(level="INFO", log_file: Optional[str] = None):
+    """Setup logging configuration."""
+    level = getattr(logging, level.upper(), logging.INFO)
+    handlers = [
+        logging.StreamHandler(sys.stdout),
+    ]
+    if isinstance(log_file, str):
+        file_handler = logging.FileHandler(log_file)
+        handlers.append(file_handler)
+
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+    )
+
+
+def get_logger(name: str) -> logging.Logger:
     """
-    Set up logging (console, MLflow, etc.) based on config.
+    Get a logger with the given name.
+
+    Args:
+        name: Logger name
+
+    Returns:
+        Configured logger
     """
-    pass 
+    return logging.getLogger(name)
+
