@@ -1,0 +1,67 @@
+# Example configuration for WildTrain classification training
+# This config demonstrates basic ResNet18 training with data augmentation
+
+task: classification
+mode: train
+
+dataset:
+  root_data_directory: "D:/workspace/data/demo-dataset"
+  transforms:
+    train:
+      - name: RandomResizedCrop
+        params:
+          size: 224
+          scale: [0.8, 1.0]
+      - name: RandomHorizontalFlip
+        params:
+          p: 0.5
+      - name: ColorJitter
+        params:
+          brightness: 0.2
+          contrast: 0.2
+          saturation: 0.2
+          hue: 0.1
+      - name: RandomRotation
+        params:
+          degrees: 10
+      - name: Normalize
+        params:
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+    val:
+      - name: Resize
+        params:
+          size: 224
+      - name: Normalize
+        params:
+          mean: [0.485, 0.456, 0.406]
+          std: [0.229, 0.224, 0.225]
+
+model:
+  backbone: timm/vit_small_patch16_224.dino
+  pretrained: true
+  backbone_source: timm
+  dropout: 0.2
+  freeze_backbone: true
+
+train:
+  batch_size: 16
+  epochs: 30
+  lr: 0.001
+  threshold: 0.5
+  label_smoothing: 0.0
+  weight_decay: 0.0001
+  lrf: 0.01
+
+checkpoint:
+  monitor: val_acc
+  save_top_k: 1
+  mode: max
+  dirpath: "./checkpoints/classification"
+  patience: 10
+
+mlflow:
+  experiment_name: wildtrain_classification
+  run_name: resnet18_basic
+  tracking_uri: "file:./mlruns"
+  log_model: true 
