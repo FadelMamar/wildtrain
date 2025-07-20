@@ -11,29 +11,9 @@ Usage:
     python examples/train_classifier.py
 """
 
-import os
-import sys
-from pathlib import Path
-from omegaconf import OmegaConf
-from wildtrain.trainers.classification_trainer import run_classification
+from omegaconf import OmegaConf, DictConfig
+from wildtrain.trainers import ClassifierTrainer
 import traceback
-
-def load_config(config_path: str):
-    """
-    Load configuration from a YAML file.
-    
-    Args:
-        config_path: Path to the YAML configuration file
-        
-    Returns:
-        OmegaConf configuration object
-    """
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    
-    config = OmegaConf.load(config_path)
-    print(f"✅ Loaded configuration from: {config_path}")
-    return config
 
 
 def main():
@@ -46,12 +26,14 @@ def main():
     # Create output directories
     print("-" * 40)
     
-    basic_config = load_config(r"D:\workspace\repos\wildtrain\configs\classification\example_config.yaml")
+    config = OmegaConf.load(r"D:\workspace\repos\wildtrain\configs\classification\example_config.yaml")
+
     print("Configuration:")
-    print(OmegaConf.to_yaml(basic_config))
+    print(OmegaConf.to_yaml(config))
     
     try:
-        run_classification(basic_config)
+        trainer = ClassifierTrainer(DictConfig(config))
+        trainer.run(debug=True)
         print("✅ Training completed successfully!")
     except Exception as e:
         print(f"❌ Training failed: {traceback.format_exc()}")
