@@ -26,10 +26,22 @@ pyproject.toml   # Project metadata
 - Modular, extensible, type-annotated codebase
 
 ## Usage
-### Install dependencies
+### Install MMDet
 ```bash
-pip install -r requirements.txt
+uv pip install torch==2.0.0 torchvision
+uv pip install -U openmim
+uv run mim install mmengine
 ```
+- If CPU only:
+``uv pip install mmcv==2.0.1 -f https://download.openmmlab.com/mmcv/dist/cpu/torch2.1/index.html``
+- If CUDA
+``uv pip install mmcv==2.0.1 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.1/index.html``
+- Mopre info at: https://mmcv.readthedocs.io/en/latest/get_started/installation.html#install-mmcv-lite
+
+- Install mmdet
+``uv run mim install mmdet``
+``uv pip install numpy==1.26.4``
+
 
 ### Train a model
 ```bash
