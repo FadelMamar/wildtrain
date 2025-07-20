@@ -155,14 +155,14 @@ class ClassifierTrainer(ModelTrainer):
             mode=self.config.checkpoint.mode,
             min_delta=self.config.checkpoint.min_delta,
         )
-        self.mlflow_logger = MLFlowLogger(
+        mlflow_logger = MLFlowLogger(
                 experiment_name=self.config.mlflow.experiment_name,
                 run_name=self.config.mlflow.run_name,
                 log_model=False,
                 checkpoint_path_prefix="classification",
                 tracking_uri=MLFLOW_TRACKING_URI,
             )
-        return [checkpoint_callback, early_stopping, lr_callback]
+        return [checkpoint_callback, early_stopping, lr_callback, mlflow_logger]
     
     def log_model(self,model: Classifier) -> None:
         if model.mlflow_run_id:
@@ -228,15 +228,16 @@ class ClassifierTrainer(ModelTrainer):
                             lrf=self.config.train.lrf
                                     )
         model.example_input_array = example_input
-        
+        callbacks = self.get_callbacks()
+        mlflow_logger = callbacks.pop(-1)
         trainer = Trainer(
             max_epochs=self.config.train.epochs,
             accelerator=self.config.train.accelerator,
             precision=self.config.train.precision,
-            logger=self.mlflow_logger,
+            logger=mlflow_logger,
             limit_train_batches=10 if debug else None,
             limit_val_batches=10 if debug else None,
-            callbacks=self.get_callbacks(),
+            callbacks=callbacks,
         )
 
         if self.config.mode == 'train':
@@ -249,17 +250,6 @@ class ClassifierTrainer(ModelTrainer):
         
         if self.config.mlflow.log_model:
             self.log_model(model)
-
-# Legacy function for backward compatibility
-def run_classification(cfg: DictConfig,debug: bool = False) -> None:
-    """
-    Run image classification training or evaluation based on config.
-    
-    This function is kept for backward compatibility. New code should use
-    ClassifierTrainer class directly.
-    """
-    trainer = ClassifierTrainer(cfg)
-    trainer.run(debug=debug) 
     
 
 
