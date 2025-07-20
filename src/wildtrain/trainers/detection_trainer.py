@@ -34,10 +34,9 @@ class MMDetectionTrainer(ModelTrainer):
     def __init__(self, config: DictConfig):
         super().__init__(config)
 
-        self.mmdet_cfg = Config.fromfile(self.config.model.config_file)
-        self.class_mapping = dict()
-
     def _setup(self) -> None:
+        
+        self.mmdet_cfg = Config.fromfile(self.config.model.config_file)
         
         with open(self.config.dataset.dataset_info,"r") as file:
             dataset_info = json.load(file)
@@ -45,7 +44,6 @@ class MMDetectionTrainer(ModelTrainer):
         self.class_mapping = {item['id']:item['name']  for item in dataset_info['classes']}
         
         # number of classes
-        
         if self.config.dataset.load_as_single_class:
             num_classes = 1
             classes = ('widlife',)
@@ -85,8 +83,6 @@ class MMDetectionTrainer(ModelTrainer):
         self.mmdet_cfg.model.test_cfg.rcnn.nms.iou_threshold = 0.5
         self.mmdet_cfg.model.test_cfg.rcnn.max_per_img = 300
         
-        
-        
         # setting dataloaders values
         for name in ["batch_size","num_workers","persistent_workers"]:
             value = getattr(self.config.dataloader, name)
@@ -115,7 +111,6 @@ class MMDetectionTrainer(ModelTrainer):
             value = getattr(self.config.val_evaluator, name)
             if value is not None:
                 setattr(self.mmdet_cfg.val_evaluator, name, value)
-        
         
         if self.config.train.amp == True and torch.cuda.is_available():
             self.mmdet_cfg.optim_wrapper.type = "AmpOptimWrapper"
@@ -146,10 +141,15 @@ class MMDetectionTrainer(ModelTrainer):
         from mmengine.registry import DATASETS
         try:
             dataset_cfg = self.mmdet_cfg.train_dataloader.dataset
-            data = DATASETS.build(dataset_cfg)
+            DATASETS.build(dataset_cfg)
         except Exception:
             print(traceback.format_exc())
-
+    
+    def _freeze_backbone(self):
+        backbone = self.runner.model.backbone
+        for param in backbone.parameters():
+            param.requires_grad = False
+        logger.info("Backbone has been frozen")
         
     def run(self,debug: bool = False) -> None:
         """
@@ -159,6 +159,10 @@ class MMDetectionTrainer(ModelTrainer):
             debug: If True, run with limited batches for debugging
         """
         self._setup()
+        
+        if self.config.train.freeze_backbone:
+            self._freeze_backbone()
+        
         self.runner.train()
         
 
