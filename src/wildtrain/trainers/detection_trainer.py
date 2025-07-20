@@ -71,7 +71,7 @@ class MMDetectionTrainer(ModelTrainer):
                                                   ]
         
         # Region proposal
-        self.mmdet_cfg.model.train_cfg.rpn_proposal.nms = 0.6
+        self.mmdet_cfg.model.train_cfg.rpn_proposal.nms.iou_threshold = 0.6
         self.mmdet_cfg.model.train_cfg.rpn_proposal.max_per_img = 300
         self.mmdet_cfg.model.train_cfg.rcnn.assigner = dict(type='MaxIoUAssigner',
                                                             pos_iou_thr=self.config.train.pos_iou_thr,
@@ -80,9 +80,9 @@ class MMDetectionTrainer(ModelTrainer):
                                                             match_low_quality=False,
                                                             ignore_iof_thr=-1)
         
-        self.mmdet_cfg.model.test_cfg.rpn.nms.iou_threshold = 0.7
+        self.mmdet_cfg.model.test_cfg.rpn.nms.iou_threshold = 0.6
         self.mmdet_cfg.model.test_cfg.rpn.max_per_img = 300
-        self.mmdet_cfg.model.test_cfg.rcnn.nms = dict(type='nms', iou_threshold=0.5)
+        self.mmdet_cfg.model.test_cfg.rcnn.nms.iou_threshold = 0.5
         self.mmdet_cfg.model.test_cfg.rcnn.max_per_img = 300
         
         
