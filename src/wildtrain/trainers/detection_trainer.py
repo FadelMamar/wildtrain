@@ -3,6 +3,8 @@ import sys
 import subprocess
 import tempfile
 import json
+import torch
+import traceback
 from pathlib import Path
 from typing import Any, Optional
 from omegaconf import DictConfig, OmegaConf
@@ -10,9 +12,10 @@ import mlflow
 from dotenv import load_dotenv
 
 import mmdet
-from mmengine.config import Config, DictAction
+from mmengine.config import Config
 from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
+from mmdet.datasets.coco import CocoDataset
 
 from ..utils.logging import ROOT, get_logger
 from .base import ModelTrainer
@@ -42,10 +45,13 @@ class MMDetectionTrainer(ModelTrainer):
         self.class_mapping = {item['id']:item['name']  for item in dataset_info['classes']}
         
         # number of classes
+        
         if self.config.dataset.load_as_single_class:
             num_classes = 1
+            classes = ('widlife',)
         else:
             num_classes = len(self.class_mapping)
+            classes = tuple(self.class_mapping[i] for i in range(len(self.class_mapping)))
             
         self.mmdet_cfg.model.roi_head.bbox_head.num_classes = num_classes
         
@@ -53,9 +59,9 @@ class MMDetectionTrainer(ModelTrainer):
         self.mmdet_cfg.train_cfg.max_epochs = self.config.train.epochs
         self.mmdet_cfg.train_cfg.val_interval = self.config.train.val_interval
         
-        setattr(self.mmdet_cfg.optim_wrapper, "optimizer", self.config.train.optimizer)
-        setattr(self.mmdet_cfg, "param_scheduler", self.config.train.param_scheduler)
-        setattr(self.mmdet_cfg.default_hooks, "checkpoint", self.config.train.checkpointer)
+        setattr(self.mmdet_cfg.optim_wrapper, "optimizer", dict(self.config.train.optimizer))
+        setattr(self.mmdet_cfg, "param_scheduler", dict(self.config.train.param_scheduler))
+        setattr(self.mmdet_cfg.default_hooks, "checkpoint", dict(self.config.train.checkpointer))
         
         self.mmdet_cfg.visualizer.vis_backends = [{'type': 'MLflowVisBackend', 
                                                    'tracking_uri': self.config.mlflow.tracking_uri, 
@@ -68,9 +74,9 @@ class MMDetectionTrainer(ModelTrainer):
         self.mmdet_cfg.model.train_cfg.rpn_proposal.nms = 0.6
         self.mmdet_cfg.model.train_cfg.rpn_proposal.max_per_img = 300
         self.mmdet_cfg.model.train_cfg.rcnn.assigner = dict(type='MaxIoUAssigner',
-                                                            pos_iou_thr=self.config.pos_iou_thr,
-                                                            neg_iou_thr=self.config.neg_iou_thr,
-                                                            min_pos_iou=self.config.min_pos_iou,
+                                                            pos_iou_thr=self.config.train.pos_iou_thr,
+                                                            neg_iou_thr=self.config.train.neg_iou_thr,
+                                                            min_pos_iou=self.config.train.min_pos_iou,
                                                             match_low_quality=False,
                                                             ignore_iof_thr=-1)
         
@@ -92,25 +98,26 @@ class MMDetectionTrainer(ModelTrainer):
         ## Train loader
         self.mmdet_cfg.train_dataloader.dataset.data_root = self.config.ROOT_DATASET
         self.mmdet_cfg.train_dataloader.dataset.ann_file = self.config.dataset.train_ann
-        self.mmdet_cfg.train_dataloader.dataset.data_prefix.img = ""
+        self.mmdet_cfg.train_dataloader.dataset.data_prefix.img = self.config.dataset.train_images
         self.mmdet_cfg.train_dataloader.dataset.filter_cfg.filter_empty_gt = self.config.dataset.filter_empty_gt.train
+        self.mmdet_cfg.train_dataloader.dataset.metainfo.classes = classes
         
         ## Val loader
         self.mmdet_cfg.val_dataloader.dataset.data_root = self.config.ROOT_DATASET
         self.mmdet_cfg.val_dataloader.dataset.ann_file = self.config.dataset.val_ann
         self.mmdet_cfg.val_dataloader.dataset.test_mode = True
-        self.mmdet_cfg.val_dataloader.dataset.data_prefix.img = ""
+        self.mmdet_cfg.val_dataloader.dataset.data_prefix.img = self.config.dataset.val_images
         self.mmdet_cfg.val_dataloader.dataset.filter_cfg.filter_empty_gt = self.config.dataset.filter_empty_gt.val
-        
+        self.mmdet_cfg.val_dataloader.dataset.metainfo.classes = classes
+
         ## evaluator
-        
         for name in ["type","ann_file","metric","format_only"]:
             value = getattr(self.config.val_evaluator, name)
             if value is not None:
                 setattr(self.mmdet_cfg.val_evaluator, name, value)
         
         
-        if self.config.train.amp == True:
+        if self.config.train.amp == True and torch.cuda.is_available():
             self.mmdet_cfg.optim_wrapper.type = "AmpOptimWrapper"
             self.mmdet_cfg.optim_wrapper.loss_scale = 'dynamic'
 
@@ -127,11 +134,22 @@ class MMDetectionTrainer(ModelTrainer):
             self.mmdet_cfg.work_dir = str(ROOT / 'work_dirs' / 'mmdet')
         Path(self.mmdet_cfg.work_dir).mkdir(parents=True, exist_ok=True)
         
+        self._try_dataset_loading()
+        
         # build the runner from config
         if 'runner_type' not in self.mmdet_cfg:
             self.runner = Runner.from_cfg(self.mmdet_cfg)
         else:
             self.runner = RUNNERS.build(self.mmdet_cfg)
+            
+    def _try_dataset_loading(self,):
+        from mmengine.registry import DATASETS
+        try:
+            dataset_cfg = self.mmdet_cfg.train_dataloader.dataset
+            data = DATASETS.build(dataset_cfg)
+        except Exception:
+            print(traceback.format_exc())
+
         
     def run(self,debug: bool = False) -> None:
         """
@@ -140,7 +158,6 @@ class MMDetectionTrainer(ModelTrainer):
         Args:
             debug: If True, run with limited batches for debugging
         """
-
         self._setup()
         self.runner.train()
         
