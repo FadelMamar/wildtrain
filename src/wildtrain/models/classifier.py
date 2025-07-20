@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import lightning as L
-import torchvision.transforms.v2 as T
+import torchvision.transforms as T
 import timm
 from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC
 from typing import Any, Optional, Tuple

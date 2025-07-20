@@ -9,7 +9,6 @@ from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping, Learning
 from lightning.pytorch.loggers import MLFlowLogger
 from pathlib import Path
 import torch
-from torchvision.transforms import v2
 from wildata.pipeline import PathManager
 from dotenv import load_dotenv
 

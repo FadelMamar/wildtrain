@@ -5,13 +5,11 @@ This module provides trainer classes for different types of computer vision task
 """
 
 from .base import ModelTrainer
-from .classification_trainer import ClassifierTrainer, run_classification
-from .detection_trainer import DetectorTrainer, run_detection
+from .classification_trainer import ClassifierTrainer
+from .detection_trainer import MMDetectionTrainer
 
 __all__ = [
     "ModelTrainer",
     "ClassifierTrainer", 
-    "DetectorTrainer",
-    "run_classification",
-    "run_detection",
+    "MMDetectionTrainer",
 ]
