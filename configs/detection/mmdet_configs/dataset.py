@@ -1,9 +1,5 @@
 # dataset settings
 dataset_type = 'CocoDataset'
-data_root = ""
-train_ann_file = ""
-val_ann_file = ""
-image_prefix = ""
 
 backend_args = None
 
@@ -35,9 +31,9 @@ train_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         metainfo=dict(classes=("wildlife",)),
-        data_root=data_root,
-        ann_file=train_ann_file,
-        data_prefix=dict(img=image_prefix),
+        data_root="",
+        ann_file="",
+        data_prefix=dict(img=""),
         filter_cfg=dict(filter_empty_gt=True, min_size=32),
         pipeline=train_pipeline,
         backend_args=backend_args))
@@ -50,10 +46,10 @@ val_dataloader = dict(
     sampler=dict(type='DefaultSampler', shuffle=False),
     dataset=dict(
         type=dataset_type,
-        data_root=data_root,
+        data_root="",
         metainfo=dict(classes=("wildlife",)),
-        ann_file=val_ann_file,
-        data_prefix=dict(img=image_prefix),
+        ann_file="",
+        data_prefix=dict(img=""),
         filter_cfg=dict(filter_empty_gt=False),
         test_mode=True,
         pipeline=test_pipeline,
@@ -63,7 +59,7 @@ test_dataloader = val_dataloader
 
 val_evaluator = dict(
     type='CocoMetric',
-    ann_file=data_root + val_ann_file,
+    ann_file="",
     metric='bbox',
     format_only=False,
     backend_args=backend_args)
