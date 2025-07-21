@@ -1,0 +1,171 @@
+from typing import Any, Dict, Tuple, Union, List
+
+import torch
+from ultralytics.data.build import build_yolo_dataset
+from ultralytics.utils import IterableSimpleNamespace
+from torch.utils.data import DataLoader
+from ultralytics import YOLO
+import os
+from omegaconf import OmegaConf, DictConfig
+
+from .base import BaseEvaluator
+
+class UltralyticsEvaluator(BaseEvaluator):
+    """
+    Evaluator for Ultralytics YOLO models.
+    Implements evaluation logic using Ultralytics metrics.
+    """
+
+    def __init__(self, config: Union[Dict[str, Any], str]):
+        super().__init__(config)
+        self.model = self._load_model()
+        self.dataloader = self._create_dataloader()
+        self.prediction_cfg = self._load_prediction_cfg()
+
+    def _load_prediction_cfg(self,):
+        if self.config.device == 'auto':
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        else:
+            device = self.config.device
+        return {
+            'conf': self.config.eval.conf,
+            'iou': self.config.eval.iou,
+            'half': self.config.eval.half,
+            'device': device,
+            'max_det': self.config.eval.max_det,
+            'verbose': self.config.eval.verbose,
+            'augment': self.config.eval.tta,
+            "save": self.config.eval.save,
+            "save_txt": self.config.eval.save_txt,
+            "save_conf": self.config.eval.save_conf,
+            "save_crop": self.config.eval.save_crop,
+        }
+
+    def evaluate(self, ) -> List:
+        """
+        Evaluate model using parameters from config dict passed via kwargs.
+        """
+        metrics = []
+        for results in self._run_inference():
+            metrics.append(self._compute_metrics(results))
+        return metrics
+
+    def _load_model(self) -> Any:
+        return YOLO(self.config.weights,task=self.config.eval.task)
+
+    def _create_dataloader(self) -> DataLoader:
+        """
+        Create a DataLoader for evaluation using Ultralytics' build_yolo_dataset utility.
+
+        Args:
+            data_config: Dictionary from YOLO data YAML (contains names, path, val/test, etc.).
+            eval_config: Dictionary of evaluation parameters (imgsz, batch_size, etc.).
+
+        Returns:
+            PyTorch DataLoader for the evaluation split.
+        """
+        data_config = DictConfig(OmegaConf.load(self.config.data))
+        eval_config = dict(self.config.eval)
+        
+        names = data_config.get('names')
+        root_path = data_config.get('path')
+        split = eval_config.get('split')
+        if split is None:
+            raise ValueError(f"No 'split' found in eval_config: {eval_config}")
+        img_path = os.path.join(root_path, data_config.get(split))
+        batch_size = eval_config.get('batch_size', 16)
+        mode = 'val' if 'val' in data_config else 'test'
+        
+        assert os.path.exists(img_path), f"{img_path} does not exist."
+
+        # Prepare cfg for build_yolo_dataset
+        cfg = IterableSimpleNamespace(mask_ratio=1,overlap_mask=False,**eval_config)
+
+        dataset = build_yolo_dataset(
+            cfg=cfg,
+            img_path=img_path,
+            batch=batch_size,
+            data={'names': names,"channels":3},
+            mode=mode,
+            rect=getattr(cfg, 'rect', False),
+            stride=getattr(cfg, 'stride', 32),
+            multi_modal=getattr(cfg, 'multi_modal', False),
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=eval_config.get('num_workers', 0),
+            pin_memory=torch.cuda.is_available(),
+            collate_fn=self._collate_fn
+        )
+        return dataloader
+    
+    def _collate_fn(self, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Custom collate function for YOLO evaluation batches.
+        Stacks images into a batch tensor; collects all other fields as lists.
+        Discards 'batch_idx'.
+        """
+        imgs = torch.stack([item['img'] for item in batch], dim=0).float() / 255.
+        im_files = [item['im_file'] for item in batch]
+        ori_shapes = [item['ori_shape'] for item in batch]
+        resized_shapes = [item['resized_shape'] for item in batch]
+        ratio_pads = [item['ratio_pad'] for item in batch]
+        cls = [item['cls'] for item in batch]
+
+        bboxes = []
+        for item in batch:
+            bbox = item['bboxes']
+            if bbox.numel() > 0: # convert bbox to xyxy format
+                bbox[:, [0, 2]] = bbox[:, [0, 2]] * item['ori_shape'][1] # x w
+                bbox[:, [1, 3]] = bbox[:, [1, 3]] * item['ori_shape'][0] # y h
+                bbox[:, [0, 1]] = bbox[:, [0, 1]] - bbox[:, [2, 3]] / 2 # x y
+                bbox[:, [2, 3]] = bbox[:, [2, 3]] + bbox[:, [0, 1]] # x y x y
+                bboxes.append(bbox)
+            else:
+                bboxes.append(bbox)
+
+        return {
+            'img': imgs,
+            'im_file': im_files,
+            'ori_shape': ori_shapes,
+            'resized_shape': resized_shapes,
+            'ratio_pad': ratio_pads,
+            'cls': cls,
+            'bboxes': bboxes,
+        }
+
+    def _run_inference(self) -> Tuple[Any, Any]:
+        for batch in self.dataloader:
+            predictions = self.model.predict(batch['img'],**self.prediction_cfg)
+            boxes = []
+            for pred in predictions:
+                if pred.obb is not None:
+                    boxes.append(pred.obb)
+                elif pred.boxes is not None:
+                    boxes.append(pred.boxes)
+                else:
+                    raise NotImplementedError()
+                    
+            results= [dict(labels=labels,
+                           file_path=file_path,
+                           bboxes=bboxes,
+                           predictions=pred) for labels,bboxes,pred,file_path in zip(batch['cls'],
+                                                                          batch['bboxes'],
+                                                                          boxes,
+                                                                          batch['im_file']
+                                                                          )
+                      ]
+            yield results
+
+    def _compute_metrics(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # TODO: Implement metric computation logic
+        result = 0
+        raise NotImplementedError("Metric computation not implemented yet.")
+
+    def reset(self) -> None:
+        pass
+
+    def get_results(self) -> Dict[str, Any]:
+        raise NotImplementedError("get_results is not implemented for UltralyticsEvaluator.") 
