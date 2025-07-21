@@ -9,13 +9,21 @@ dataset:
   val_ann: ${dataset.train_ann}
   val_images: ${dataset.train_images}
 
-  dataset_info: ${ROOT_DATASET}/savmap/dataset_info.json
-  
-  load_as_single_class: false
+  dataset_info: savmap/dataset_info.json
+
   filter_empty_gt: 
     train: true
     val: false
 
+  load_as_single_class: true
+  single_class_name: "wildlife"
+  single_class_id: 0
+  keep_labels: null
+  discard_labels:
+    - "rocks"
+    - "termite mound"
+    - "vegetation"
+  
 work_dir: ${ROOT_PROJECT}/work_dirs/mmdet
 
 model:
@@ -68,7 +76,7 @@ mlflow:
   experiment_name: "detection_experiment"
   run_name: "mmdet_training"
   log_model: true
-  tracking_uri: http://localhost:5000
+  tracking_uri: "http://127.0.0.1:5000"
 
 mode: train  # train or evaluate
 

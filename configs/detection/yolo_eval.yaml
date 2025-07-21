@@ -1,0 +1,35 @@
+# Example YOLO evaluation configuration
+
+# Path to the trained YOLO weights file
+weights: D:/workspace/repos/wildtrain/models/yolo12s.pt
+
+# Path to the data config YAML (YOLO format)
+data: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
+
+device: auto
+
+# Evaluation parameters
+# 'eval' section is passed as eval_config to the evaluator
+eval:
+  imgsz: 640           # Image size for evaluation
+  split: "val"           # Split to evaluate on
+  iou: 0.6
+  half: false
+  batch_size: 16       # Batch size for DataLoader
+  num_workers: 0       # Number of DataLoader workers (0 for Windows compatibility)
+  rect: false          # Use rectangular batches
+  stride: 32           # Model stride
+  task: "detect"         # Task type (detect/classify/segment)
+  classes: null        # Optionally restrict to specific class indices
+  cache: false         # Use cache for images/labels
+  single_cls: false    # Treat dataset as single-class
+  multi_modal: false   # Not using multi-modal data
+  conf: 0.1         # Confidence threshold for evaluation
+  max_det: 300      # Maximum detections per image
+  verbose: false    # Verbosity level
+  tta: false        # Use Test Time Augmentation
+  save: false       # Save predictions
+  save_txt: false   # Save predictions in text format
+  save_conf: false  # Save confidence scores
+  save_crop: false  # Save cropped predictions
+

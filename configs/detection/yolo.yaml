@@ -1,22 +1,66 @@
 # YOLOv8 detection config
 
 dataset:
-  train_path: ./data/detection/train
-  val_path: ./data/detection/val
-  test_path: ./data/detection/test
-  num_classes: 2
+  data_cfg: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
+  load_as_single_class: true
 
 model:
-  name: yolov8n
   pretrained: true
+  weights: D:\workspace\repos\wildtrain\models\yolo12s.pt
+  architecture_file: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/models/yolo12-rtdetr.yaml
+
+# run name and project name for tracking
+name: yolo12
+project: wildai-localization
+
+mlflow:
+  tracking_uri: "http://127.0.0.1:5000"
 
 train:
-  batch_size: 16
+  batch: 16
   epochs: 50
-  optimizer: SGD
-  lr: 0.01
-  img_size: 640
-  augment: true
+  optimizer: AdamW
+  lr0: 0.0001
+  lrf: 0.1
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 1
+  cos_lr: true
+  patience: 10
+  iou: 0.65
+  imgsz: 640
+  
+  # loss weights
+  box: 3.5
+  cls: 1.0
+  dfl: 1.5
 
-export:
-  onnx: true 
+  device: cpu
+  workers: 0
+
+  # augmentations
+  degrees: 45.0
+  mixup: 0.0
+  cutmix: 0.5
+  shear: 10.0
+  copy_paste: 0.0
+  erasing: 0.0
+  scale: 0.2
+  fliplr: 0.5
+  flipud: 0.5
+  hsv_h: 0.0
+  hsv_s: 0.1
+  hsv_v: 0.1
+  translate: 0.2
+  mosaic: 0.0
+  multi_scale: false
+  perspective: 0.0
+
+  deterministic: false
+  seed: 41
+
+  # freeze layers: int or null
+  freeze: 9
+  
+  # cache
+  cache: false

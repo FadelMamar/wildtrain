@@ -1,7 +1,13 @@
-#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Jul 21 16:46:54 2025
+
+@author: FADELCO
+"""
+
 
 from omegaconf import OmegaConf, DictConfig
-from wildtrain.trainers import MMDetectionTrainer
+from wildtrain.trainers import UltraLightDetectionTrainer
 import traceback
 
 
@@ -9,22 +15,22 @@ def main():
     """
     Main function to run classification training with different configurations.
     """
-    print("🚀 Starting WildTrain Classification Training Example")
+    print("🚀 Starting WildTrain YOLO Training Example")
     print("=" * 60)
     
     # Create output directories
     print("-" * 40)
     
-    config = OmegaConf.load(r"D:\workspace\repos\wildtrain\configs\detection\mmdet.yaml")
+    config = OmegaConf.load(r"D:/workspace/repos/wildtrain/configs/detection/yolo.yaml")
 
     #print("Configuration:")
     #print(OmegaConf.to_yaml(config))
     
     try:
-        trainer = MMDetectionTrainer(DictConfig(config))
-        trainer.run(debug=True)
+        trainer = UltraLightDetectionTrainer(DictConfig(config))
+        trainer.run()
         print("✅ Training completed successfully!")
-    except Exception as e:
+    except Exception :
         print(f"❌ Training failed: {traceback.format_exc()}")
         
 
