@@ -5,7 +5,6 @@ train_ann_file = ""
 val_ann_file = ""
 image_prefix = ""
 
-classes = ('a', 'b', 'c', 'd', 'e')
 backend_args = None
 
 resize_scale = (640, 640)
@@ -35,7 +34,7 @@ train_dataloader = dict(
     batch_sampler=dict(type='AspectRatioBatchSampler'),
     dataset=dict(
         type=dataset_type,
-        metainfo=dict(classes=classes),
+        metainfo=dict(classes=("wildlife",)),
         data_root=data_root,
         ann_file=train_ann_file,
         data_prefix=dict(img=image_prefix),
@@ -52,7 +51,7 @@ val_dataloader = dict(
     dataset=dict(
         type=dataset_type,
         data_root=data_root,
-        metainfo=dict(classes=classes),
+        metainfo=dict(classes=("wildlife",)),
         ann_file=val_ann_file,
         data_prefix=dict(img=image_prefix),
         filter_cfg=dict(filter_empty_gt=False),
