@@ -272,7 +272,7 @@ class MMDetectionTrainer(ModelTrainer):
     @property
     def num_frozen_params(self,):
         if self.runner is None:
-            logger.info("runner is not set. returning 0")
+            logger.info("cannot compute number of frozen params. Runner is not set. Returning 0")
             return 0
         
         backbone = self.runner.model.backbone
