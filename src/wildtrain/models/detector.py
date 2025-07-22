@@ -2,12 +2,13 @@ import torch
 import supervision as sv
 import torchvision.ops as ops
 import numpy as np
+from typing import Optional
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer
 
 
-class TwoStageDetector(object):
+class Detector(object):
     """
     Two-stage detector for inference: localizes objects and classifies each ROI.
     Args:
@@ -15,7 +16,7 @@ class TwoStageDetector(object):
         classifier (GenericClassifier): The classifier for each ROI.
     """
 
-    def __init__(self, localizer: ObjectLocalizer, classifier: GenericClassifier):
+    def __init__(self, localizer: ObjectLocalizer, classifier: Optional[GenericClassifier]=None):
         self.localizer = localizer
         self.classifier = classifier
 
@@ -24,12 +25,20 @@ class TwoStageDetector(object):
         assert images.dim() == 4, "Input images must be a batch of images"
         assert images.shape[1] == 3, "Input images must be RGB"
 
-        roi_size = self.classifier.input_size.item()
+        detections: list[sv.Detections] = self.localizer.forward(images)
 
+        if self.classifier is None:
+            return detections
+
+        roi_size = self.classifier.input_size.item()
         def resize_bbox(bbox: np.ndarray) -> np.ndarray:
+            
+            if bbox.size == 0:
+                return bbox
+            
             bbox = bbox.copy()
-            h = roi_size[0]
-            w = roi_size[1]
+            h = roi_size
+            w = roi_size
 
             bbox[:, 0] = (bbox[:, 0] + bbox[:, 2]) / 2.0 - w / 2.0
             bbox[:, 1] = (bbox[:, 1] + bbox[:, 3]) / 2.0 - h / 2.0
@@ -42,15 +51,21 @@ class TwoStageDetector(object):
             bbox[:, 2] = np.clip(bbox[:, 2], 0, W - 1)
             bbox[:, 3] = np.clip(bbox[:, 3], 0, H - 1)
             return bbox
-
-        detections: list[sv.Detections] = self.localizer.forward(images)
+        
         boxes = []
         for i in range(images.shape[0]):
             det = resize_bbox(detections[i].xyxy)
+            if det.size == 0:
+                continue
+            det = torch.Tensor(det)
             roi_boxes = torch.cat(
                 [torch.full((det.shape[0], 1), i, dtype=torch.long), det], dim=1
             )
             boxes.append(roi_boxes)
+        
+        if len(boxes)==0:
+            return detections
+        
         boxes = torch.cat(boxes, dim=0)
         crops = ops.roi_align(
             images,
@@ -65,14 +80,15 @@ class TwoStageDetector(object):
         results = []
         for i in range(images.shape[0]):
             det = detections[i]
-            class_id = cls_results[i]["class"]
+            class_name = cls_results[i]["class"]
+            class_id = cls_results[i]["class_id"]
             score = cls_results[i]["score"]
             metadata = det.metadata.copy()
-            metadata.update({"class": class_id, "score": score})
+            metadata.update({"class": class_name, "score": score})
             updated_det = sv.Detections(
                 xyxy=det.xyxy,
                 confidence=det.confidence * score,
-                class_id=class_id,
+                class_id=np.array([class_id]),
                 metadata=metadata,
             )
             results.append(updated_det)

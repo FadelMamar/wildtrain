@@ -103,11 +103,12 @@ class GenericClassifier(nn.Module):
         with torch.no_grad():
             logits = self.forward(x)
             probs = torch.softmax(logits, dim=1)
+            labels = probs.cpu().argmax(dim=1).tolist()
             classes = [
-                self.label_to_class_map[i] for i in probs.cpu().argmax(dim=1).tolist()
+                self.label_to_class_map[i] for i in labels
             ]
             scores = probs.cpu().max(dim=1).values.tolist()
-            return [{"class": c, "score": s} for c, s in zip(classes, scores)]
+            return [{"class": c, "score": s, "class_id":l} for c, s, l in zip(classes, scores, labels)]
 
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None):
