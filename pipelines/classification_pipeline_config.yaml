@@ -1,10 +1,10 @@
 # Unified configuration for classification pipeline (train + eval)
 
 # ----------------------
-# Task
+# Task and mode
 # ----------------------
 task: classification
-
+debug: true
 # ----------------------
 # Model configuration
 # ----------------------

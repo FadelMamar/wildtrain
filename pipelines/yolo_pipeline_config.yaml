@@ -11,6 +11,7 @@ model:
 # Path to classifier weights
 classifier: D:/workspace/repos/wildtrain/models/best_classifier.pt
 
+debug: true
 # ----------------------
 # Dataset configuration
 # ----------------------
