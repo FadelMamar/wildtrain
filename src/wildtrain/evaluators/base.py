@@ -46,7 +46,7 @@ class BaseEvaluator(ABC):
         self.per_image_metrics = deepcopy(self.metrics)
         self.per_image_results = dict()
 
-        self.report: pd.DataFrame = None
+        self.report: Dict[str, float] = dict()
 
     def evaluate(
         self,debug:bool=False
@@ -66,7 +66,7 @@ class BaseEvaluator(ABC):
             self.report = self._get_report(results)
         except Exception:
             logger.error(f"Error generating report: {traceback.format_exc()}")
-            self.report = None
+            self.report = dict()
 
         self._reset()
         return results
@@ -120,20 +120,27 @@ class BaseEvaluator(ABC):
             metric.reset()
         self.per_image_results = dict()
 
-    def _get_report(self, results: Dict[str, Any]):
+    def _get_report(self, results: Dict[str, Any]) -> Dict[str, float]:
         """
         Generate a summary evaluation report as a pandas DataFrame.
         Includes mAP@50, mAP@75, mAR@1, Precision@50, Recall@50, F1@50.
         Only summary metrics are included, no per-class metrics.
         """
 
-        dfs = []
+        dfs = {}
         for name, result in results.items():
             df = result.to_pandas()
-            df = df.add_prefix(f"{name}_")
-            dfs.append(df)
-        report_df = pd.concat(dfs, axis=1)
-        return report_df
+            for record in df.to_dict(orient='records'):
+                dfs.update(record)
+
+        for name in ["f1","precision","recall"]:
+            argmax = getattr(results[name],f"{name}_scores").argmax()
+            best_score = getattr(results[name],f"{name}_scores")[argmax]
+            best_iou = results[name].iou_thresholds[argmax]
+            dfs[f'best_{name}'] = {f'{name}_at_{best_iou}': best_score}
+            dfs[f"{name}_scores"] = list(zip(results[name].iou_thresholds, getattr(results[name],f"{name}_scores")))
+
+        return dfs
 
     def _get_results(self) -> Dict[str, Any]:
         return {name: metric.compute() for name, metric in self.metrics.items()}
