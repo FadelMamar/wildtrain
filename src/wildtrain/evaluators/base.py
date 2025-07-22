@@ -5,14 +5,12 @@ import pandas as pd
 from supervision.metrics import (
     MeanAveragePrecision,
     MeanAverageRecall,
-    Precision,
-    Recall,
-    F1Score,
 )
 import supervision as sv
 from copy import deepcopy
 from logging import getLogger
 import traceback
+from .metrics import MyPrecision,MyRecall,MyF1Score
 
 logger = getLogger(__name__)
 
@@ -40,9 +38,9 @@ class BaseEvaluator(ABC):
                 class_mapping=None,
             ),
             mAR=MeanAverageRecall(boxes),
-            p=Precision(boxes, averaging_method=average),
-            r=Recall(boxes, averaging_method=average),
-            f1=F1Score(boxes, averaging_method=average),
+            precision=MyPrecision(boxes, averaging_method=average),
+            recall=MyRecall(boxes, averaging_method=average),
+            f1=MyF1Score(boxes, averaging_method=average),
         )
         
         self.per_image_metrics = deepcopy(self.metrics)
@@ -114,7 +112,7 @@ class BaseEvaluator(ABC):
         metric_i = self.per_image_metrics[metric_name]
         metric_i.reset()
         result_i = metric_i.update(pred, gt).compute()
-        self.per_image_results[(gt.metadata['file_path'],metric_name)] = result_i.to_pandas()
+        self.per_image_results[(gt.metadata['file_path'],metric_name)] = result_i.to_pandas().to_dict(orient='records')
         
 
     def _reset(self) -> None:
