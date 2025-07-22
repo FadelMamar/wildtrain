@@ -5,7 +5,6 @@ Created on Mon Jul 21 16:46:54 2025
 @author: FADELCO
 """
 
-
 from omegaconf import OmegaConf, DictConfig
 from wildtrain.trainers import UltraLightDetectionTrainer
 import traceback
@@ -17,22 +16,22 @@ def main():
     """
     print("🚀 Starting WildTrain YOLO Training Example")
     print("=" * 60)
-    
+
     # Create output directories
     print("-" * 40)
-    
+
     config = OmegaConf.load(r"D:/workspace/repos/wildtrain/configs/detection/yolo.yaml")
 
-    #print("Configuration:")
-    #print(OmegaConf.to_yaml(config))
-    
+    # print("Configuration:")
+    # print(OmegaConf.to_yaml(config))
+
     try:
         trainer = UltraLightDetectionTrainer(DictConfig(config))
         trainer.run()
         print("✅ Training completed successfully!")
-    except Exception :
+    except Exception:
         print(f"❌ Training failed: {traceback.format_exc()}")
-        
+
 
 if __name__ == "__main__":
-    main() 
+    main()

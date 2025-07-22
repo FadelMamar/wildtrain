@@ -1,9 +1,10 @@
-import logging 
+import logging
 import sys
 from typing import Optional
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
+
 
 def setup_logging(level="INFO", log_file: Optional[str] = None):
     """Setup logging configuration."""
@@ -33,4 +34,3 @@ def get_logger(name: str) -> logging.Logger:
         Configured logger
     """
     return logging.getLogger(name)
-

@@ -1,12 +1,18 @@
 # Example YOLO evaluation configuration
 
 # Path to the trained YOLO weights file
-weights: D:/workspace/repos/wildtrain/models/yolo12s.pt
+weights:
+  localizer: D:/workspace/repos/wildtrain/models/yolo12s.pt
+  classifier: D:/workspace/repos/wildtrain/models/classifier.pt
 
 # Path to the data config YAML (YOLO format)
 data: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
 
 device: auto
+
+metrics:
+  average: macro # weighted, macro, micro
+  class_agnostic: false
 
 # Evaluation parameters
 # 'eval' section is passed as eval_config to the evaluator
@@ -15,7 +21,7 @@ eval:
   split: "val"           # Split to evaluate on
   iou: 0.6
   half: false
-  batch_size: 16       # Batch size for DataLoader
+  batch_size: 8       # Batch size for DataLoader
   num_workers: 0       # Number of DataLoader workers (0 for Windows compatibility)
   rect: false          # Use rectangular batches
   stride: 32           # Model stride

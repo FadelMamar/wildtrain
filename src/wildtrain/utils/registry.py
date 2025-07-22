@@ -1,9 +1,11 @@
 from typing import Callable, Dict
 
+
 class Registry:
     """
     Simple registry for factories (models, datasets, etc.).
     """
+
     def __init__(self):
         self._registry: Dict[str, Callable[..., object]] = {}
 
@@ -13,4 +15,4 @@ class Registry:
     def get(self, name: str) -> Callable[..., object]:
         if name not in self._registry:
             raise KeyError(f"{name} not found in registry")
-        return self._registry[name] 
+        return self._registry[name]

@@ -10,7 +10,7 @@ from .detection_trainer import MMDetectionTrainer, UltraLightDetectionTrainer
 
 __all__ = [
     "ModelTrainer",
-    "ClassifierTrainer", 
+    "ClassifierTrainer",
     "MMDetectionTrainer",
     "UltraLightDetectionTrainer",
 ]
