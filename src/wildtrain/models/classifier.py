@@ -1,11 +1,8 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import lightning as L
 import torchvision.transforms as T
 import timm
-from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC
-from typing import Any, Optional, Tuple
+
 
 from ..utils.logging import get_logger
 
@@ -16,7 +13,6 @@ class GenericClassifier(nn.Module):
     Generic classifier model supporting timm and MMPretrain backbones.
     """
     def __init__(self, 
-    num_classes: int, 
     label_to_class_map: dict,
     backbone: str = 'resnet18', 
     backbone_source: str = 'timm', 
@@ -29,145 +25,104 @@ class GenericClassifier(nn.Module):
     ):
 
         super().__init__()
-        self.backbone = self._get_backbone(backbone, backbone_source, pretrained)
-        self.fc = torch.nn.Sequential(
+        self.freeze_backbone = freeze_backbone
+        self.label_to_class_map = label_to_class_map
+
+        # register buffers
+        self.register_buffer('mean', torch.tensor(mean))
+        self.register_buffer('std', torch.tensor(std))
+        self.register_buffer('input_size', torch.tensor([input_size]).int())
+        self.register_buffer('num_classes', torch.tensor([len(label_to_class_map)]).int())
+
+        self._check_arguments()
+
+        self.backbone = backbone
+        self.backbone_source = backbone_source
+        self.pretrained = pretrained
+        
+        self.preprocessing = self._set_preprocessing()
+
+        self.classifier = torch.nn.Sequential(
+            self._get_backbone(),
             torch.nn.LazyLinear(128),
             torch.nn.ReLU(),
             torch.nn.Dropout(p=dropout),
-            torch.nn.LazyLinear(num_classes),
+            torch.nn.LazyLinear(self.num_classes.item()),
+        )         
+        return None
+        
+    def _set_preprocessing(self,):
+        preprocessing = torch.nn.Sequential(
+            T.Resize(self.input_size.item(),interpolation=T.InterpolationMode.NEAREST),
+            T.Normalize(mean=self.mean, std=self.std),
         )
-        self.preprocessing = torch.nn.Sequential(
-            T.Resize(input_size,interpolation=T.InterpolationMode.NEAREST),
-            T.Normalize(mean=mean, std=std),
-        )
+        return preprocessing
+    
+    def _check_arguments(self,):
+        if self.num_classes is None:
+            raise ValueError("num_classes must be provided")
+        if not isinstance(self.input_size, torch.Tensor):
+            raise ValueError("input_size must be a tensor")
+        if not isinstance(self.mean, torch.Tensor):
+            raise ValueError("mean must be a tensor")
+        if not isinstance(self.std, torch.Tensor):
+            raise ValueError("std must be a tensor")
 
-        self.freeze_backbone = freeze_backbone
-        self.num_classes = num_classes
-        self.label_to_class_map = label_to_class_map
 
-        if freeze_backbone:
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-            self.backbone.eval()
-            logger.info(f"Backbone {backbone} frozen")
-
-    def _get_backbone(self, backbone: str, source: str, pretrained: bool)->nn.Module:
-        if source == 'timm':
-            model = timm.create_model(backbone, pretrained=pretrained, num_classes=0)
-            return model
+    def _get_backbone(self,)->nn.Module:
+        if self.backbone_source == 'timm':
+            model = timm.create_model(self.backbone, pretrained=self.pretrained, num_classes=0)
         else:
-            raise ValueError(f"Unsupported backbone source: {source}")
+            raise ValueError(f"Unsupported backbone source: {self.backbone_source}")
+        
+        if self.freeze_backbone:
+            for param in model.parameters():
+                param.requires_grad = False
+            model.eval()
+            logger.info(f"Backbone {self.backbone} frozen")
+        
+        return model
+        
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.preprocessing(x)
-        x = self.backbone(x)
-        x = self.fc(x)
-        return x
+        return self.classifier(x)
+    
+    def predict(self, x: torch.Tensor) -> list[dict]:
+        self.eval()
+        with torch.no_grad():
+            logits = self.forward(x)
+            probs = torch.softmax(logits, dim=1)
+            classes = [self.label_to_class_map[i] for i in probs.cpu().argmax(dim=1).tolist()]
+            scores = probs.cpu().max(dim=1).values.tolist()
+            return [{'class': c, 'score': s} for c, s in zip(classes, scores)]
+    
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = 'cpu'):
+        state_dict = torch.load(checkpoint_path, map_location=map_location,weights_only=False)
+        #state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
+        label_to_class_map = state_dict['label_to_class_map']
+        backbone = state_dict['backbone']
+        backbone_source = state_dict['backbone_source']
+        model = cls(label_to_class_map=label_to_class_map,
+                    backbone=backbone,
+                    backbone_source=backbone_source)
+        model.load_state_dict(state_dict)
+        return model
 
-class Classifier(L.LightningModule):
-    def __init__(
-        self,
-        model: GenericClassifier,
-        epochs: int=20,
-        threshold: float = 0.5,
-        label_smoothing: float = 0.0,
-        lr: float = 1e-3,
-        lrf: float = 1e-2,
-        weight_decay: float = 5e-3,
-    ):
-        super().__init__()
+    def state_dict(self, *args, **kwargs):
+        state = super().state_dict(*args, **kwargs)
+        # Save label_to_class_map as a string (or use pickle for more complex objects)
+        state['label_to_class_map'] = self.label_to_class_map
+        state['backbone'] = self.backbone
+        state['backbone_source'] = self.backbone_source
+        return state
 
-        self.save_hyperparameters(ignore=["model"])
+    def load_state_dict(self, state_dict, **kwargs):
+        # Restore label_to_class_map
+        if 'label_to_class_map' in state_dict:
+            self.label_to_class_map = state_dict.pop('label_to_class_map')
+            self.backbone = state_dict.pop('backbone')
+            self.backbone_source = state_dict.pop('backbone_source')
+        super().load_state_dict(state_dict, **kwargs)
 
-        self.model = model
-        self.num_classes = model.num_classes
-        self.label_to_class_map = model.label_to_class_map
-
-        self.mlflow_run_id = None 
-        self.mlflow_experiment_id = None
-
-        # metrics
-        cfg = dict(task="multiclass", num_classes=self.num_classes, average=None)
-        self.accuracy = Accuracy(**cfg)
-        self.precision = Precision(threshold=threshold, **cfg)
-        self.recall = Recall(threshold=threshold, **cfg)
-        self.f1score = F1Score(threshold=threshold, **cfg)
-        self.ap = AUROC(**cfg)
-
-        self.metrics = dict(
-            accuracy=self.accuracy,
-            precision=self.precision,
-            recall=self.recall,
-            f1score=self.f1score,
-        )
-
-        self.label_smoothing = label_smoothing
-        
-
-    def forward(self, x:torch.Tensor) -> torch.Tensor:
-        return self.model(x)
-
-    def training_step(self, batch:Tuple[torch.Tensor, torch.Tensor], batch_idx:int):
-        x, y = batch
-
-        classes = y.cpu().flatten().tolist()
-        weight = [
-            len(classes) / (classes.count(i) + 1e-6) for i in range(self.num_classes)
-        ]
-        weight = torch.Tensor(weight).float().clamp(1.0, 1e2).to(y.device)
-
-        logits = self(x)
-        loss = F.cross_entropy(
-            logits,
-            y.long().squeeze(1),
-            label_smoothing=self.label_smoothing,
-            weight=weight,
-        )
-
-        self.log("train_loss", loss, on_step=False, on_epoch=True)
-
-        return loss
-
-    def validation_step(self, batch:Tuple[torch.Tensor, torch.Tensor], batch_idx:int):
-        x, y = batch
-        y = y.long().squeeze(1)
-
-        logits = self(x)
-        loss = F.cross_entropy(logits, y, label_smoothing=self.label_smoothing)
-
-        for name, metric in self.metrics.items():
-            metric.update(logits, y)
-
-        self.log("val_loss", loss, on_epoch=True, prog_bar=True)
-
-    def on_validation_epoch_end(self):
-        if self.mlflow_run_id is None:
-            self.mlflow_run_id = getattr(self.logger, "run_id", None)
-            self.mlflow_experiment_id = getattr(self.logger, "experiment_id", None)
-            if self.mlflow_run_id is not None:
-                logger.info(f"MLflow run_id: {self.mlflow_run_id}")
-                logger.info(f"MLflow experiment_id: {self.mlflow_experiment_id}")
-            else:
-                logger.warning("No mlflow logger found")
-                self.mlflow_run_id = "None"
-
-        for name, metric in self.metrics.items():
-            score = metric.compute().cpu()
-            self.log(f"val_{name}", score.mean())
-            for i, score in enumerate(score):
-                cls_name = self.label_to_class_map.get(i, i)
-                self.log(f"val_{name}_class_{cls_name}", score)
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(
-            params=self.model.parameters(),
-            lr=self.hparams.lr,
-            weight_decay=self.hparams.weight_decay,
-        )
-        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer,
-            T_0=self.hparams.epochs,
-            T_mult=1,
-            eta_min=self.hparams.lr * self.hparams.lrf,
-        )
-        return [optimizer], [lr_scheduler]

@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple, Union, List
+from typing import Any, Dict, Tuple, Union, List, Generator
 
 import torch
 from ultralytics.data.build import build_yolo_dataset
@@ -7,8 +7,13 @@ from torch.utils.data import DataLoader
 from ultralytics import YOLO
 import os
 from omegaconf import OmegaConf, DictConfig
+from tqdm import tqdm
+import supervision as sv
 
 from .base import BaseEvaluator
+from ..models.detector import TwoStageDetector
+from ..models.localizer import UltralyticsLocalizer
+from ..models.classifier import GenericClassifier
 
 class UltralyticsEvaluator(BaseEvaluator):
     """
@@ -41,17 +46,17 @@ class UltralyticsEvaluator(BaseEvaluator):
             "save_crop": self.config.eval.save_crop,
         }
 
-    def evaluate(self, ) -> List:
-        """
-        Evaluate model using parameters from config dict passed via kwargs.
-        """
-        metrics = []
-        for results in self._run_inference():
-            metrics.append(self._compute_metrics(results))
-        return metrics
-
     def _load_model(self) -> Any:
-        return YOLO(self.config.weights,task=self.config.eval.task)
+        localizer = UltralyticsLocalizer(weights=self.config.weights.localizer,
+                                         device=self.config.device,
+                                         conf_thres=self.config.eval.conf,
+                                         iou_thres=self.config.eval.iou,
+                                         task=self.config.eval.task)
+
+        classifier = GenericClassifier.load_from_checkpoint(self.config.weights.classifier,
+                                                                              map_location=self.config.device)
+
+        return TwoStageDetector(localizer, classifier)
 
     def _create_dataloader(self) -> DataLoader:
         """
@@ -136,36 +141,17 @@ class UltralyticsEvaluator(BaseEvaluator):
             'bboxes': bboxes,
         }
 
-    def _run_inference(self) -> Tuple[Any, Any]:
-        for batch in self.dataloader:
+    def _run_inference(self) -> Generator[Dict[str, List[sv.Detections]], None, None]:
+        for batch in tqdm(self.dataloader,desc="Running inference"):
             predictions = self.model.predict(batch['img'],**self.prediction_cfg)
-            boxes = []
-            for pred in predictions:
-                if pred.obb is not None:
-                    boxes.append(pred.obb)
-                elif pred.boxes is not None:
-                    boxes.append(pred.boxes)
-                else:
-                    raise NotImplementedError()
-                    
-            results= [dict(labels=labels,
-                           file_path=file_path,
-                           bboxes=bboxes,
-                           predictions=pred) for labels,bboxes,pred,file_path in zip(batch['cls'],
-                                                                          batch['bboxes'],
-                                                                          boxes,
-                                                                          batch['im_file']
-                                                                          )
-                      ]
-            yield results
+            detections = [sv.Detections.from_ultralytics(pred) for pred in predictions]
+            gt_detections = [sv.Detections(xyxy=gt.cpu().numpy(),
+                                            class_id=cls.cpu().flatten().numpy(),
+                                            metadata=dict(file_path=file_path)) for gt,cls,file_path in zip(batch['bboxes'],batch['cls'],batch['im_file'])]
+            
+            yield dict(predictions=detections,
+                       ground_truth=gt_detections)
 
-    def _compute_metrics(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
-        # TODO: Implement metric computation logic
-        result = 0
-        raise NotImplementedError("Metric computation not implemented yet.")
-
-    def reset(self) -> None:
-        pass
-
-    def get_results(self) -> Dict[str, Any]:
-        raise NotImplementedError("get_results is not implemented for UltralyticsEvaluator.") 
+    
+        
+    
