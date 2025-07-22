@@ -73,7 +73,7 @@ class UltralyticsLocalizer(ObjectLocalizer):
             images,
             imgsz=self.imgsz,
             verbose=False,
-            conf=0.1,
+            conf=self.conf_thres,
             iou=0.1,
             device=self.device,
             max_det=self.max_det

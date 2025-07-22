@@ -20,18 +20,26 @@ class BaseEvaluator(ABC):
     Subclasses must implement the evaluate method.
     """
 
-    def __init__(self, config: Union[Dict[str, Any], str]):
+    def __init__(self, config: Union[DictConfig, str, dict]):
         if isinstance(config, str):
             self.config = DictConfig(OmegaConf.load(config))
         elif isinstance(config, dict):
             self.config = DictConfig(config)
+        elif isinstance(config, DictConfig):
+            self.config = config
         else:
             raise ValueError(f"Invalid config type: {type(config)}")
 
+        self.metrics = self._get_metrics()
+        self.per_image_metrics = deepcopy(self.metrics)
+        self.per_image_results = dict()
+
+        self._report: Dict[str, float] = dict()
+    
+    def _get_metrics(self,):
         boxes = sv.metrics.core.MetricTarget.BOXES
         average = getattr(sv.metrics.core.AveragingMethod,self.config.metrics.average.upper())
-
-        self.metrics = dict(
+        return dict(
             mAP=MeanAveragePrecision(
                 boxes,
                 class_agnostic=self.config.metrics.class_agnostic,
@@ -43,11 +51,6 @@ class BaseEvaluator(ABC):
             f1=MyF1Score(boxes, averaging_method=average),
         )
         
-        self.per_image_metrics = deepcopy(self.metrics)
-        self.per_image_results = dict()
-
-        self.report: Dict[str, float] = dict()
-
     def evaluate(
         self,debug:bool=False
     ) -> Dict[str, Any]:
@@ -63,10 +66,9 @@ class BaseEvaluator(ABC):
 
         results = self._get_results()
         try:
-            self.report = self._get_report(results)
+            self._set_report(results)
         except Exception:
             logger.error(f"Error generating report: {traceback.format_exc()}")
-            self.report = dict()
 
         self._reset()
         return results
@@ -114,13 +116,15 @@ class BaseEvaluator(ABC):
         result_i = metric_i.update(pred, gt).compute()
         self.per_image_results[(gt.metadata['file_path'],metric_name)] = result_i.to_pandas().to_dict(orient='records')
         
-
     def _reset(self) -> None:
         for metric in self.metrics.values():
             metric.reset()
         self.per_image_results = dict()
+    
+    def get_report(self) -> Dict[str, Any]:
+        return self._report
 
-    def _get_report(self, results: Dict[str, Any]) -> Dict[str, float]:
+    def _set_report(self, results: Dict[str, Any]) -> None:
         """
         Generate a summary evaluation report as a pandas DataFrame.
         Includes mAP@50, mAP@75, mAR@1, Precision@50, Recall@50, F1@50.
@@ -140,7 +144,7 @@ class BaseEvaluator(ABC):
             dfs[f'best_{name}'] = {f'{name}_at_{best_iou}': best_score}
             dfs[f"{name}_scores"] = list(zip(results[name].iou_thresholds, getattr(results[name],f"{name}_scores")))
 
-        return dfs
+        self._report = dfs
 
     def _get_results(self) -> Dict[str, Any]:
         return {name: metric.compute() for name, metric in self.metrics.items()}

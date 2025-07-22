@@ -22,7 +22,7 @@ class UltralyticsEvaluator(BaseEvaluator):
     Implements evaluation logic using Ultralytics metrics.
     """
 
-    def __init__(self, config: Union[Dict[str, Any], str]):
+    def __init__(self, config: Union[DictConfig, str, dict]):
         super().__init__(config)
         self.model = self._load_model()
         self.dataloader = self._create_dataloader()    
@@ -101,9 +101,9 @@ class UltralyticsEvaluator(BaseEvaluator):
         """
         imgs = torch.stack([item["img"] for item in batch], dim=0).float() / 255.0
         im_files = [item["im_file"] for item in batch]
-        ori_shapes = [item["ori_shape"] for item in batch]
-        resized_shapes = [item["resized_shape"] for item in batch]
-        ratio_pads = [item["ratio_pad"] for item in batch]
+        #ori_shapes = [item["ori_shape"] for item in batch]
+        #resized_shapes = [item["resized_shape"] for item in batch]
+        #ratio_pads = [item["ratio_pad"] for item in batch]
         cls = [item["cls"] for item in batch]
 
         bboxes = []
@@ -131,8 +131,16 @@ class UltralyticsEvaluator(BaseEvaluator):
     def _run_inference(self) -> Generator[Dict[str, List[sv.Detections]], None, None]:
         for batch in tqdm(self.dataloader, desc="Running inference"):
             predictions = self.model.predict(batch["img"])
-            # try:
-            offset = 1 if self.config.eval.single_cls else 0
+
+            offset = 0
+            if self.config.eval.class_agnostic:
+                # because ultralytics uses 0 for positive class
+                # while we use 1 for positive class
+                # we need to offset ultralytics class ids by 1 
+                # if we are using single class
+                offset = 1 
+
+            # convert ultralytics detections to supervision detections
             gt_detections = [
                 sv.Detections(
                     xyxy=gt.cpu().numpy(),
@@ -143,7 +151,6 @@ class UltralyticsEvaluator(BaseEvaluator):
                     batch["bboxes"], batch["cls"], batch["im_file"]
                 )
             ]
-            # except Exception:
-            #     pass
+
 
             yield dict(predictions=predictions, ground_truth=gt_detections)
