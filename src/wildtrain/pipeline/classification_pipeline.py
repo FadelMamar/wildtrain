@@ -22,7 +22,7 @@ class ClassificationPipeline:
     def train(self):
         logger.info("[Pipeline] Starting classification training...")
         trainer = ClassifierTrainer(DictConfig(self.config))
-        trainer.run()
+        trainer.run(debug=self.config.debug)
         logger.info("[Pipeline] Training completed.")
         self.best_model_path = trainer.best_model_path
 
@@ -38,7 +38,7 @@ class ClassificationPipeline:
             "batch_size": self.config.eval.batch_size,
         })
         evaluator = ClassificationEvaluator(eval_config)
-        results = evaluator.evaluate()
+        results = evaluator.evaluate(debug=self.config.debug)
         report_path = os.path.join(self.results_dir, "eval_report.json")
         evaluator.save_report(report_path)
         logger.info("[Pipeline] Evaluation completed.")

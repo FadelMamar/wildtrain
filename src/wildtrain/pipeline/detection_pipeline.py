@@ -18,13 +18,13 @@ class DetectionPipeline:
     def train(self):
         logger.info("[Pipeline] Starting training...")
         trainer = UltralyticsDetectionTrainer(DictConfig(self.config))
-        trainer.run()
+        trainer.run(debug=self.config.debug)
         logger.info("[Pipeline] Training completed.")
 
     def evaluate(self):
         logger.info("[Pipeline] Starting evaluation...")
         evaluator = UltralyticsEvaluator(config=DictConfig(self.config))
-        results = evaluator.evaluate()
+        results = evaluator.evaluate(debug=self.config.debug)
         logger.info("[Pipeline] Evaluation completed.")
         report_path = os.path.join(self.results_dir, "eval_report.json")
         evaluator.save_report(report_path)

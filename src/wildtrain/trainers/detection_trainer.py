@@ -379,7 +379,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         if self.config.dataset.data_cfg is None:
             raise ValueError("data_cfg must be provided")
 
-    def run(self) -> None:
+    def run(self,debug:bool=False) -> None:
         mlflow.set_tracking_uri(self.config.mlflow.tracking_uri)
         
 
@@ -404,6 +404,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             data=self.config.dataset.data_cfg,
             name=self.config.name,
             project=self.config.project,
+            time=5/60 if debug else None,
             save=True,
             **train_cfg,
         )
