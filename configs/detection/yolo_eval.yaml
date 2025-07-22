@@ -3,7 +3,7 @@
 # Path to the trained YOLO weights file
 weights:
   localizer: D:/workspace/repos/wildtrain/models/best.pt
-  classifier: D:/workspace/repos/wildtrain/models/best_classifier.pt
+  classifier: null #D:/workspace/repos/wildtrain/models/best_classifier.pt
 
 # Path to the data config YAML (YOLO format)
 data: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
@@ -34,8 +34,4 @@ eval:
   max_det: 300      # Maximum detections per image
   verbose: false    # Verbosity level
   augment: false        # Use Test Time Augmentation
-  save: false       # Save predictions
-  save_txt: false   # Save predictions in text format
-  save_conf: false  # Save confidence scores
-  save_crop: false  # Save cropped predictions
 
