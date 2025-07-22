@@ -315,7 +315,6 @@ class ClassifierTrainer(ModelTrainer):
         """
         Run image classification training or evaluation based on config.
         """
-        self.validate_config()
 
         # DataModule
         data_cfg = self.config.dataset
@@ -331,6 +330,7 @@ class ClassifierTrainer(ModelTrainer):
             keep_classes=self.config.dataset.single_class.keep_classes,
             discard_classes=self.config.dataset.single_class.discard_classes,
         )
+        logger.info(f"Getting one batch of data to initialize lazy modules in classifier.")
         datamodule.setup(stage="fit")
         example_input, _ = next(iter(datamodule.train_dataloader()))
 
@@ -360,7 +360,7 @@ class ClassifierTrainer(ModelTrainer):
         callbacks = self.get_callbacks()
         mlflow_logger = callbacks.pop(-1)
         trainer = Trainer(
-            max_epochs=self.config.train.epochs,
+            max_epochs=self.config.train.epochs if not debug else 1,
             accelerator=self.config.train.accelerator,
             precision=self.config.train.precision,
             logger=mlflow_logger,

@@ -1,4 +1,6 @@
-from typing import Union
+import json
+import traceback
+from typing import Union, Optional
 from omegaconf import OmegaConf, DictConfig
 import torch
 from pathlib import Path
@@ -7,6 +9,9 @@ from wildtrain.data import ClassificationDataModule
 from wildtrain.trainers.classification_trainer import create_transforms
 from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC
 from tqdm import tqdm
+from wildtrain.utils.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class ClassificationEvaluator:
@@ -18,7 +23,10 @@ class ClassificationEvaluator:
             self.config = config    
 
     def _load_model(self):
-        model = GenericClassifier.load_from_lightning_ckpt(self.config.classifier, map_location=self.config.device)
+        try:
+            model = GenericClassifier.load_from_lightning_ckpt(self.config.classifier, map_location=self.config.device)
+        except Exception:
+            model = GenericClassifier.load_from_checkpoint(self.config.classifier, map_location=self.config.device)
         model.eval()
         return model
 
@@ -40,7 +48,7 @@ class ClassificationEvaluator:
         else:
             return datamodule.val_dataloader()
 
-    def evaluate(self,debug:bool=False):
+    def evaluate(self,debug:bool=False, save_path:Optional[str]=None):
         model = self._load_model().to(self.config.device)
         dataloader = self._load_data()
         num_classes = len(model.label_to_class_map)
@@ -63,5 +71,20 @@ class ClassificationEvaluator:
                 count += 1
                 if count > 10 and debug:
                     break
-        results = {name: metric.compute().cpu().tolist() for name, metric in metrics.items()}
+
+        results = {}
+        for name, metric in metrics.items():
+            score = metric.compute().cpu()
+            results[name] = score.tolist()
+            for i, score in enumerate(score):
+                cls_name = model.label_to_class_map.get(i, i)
+                results[f"{name}_class_{cls_name}"] = score.item()
+        
+        if save_path:
+            try:
+                with open(save_path, "w") as f:
+                    json.dump(results, f, indent=2)
+            except Exception:
+                logger.error(f"Error saving report to {save_path}: {traceback.format_exc()}")
+
         return results
