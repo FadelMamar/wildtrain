@@ -133,7 +133,7 @@ class UltralyticsEvaluator(BaseEvaluator):
             predictions = self.model.predict(batch["img"])
 
             offset = 0
-            if self.config.eval.class_agnostic:
+            if self.config.eval.single_cls:
                 # because ultralytics uses 0 for positive class
                 # while we use 1 for positive class
                 # we need to offset ultralytics class ids by 1 

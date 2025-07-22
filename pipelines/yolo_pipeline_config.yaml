@@ -1,0 +1,101 @@
+# pipeline_config.yaml
+
+# ----------------------
+# Model configuration
+# ----------------------
+model:
+  weights: D:/workspace/repos/wildtrain/models/yolo12s.pt         # Path to initial weights (for training or fine-tuning)
+  architecture_file: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/models/yolo12-rtdetr.yaml
+  pretrained: true
+
+# Path to classifier weights
+classifier: D:/workspace/repos/wildtrain/models/best_classifier.pt
+
+# ----------------------
+# Dataset configuration
+# ----------------------
+dataset:
+  load_as_single_class: true
+  data_cfg: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml  # YOLO data YAML
+
+# ----------------------
+# Training configuration
+# ----------------------
+train:
+  batch: 16
+  epochs: 50
+  optimizer: AdamW
+  lr0: 0.0001
+  lrf: 0.1
+  momentum: 0.937
+  weight_decay: 0.0005
+  warmup_epochs: 1
+  cos_lr: true
+  patience: 10
+  iou: 0.65
+  imgsz: 640
+  box: 3.5
+  cls: 1.0
+  dfl: 1.5
+  device: cpu
+  workers: 0
+  degrees: 45.0
+  mixup: 0.0
+  cutmix: 0.5
+  shear: 10.0
+  copy_paste: 0.0
+  erasing: 0.0
+  scale: 0.2
+  fliplr: 0.5
+  flipud: 0.5
+  hsv_h: 0.0
+  hsv_s: 0.1
+  hsv_v: 0.1
+  translate: 0.2
+  mosaic: 0.0
+  multi_scale: false
+  perspective: 0.0
+  deterministic: false
+  seed: 41
+  freeze: 9
+  cache: false
+
+# ----------------------
+# Evaluation configuration
+# ----------------------
+eval:
+  imgsz: 640
+  split: val
+  iou: 0.6
+  single_cls: ${dataset.load_as_single_class}
+  half: false
+  batch_size: 8
+  num_workers: 0
+  rect: false
+  stride: 32
+  task: detect
+  classes: null
+  cache: false
+  multi_modal: false
+  conf: 0.25
+  max_det: 300
+  verbose: false
+
+# ----------------------
+# Metrics configuration
+# ----------------------
+metrics:
+  average: macro
+  class_agnostic: false
+
+# ----------------------
+# MLflow configuration
+# ----------------------
+mlflow:
+  tracking_uri: "http://127.0.0.1:5000"
+
+# ----------------------
+# Output/report configuration
+# ----------------------
+output:
+  results_dir: D:/workspace/repos/wildtrain/results/ 

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Union, List, Generator
+from typing import Any, Dict, Union, List, Generator, Optional
 from omegaconf import OmegaConf, DictConfig
 import pandas as pd
 from supervision.metrics import (
@@ -11,6 +11,7 @@ from copy import deepcopy
 from logging import getLogger
 import traceback
 from .metrics import MyPrecision,MyRecall,MyF1Score
+import json
 
 logger = getLogger(__name__)
 
@@ -52,7 +53,9 @@ class BaseEvaluator(ABC):
         )
         
     def evaluate(
-        self,debug:bool=False
+        self,
+        debug:bool=False,
+        save_path:Optional[str]=None
     ) -> Dict[str, Any]:
         """
         Evaluate model using parameters from config dict passed via kwargs.
@@ -67,6 +70,8 @@ class BaseEvaluator(ABC):
         results = self._get_results()
         try:
             self._set_report(results)
+            if save_path:
+                self.save_report(save_path)
         except Exception:
             logger.error(f"Error generating report: {traceback.format_exc()}")
 
@@ -148,3 +153,7 @@ class BaseEvaluator(ABC):
 
     def _get_results(self) -> Dict[str, Any]:
         return {name: metric.compute() for name, metric in self.metrics.items()}
+    
+    def save_report(self, path: str) -> None:
+        with open(path, 'w') as f:
+            json.dump(self._report, f,indent=2)

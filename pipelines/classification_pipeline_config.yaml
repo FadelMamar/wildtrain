@@ -1,22 +1,35 @@
-# Example configuration for WildTrain classification training
+# Unified configuration for classification pipeline (train + eval)
+
+# ----------------------
+# Task
+# ----------------------
 task: classification
 
+# ----------------------
+# Model configuration
+# ----------------------
+model:
+  backbone: timm/vit_small_patch16_224.dino
+  pretrained: true
+  backbone_source: timm
+  dropout: 0.2
+  freeze_backbone: true
+  input_size: 224
+  mean: [0.554, 0.469, 0.348]
+  std: [0.203, 0.173, 0.144]
+
+# ----------------------
+# Dataset configuration
+# ----------------------
 dataset:
   root_data_directory: "D:/workspace/data/demo-dataset"
-
   single_class:
     enable : true
     background_class_name: "background"
     single_class_name: "wildlife"
     keep_classes: null
     discard_classes: ["vegetation", "termite mound", "rocks", "other", "label"]
-
-  stats:
-    mean: [0.554, 0.469, 0.348]
-    std: [0.203, 0.173, 0.144]
-  
   input_size: 224
-
   transforms:
     train:
       - name: Resize
@@ -38,27 +51,28 @@ dataset:
         params:
           size: ${dataset.input_size}
 
-model:
-  backbone: timm/vit_small_patch16_224.dino
-  pretrained: true
-  backbone_source: timm
-  dropout: 0.2
-  freeze_backbone: true
-  input_size: ${dataset.input_size}
-  mean: ${dataset.stats.mean}
-  std: ${dataset.stats.std}
-
+# ----------------------
+# Training configuration
+# ----------------------
 train:
   batch_size: 4
-  epochs: 1
+  epochs: 10
   lr: 0.0001
-  threshold: 0.5
+  threshold: 0.5 # classification threshold for Precision, Recall, F1Score
   label_smoothing: 0.0
   weight_decay: 0.0001
   lrf: 0.1
   precision: bf16-mixed
   accelerator: auto
 
+eval:
+  split: val  # 'val' or 'test'
+  device: cpu  # or 'cuda'
+  batch_size: 4
+
+# ----------------------
+# Checkpoint configuration
+# ----------------------
 checkpoint:
   monitor: val_f1score
   save_top_k: 1
@@ -70,12 +84,16 @@ checkpoint:
   filename: "best"
   min_delta: 0.001
 
+# ----------------------
+# MLflow configuration
+# ----------------------
 mlflow:
   experiment_name: wildtrain_classification
   run_name: demo
   log_model: true
 
-
+# ----------------------
 # DVC dataset tracking configuration
+# ----------------------
 track_dataset: false
 dataset_name: "roi-demo" 

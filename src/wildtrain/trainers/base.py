@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from omegaconf import DictConfig
-from typing import Any
+from typing import Any, Optional
 
 
 class ModelTrainer(ABC):
@@ -19,6 +19,7 @@ class ModelTrainer(ABC):
             config: Configuration object containing all training parameters
         """
         self.config = config
+        self.best_model_path: Optional[str] = None
 
     @abstractmethod
     def run(self) -> None:

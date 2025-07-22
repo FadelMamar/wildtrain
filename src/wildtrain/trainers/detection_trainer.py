@@ -1,7 +1,4 @@
 import os
-import sys
-import subprocess
-import tempfile
 import json
 import torch
 import traceback
@@ -16,9 +13,12 @@ from mmdet.datasets.coco import CocoDataset
 from mmengine.config import Config
 from mmengine.registry import RUNNERS, MODELS, DATASETS
 from mmengine.runner import Runner
+
+from ultralytics import YOLO
+from ultralytics import settings
+
 from ..utils.logging import ROOT, get_logger
 from .base import ModelTrainer
-from ultralytics import YOLO
 
 logger = get_logger(__name__)
 
@@ -359,7 +359,7 @@ class MMDetectionTrainer(ModelTrainer):
         self._clean_up()
 
 
-class UltraLightDetectionTrainer(ModelTrainer):
+class UltralyticsDetectionTrainer(ModelTrainer):
     """
     Trainer class for object detection models using Ultralytics YOLO.
     This class handles training using parameters from a DictConfig (e.g., from yolo.yaml).
@@ -381,7 +381,7 @@ class UltraLightDetectionTrainer(ModelTrainer):
 
     def run(self) -> None:
         mlflow.set_tracking_uri(self.config.mlflow.tracking_uri)
-        from ultralytics import settings
+        
 
         settings.update({"mlflow": True})
 
@@ -404,5 +404,6 @@ class UltraLightDetectionTrainer(ModelTrainer):
             data=self.config.dataset.data_cfg,
             name=self.config.name,
             project=self.config.project,
+            save=True,
             **train_cfg,
         )

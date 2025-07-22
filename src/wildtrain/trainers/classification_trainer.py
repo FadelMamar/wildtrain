@@ -299,6 +299,7 @@ class ClassifierTrainer(ModelTrainer):
                     path = Path(ckpt).with_name("best_classifier.pt")
                     torch.save(best_model, path)
                     mlflow.log_artifact(str(path), "checkpoint")
+                    self.best_model_path = str(path)
 
                     cfg_path = Path(ckpt).with_name("config.yaml")
                     OmegaConf.save(self.config, cfg_path)
@@ -368,13 +369,7 @@ class ClassifierTrainer(ModelTrainer):
             callbacks=callbacks,
         )
 
-        if self.config.mode == "train":
-            trainer.fit(model, datamodule=datamodule)
-        elif self.config.mode == "evaluate":
-            trainer.validate(model, datamodule=datamodule)
-            trainer.test(model, datamodule=datamodule)
-        else:
-            raise ValueError(f"Unknown mode: {self.config.mode}")
-
+        trainer.fit(model, datamodule=datamodule)
+    
         if self.config.mlflow.log_model:
             self.log_model(model)
