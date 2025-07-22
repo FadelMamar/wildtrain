@@ -74,7 +74,7 @@ class ClassificationEvaluator:
 
         results = {}
         for name, metric in metrics.items():
-            score = metric.compute().cpu()
+            score = metric.compute().cpu().flatten()
             results[name] = score.tolist()
             for i, score in enumerate(score):
                 cls_name = model.label_to_class_map.get(i, i)
