@@ -112,22 +112,22 @@ class GenericClassifier(nn.Module):
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None):
         
-        if state_dict is None:
+        if state_dict is not None:
+            label_to_class_map = state_dict["label_to_class_map"]
+            backbone = state_dict["backbone"]
+            backbone_source = state_dict["backbone_source"]
+            model = cls(
+                label_to_class_map=label_to_class_map,
+                backbone=backbone,
+                backbone_source=backbone_source,
+            )
+            model.load_state_dict(state_dict)
+        else:
             if checkpoint_path is None:
                 raise ValueError("checkpoint_path or state_dict must be provided")
-            state_dict = torch.load(
+            model = torch.load(
                 checkpoint_path, map_location=map_location, weights_only=False
             )
-            
-        label_to_class_map = state_dict["label_to_class_map"]
-        backbone = state_dict["backbone"]
-        backbone_source = state_dict["backbone_source"]
-        model = cls(
-            label_to_class_map=label_to_class_map,
-            backbone=backbone,
-            backbone_source=backbone_source,
-        )
-        model.load_state_dict(state_dict)
         return model
 
     @classmethod

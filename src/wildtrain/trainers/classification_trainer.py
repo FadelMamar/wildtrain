@@ -21,7 +21,7 @@ from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AU
 from typing import Any, Optional, Tuple
 
 from ..models.classifier import GenericClassifier
-from ..data.classification_datamodule import ClassificationDataModule
+from ..data import ClassificationDataModule
 from ..utils.logging import ROOT
 from ..utils.logging import get_logger
 from ..utils.dvc_tracker import DVCTracker
