@@ -9,14 +9,16 @@ from rich.text import Text
 import logging
 from pathlib import Path
 from typing import Optional
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig
 import subprocess
 import platform
 from datetime import datetime
 
 
-from .trainers.classification_trainer import run_classification
+from .trainers.classification_trainer import ClassifierTrainer
 from .utils.logging import ROOT
+from .pipeline.detection_pipeline import DetectionPipeline
+from .pipeline.classification_pipeline import ClassificationPipeline
 
 # Create Typer app
 app = typer.Typer(
@@ -87,7 +89,7 @@ def train_classifier(
 
         cfg = OmegaConf.load(config)
         console.print(OmegaConf.to_yaml(cfg))
-        run_classification(cfg=cfg)
+        ClassifierTrainer(DictConfig(cfg)).run()
 
         progress.update(task, description="Training completed!")
 
@@ -185,6 +187,52 @@ def get_dataset_stats(
         console.print("  🏷️  Classes: 10")
         console.print("  📏 Image size: 224x224")
         console.print("  📁 Format: JPEG")
+
+
+@app.command()
+def run_detection_pipeline(
+    config: Path = typer.Argument(..., help="Path to unified detection pipeline YAML config"),
+) -> None:
+    """Run the full detection pipeline (train + eval) for object detection."""
+    console.print(f"[bold green]Running detection pipeline with config:[/bold green] {config}")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Initializing pipeline...", total=None)
+        pipeline = DetectionPipeline(str(config))
+        progress.update(task, description="Training...")
+        pipeline.train()
+        progress.update(task, description="Evaluating...")
+        results = pipeline.evaluate()
+        progress.update(task, description="Pipeline completed!")
+        console.print("\n[bold blue]Detection pipeline completed. Evaluation results:[/bold blue]")
+        console.print(results)
+
+
+@app.command()
+def run_classification_pipeline(
+    config: Path = typer.Argument(..., help="Path to unified classification pipeline YAML config"),
+) -> None:
+    """Run the full classification pipeline (train + eval) for image classification."""
+    console.print(f"[bold green]Running classification pipeline with config:[/bold green] {config}")
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Initializing pipeline...", total=None)
+        pipeline = ClassificationPipeline(str(config))
+        progress.update(task, description="Training...")
+        pipeline.train()
+        progress.update(task, description="Evaluating...")
+        results = pipeline.evaluate()
+        progress.update(task, description="Pipeline completed!")
+        console.print("\n[bold blue]Classification pipeline completed. Evaluation results:[/bold blue]")
+        console.print(results)
 
 
 if __name__ == "__main__":
