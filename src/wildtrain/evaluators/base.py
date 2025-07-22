@@ -10,7 +10,11 @@ from supervision.metrics import (
     F1Score,
 )
 import supervision as sv
+from copy import deepcopy
+from logging import getLogger
+import traceback
 
+logger = getLogger(__name__)
 
 class BaseEvaluator(ABC):
     """
@@ -26,33 +30,44 @@ class BaseEvaluator(ABC):
         else:
             raise ValueError(f"Invalid config type: {type(config)}")
 
+        boxes = sv.metrics.core.MetricTarget.BOXES
+        average = getattr(sv.metrics.core.AveragingMethod,self.config.metrics.average.upper())
+
         self.metrics = dict(
             mAP=MeanAveragePrecision(
-                "boxes",
+                boxes,
                 class_agnostic=self.config.metrics.class_agnostic,
                 class_mapping=None,
             ),
-            mAR=MeanAverageRecall("boxes"),
-            p=Precision("boxes", averaging_method=self.config.metrics.average),
-            r=Recall("boxes", averaging_method=self.config.metrics.average),
-            f1=F1Score("boxes", averaging_method=self.config.metrics.average),
+            mAR=MeanAverageRecall(boxes),
+            p=Precision(boxes, averaging_method=average),
+            r=Recall(boxes, averaging_method=average),
+            f1=F1Score(boxes, averaging_method=average),
         )
+        
+        self.per_image_metrics = deepcopy(self.metrics)
+        self.per_image_results = dict()
 
         self.report: pd.DataFrame = None
 
     def evaluate(
-        self,
+        self,debug:bool=False
     ) -> Dict[str, Any]:
         """
         Evaluate model using parameters from config dict passed via kwargs.
         """
+        count = 0
         for results in self._run_inference():
             self._compute_metrics(results)
+            count += 1
+            if debug and count > 10:
+                break
+
         results = self._get_results()
         try:
             self.report = self._get_report(results)
-        except Exception as e:
-            print(f"Error generating report: {e}")
+        except Exception:
+            logger.error(f"Error generating report: {traceback.format_exc()}")
             self.report = None
 
         self._reset()
@@ -69,13 +84,43 @@ class BaseEvaluator(ABC):
         """
         Compute metrics for a batch of results.
         """
-        for metric in self.metrics.values():
+        for metric_name, metric in self.metrics.items():
             for pred, gt in zip(results["predictions"], results["ground_truth"]):
                 metric.update(pred, gt)
+                
+                try:
+                    self._record_per_image_stats(pred, gt, metric_name)
+                except Exception:
+                    logger.info(gt)
+                    logger.info(pred)
+                    logger.error(f"Error recording per image stats for {gt.metadata['file_path']}. {traceback.format_exc()}")
+                    raise 
+                
+    def _record_per_image_stats(self,pred,gt,metric_name):
+        
+        # compute per image metrics
+        if (pred.xyxy.size == 0) and (gt.xyxy.size == 0):
+            self.per_image_results[(gt.metadata['file_path'],metric_name)] = "True-Negative"
+            return
+            
+        elif pred.xyxy.size == 0:
+            self.per_image_results[(gt.metadata['file_path'],metric_name)] = ["False-Negative",gt]
+            return
+
+        elif gt.xyxy.size == 0:
+            self.per_image_results[(gt.metadata['file_path'],metric_name)] = ["False-Positive",pred]
+            return
+
+        metric_i = self.per_image_metrics[metric_name]
+        metric_i.reset()
+        result_i = metric_i.update(pred, gt).compute()
+        self.per_image_results[(gt.metadata['file_path'],metric_name)] = result_i.to_pandas()
+        
 
     def _reset(self) -> None:
         for metric in self.metrics.values():
             metric.reset()
+        self.per_image_results = dict()
 
     def _get_report(self, results: Dict[str, Any]):
         """

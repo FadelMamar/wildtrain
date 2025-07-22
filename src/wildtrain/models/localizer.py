@@ -27,11 +27,10 @@ class UltralyticsLocalizer(ObjectLocalizer):
         conf_thres (float): Confidence threshold for detections.
     """
     
-    
-
     def __init__(
         self,
         weights: str,
+        imgsz:int,
         device: str = "cpu",
         conf_thres: float = 0.25,
         iou_thres: float = 0.5,
@@ -47,6 +46,7 @@ class UltralyticsLocalizer(ObjectLocalizer):
         self.iou_thres = iou_thres
         self.max_det = max_det
         self.overlap_metric = overlap_metric
+        self.imgsz = imgsz
         
         self.class_agnostic = False
         
@@ -71,6 +71,7 @@ class UltralyticsLocalizer(ObjectLocalizer):
             
         predictions = self.model.predict(
             images,
+            imgsz=self.imgsz,
             verbose=False,
             conf=0.1,
             iou=0.1,

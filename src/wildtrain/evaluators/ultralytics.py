@@ -11,7 +11,7 @@ from tqdm import tqdm
 import supervision as sv
 
 from .base import BaseEvaluator
-from ..models.detector import TwoStageDetector
+from ..models.detector import Detector
 from ..models.localizer import UltralyticsLocalizer
 from ..models.classifier import GenericClassifier
 
@@ -25,44 +25,25 @@ class UltralyticsEvaluator(BaseEvaluator):
     def __init__(self, config: Union[Dict[str, Any], str]):
         super().__init__(config)
         self.model = self._load_model()
-        self.dataloader = self._create_dataloader()
-        self.prediction_cfg = self._load_prediction_cfg()
-
-    def _load_prediction_cfg(
-        self,
-    ):
-        if self.config.device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            device = self.config.device
-        return {
-            "conf": self.config.eval.conf,
-            "iou": self.config.eval.iou,
-            "half": self.config.eval.half,
-            "device": device,
-            "max_det": self.config.eval.max_det,
-            "verbose": self.config.eval.verbose,
-            "augment": self.config.eval.tta,
-            "save": self.config.eval.save,
-            "save_txt": self.config.eval.save_txt,
-            "save_conf": self.config.eval.save_conf,
-            "save_crop": self.config.eval.save_crop,
-        }
+        self.dataloader = self._create_dataloader()    
 
     def _load_model(self) -> Any:
         localizer = UltralyticsLocalizer(
             weights=self.config.weights.localizer,
+            imgsz=self.config.eval.imgsz,
             device=self.config.device,
             conf_thres=self.config.eval.conf,
             iou_thres=self.config.eval.iou,
             task=self.config.eval.task,
         )
+        
+        classifier = None
+        if self.config.weights.classifier:
+            classifier = GenericClassifier.load_from_checkpoint(
+                self.config.weights.classifier, map_location=self.config.device
+            )
 
-        classifier = GenericClassifier.load_from_checkpoint(
-            self.config.weights.classifier, map_location=self.config.device
-        )
-
-        return TwoStageDetector(localizer, classifier)
+        return Detector(localizer, classifier)
 
     def _create_dataloader(self) -> DataLoader:
         """
@@ -129,8 +110,8 @@ class UltralyticsEvaluator(BaseEvaluator):
         for item in batch:
             bbox = item["bboxes"]
             if bbox.numel() > 0:  # convert bbox to xyxy format
-                bbox[:, [0, 2]] = bbox[:, [0, 2]] * item["ori_shape"][1]  # x w
-                bbox[:, [1, 3]] = bbox[:, [1, 3]] * item["ori_shape"][0]  # y h
+                bbox[:, [0, 2]] = bbox[:, [0, 2]] * item["resized_shape"][1]  # x w
+                bbox[:, [1, 3]] = bbox[:, [1, 3]] * item["resized_shape"][0]  # y h
                 bbox[:, [0, 1]] = bbox[:, [0, 1]] - bbox[:, [2, 3]] / 2  # x y
                 bbox[:, [2, 3]] = bbox[:, [2, 3]] + bbox[:, [0, 1]]  # x y x y
                 bboxes.append(bbox)
@@ -140,26 +121,29 @@ class UltralyticsEvaluator(BaseEvaluator):
         return {
             "img": imgs,
             "im_file": im_files,
-            "ori_shape": ori_shapes,
-            "resized_shape": resized_shapes,
-            "ratio_pad": ratio_pads,
+            # "ori_shape": ori_shapes,
+            # "resized_shape": resized_shapes,
+            # "ratio_pad": ratio_pads,
             "cls": cls,
             "bboxes": bboxes,
         }
 
     def _run_inference(self) -> Generator[Dict[str, List[sv.Detections]], None, None]:
         for batch in tqdm(self.dataloader, desc="Running inference"):
-            predictions = self.model.predict(batch["img"], **self.prediction_cfg)
-            detections = [sv.Detections.from_ultralytics(pred) for pred in predictions]
+            predictions = self.model.predict(batch["img"])
+            # try:
+            offset = 1 if self.config.eval.single_cls else 0
             gt_detections = [
                 sv.Detections(
                     xyxy=gt.cpu().numpy(),
-                    class_id=cls.cpu().flatten().numpy(),
+                    class_id=cls.cpu().int().flatten().numpy() + offset,
                     metadata=dict(file_path=file_path),
                 )
                 for gt, cls, file_path in zip(
                     batch["bboxes"], batch["cls"], batch["im_file"]
                 )
             ]
+            # except Exception:
+            #     pass
 
-            yield dict(predictions=detections, ground_truth=gt_detections)
+            yield dict(predictions=predictions, ground_truth=gt_detections)

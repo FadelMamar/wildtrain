@@ -3,9 +3,10 @@ import supervision as sv
 import torchvision.ops as ops
 import numpy as np
 from typing import Optional
-
+from copy import deepcopy
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer
+from collections import defaultdict
 
 
 class Detector(object):
@@ -25,7 +26,7 @@ class Detector(object):
         assert images.dim() == 4, "Input images must be a batch of images"
         assert images.shape[1] == 3, "Input images must be RGB"
 
-        detections: list[sv.Detections] = self.localizer.forward(images)
+        detections: list[sv.Detections] = self.localizer.predict(images)
 
         if self.classifier is None:
             return detections
@@ -77,20 +78,26 @@ class Detector(object):
         )
 
         cls_results = self.classifier.predict(crops)  # (N, num_classes)
-        results = []
-        for i in range(images.shape[0]):
-            det = detections[i]
-            class_name = cls_results[i]["class"]
-            class_id = cls_results[i]["class_id"]
-            score = cls_results[i]["score"]
-            metadata = det.metadata.copy()
-            metadata.update({"class": class_name, "score": score})
-            updated_det = sv.Detections(
+        results = deepcopy(detections)
+
+        # Map from image index to list of (detection index in boxes, classifier result)
+        img_to_det_indices = defaultdict(list)
+        for det_idx, img_idx in enumerate(boxes[:, 0].tolist()):
+            img_to_det_indices[int(img_idx)].append(det_idx)
+
+        # Prepare per-image updates
+        for img_idx, det_indices in img_to_det_indices.items():
+            if len(det_indices) == 0:
+                continue
+            det = detections[img_idx]
+            # Gather classifier results for all detections in this image
+            class_ids = np.array([cls_results[j]['class_id'] for j in det_indices])
+            scores = np.array([cls_results[j]['score'] for j in det_indices])
+            results[img_idx] = sv.Detections(
                 xyxy=det.xyxy,
-                confidence=det.confidence * score,
-                class_id=np.array([class_id]),
-                metadata=metadata,
+                confidence=det.confidence * scores,
+                class_id=class_ids,
+                metadata=det.metadata.copy(),  # or update as needed
             )
-            results.append(updated_det)
 
         return results
