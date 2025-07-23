@@ -15,6 +15,7 @@ dependencies = [
     "openmim>=0.3.9",
     "python-dotenv",
     "rich>=14.0.0",
+    "fiftyone==1.2.0",
     "timm",
     "numpy<2.0.0",
     "supervision",
@@ -23,6 +24,7 @@ dependencies = [
     "typer>=0.16.0",
     "ultralytics>=8.3.168",
     "omegaconf>=2.3.0",
+    "shap>=0.48.0",
 ]
 
 [project.scripts]
