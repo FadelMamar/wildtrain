@@ -8,6 +8,9 @@ model:
   architecture_file: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/models/yolo12-rtdetr.yaml
   pretrained: true
 
+name: yolo12
+project: wildai-localization
+
 # Path to classifier weights
 classifier: D:/workspace/repos/wildtrain/models/best_classifier.pt
 
