@@ -23,10 +23,7 @@ class ClassificationEvaluator:
             self.config = config    
 
     def _load_model(self):
-        try:
-            model = GenericClassifier.load_from_lightning_ckpt(self.config.classifier, map_location=self.config.device)
-        except Exception:
-            model = GenericClassifier.load_from_checkpoint(self.config.classifier, map_location=self.config.device)
+        model = GenericClassifier.load_from_checkpoint(self.config.classifier, map_location=self.config.device)
         model.eval()
         return model
 
