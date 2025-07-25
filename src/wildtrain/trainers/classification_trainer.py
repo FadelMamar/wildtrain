@@ -146,7 +146,6 @@ class ClassifierModule(L.LightningModule):
         self,
         model: GenericClassifier,
         epochs: int = 20,
-        threshold: float = 0.5,
         label_smoothing: float = 0.0,
         lr: float = 1e-3,
         lrf: float = 1e-2,
@@ -166,9 +165,9 @@ class ClassifierModule(L.LightningModule):
         # metrics
         cfg = dict(task="multiclass", num_classes=self.num_classes, average=None)
         self.accuracy = Accuracy(**cfg)
-        self.precision = Precision(threshold=threshold, **cfg)
-        self.recall = Recall(threshold=threshold, **cfg)
-        self.f1score = F1Score(threshold=threshold, **cfg)
+        self.precision = Precision(**cfg)
+        self.recall = Recall(**cfg)
+        self.f1score = F1Score(**cfg)
         self.ap = AUROC(**cfg)
 
         self.metrics = dict(
@@ -212,7 +211,7 @@ class ClassifierModule(L.LightningModule):
         loss = F.cross_entropy(logits, y, label_smoothing=self.label_smoothing)
 
         for name, metric in self.metrics.items():
-            metric.update(logits, y)
+            metric.update(logits.softmax(dim=1), y)
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
 
@@ -359,7 +358,6 @@ class ClassifierTrainer(ModelTrainer):
             epochs=self.config.train.epochs,
             model=cls_model,
             lr=self.config.train.lr,
-            threshold=self.config.train.threshold,
             label_smoothing=self.config.train.label_smoothing,
             weight_decay=self.config.train.weight_decay,
             lrf=self.config.train.lrf,

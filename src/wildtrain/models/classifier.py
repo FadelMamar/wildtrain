@@ -140,7 +140,7 @@ class GenericClassifier(nn.Module):
                 checkpoint_path, map_location=map_location, weights_only=False
             )
             # warmup
-            model(torch.randn(1,3,model.input_size.item(),model.input_size.item()))
+            #model(torch.randn(1,3,model.input_size.item(),model.input_size.item()).to(model.device))
         return model
 
     @classmethod

@@ -20,6 +20,8 @@ from .utils.logging import ROOT
 from .pipeline.detection_pipeline import DetectionPipeline
 from .pipeline.classification_pipeline import ClassificationPipeline
 from .visualization import FiftyOneManager
+from .evaluators.ultralytics import UltralyticsEvaluator
+from .evaluators.classification import ClassificationEvaluator
 
 # Create Typer app
 app = typer.Typer(
@@ -215,6 +217,34 @@ def visualize_predictions(
         debug=debug,
     )
     console.print(f"[bold blue]Predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+
+
+@app.command()
+def evaluate_detector(
+    config: Path = typer.Argument(..., help="Path to YOLO evaluation YAML config file"),
+    type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
+) -> None:
+    """Evaluate a YOLO model using a YAML config file."""
+    console.print(f"[bold green]Running {type} evaluation with config:[/bold green] {config}")
+    if type == "yolo":
+        evaluator = UltralyticsEvaluator(config=str(config))
+    else:
+        raise ValueError(f"Invalid detector type: {type}")
+    results = evaluator.evaluate(debug=False)
+    console.print(f"\n[bold blue]{type} Evaluation Results:[/bold blue]")
+    console.print(results)
+
+
+@app.command()
+def evaluate_classifier(
+    config: Path = typer.Argument(..., help="Path to classification evaluation YAML config file"),
+) -> None:
+    """Evaluate a classifier using a YAML config file."""
+    console.print(f"[bold green]Running classifier evaluation with config:[/bold green] {config}")
+    evaluator = ClassificationEvaluator(str(config))
+    results = evaluator.evaluate(debug=False)
+    console.print("\n[bold blue]Classifier Evaluation Results:[/bold blue]")
+    console.print(results)
 
 
 if __name__ == "__main__":

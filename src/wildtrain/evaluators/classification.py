@@ -6,10 +6,10 @@ import torch
 from pathlib import Path
 from wildtrain.models.classifier import GenericClassifier
 from wildtrain.data import ClassificationDataModule
-from wildtrain.trainers.classification_trainer import create_transforms
-from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC
+from torchmetrics.classification import Accuracy, Precision, Recall, F1Score, AUROC, AveragePrecision
 from tqdm import tqdm
 from wildtrain.utils.logging import get_logger
+import numpy as np
 
 logger = get_logger(__name__)
 
@@ -28,11 +28,10 @@ class ClassificationEvaluator:
         return model
 
     def _load_data(self):
-        transforms = create_transforms(self.config.dataset.transforms)
         datamodule = ClassificationDataModule(
             root_data_directory=self.config.dataset.root_data_directory,
             batch_size=self.config.batch_size,
-            transforms=transforms,
+            transforms=None,
             load_as_single_class=self.config.dataset.single_class.enable,
             background_class_name=self.config.dataset.single_class.background_class_name,
             single_class_name=self.config.dataset.single_class.single_class_name,
@@ -44,30 +43,34 @@ class ClassificationEvaluator:
             return datamodule.test_dataloader()
         else:
             return datamodule.val_dataloader()
+    
 
     def evaluate(self,debug:bool=False, save_path:Optional[str]=None):
         model = self._load_model().to(self.config.device)
         dataloader = self._load_data()
         num_classes = len(model.label_to_class_map)
+        logger.info(f"Number of classes: {num_classes}")
         metrics = {
-            "accuracy": Accuracy(task="multiclass", num_classes=num_classes),
-            "precision": Precision(task="multiclass", num_classes=num_classes, average=None),
+            "accuracy": Accuracy(task="multiclass", num_classes=num_classes,),
+            "precision": Precision(task="multiclass", num_classes=num_classes, average=None,),
             "recall": Recall(task="multiclass", num_classes=num_classes, average=None),
             "f1": F1Score(task="multiclass", num_classes=num_classes, average=None),
-            "auroc": AUROC(task="multiclass", num_classes=num_classes),
+            "auroc": AUROC(task="multiclass", num_classes=num_classes,average=None),
+            "average_precision": AveragePrecision(task="multiclass", num_classes=num_classes,average=None),
         }
         for metric in metrics.values():
             metric.to(self.config.device)
+        
         with torch.no_grad():
             count = 0
             for x, y in tqdm(dataloader, desc="Evaluating"):
                 x, y = x.to(self.config.device), y.to(self.config.device).long().squeeze(1)
-                logits = model(x)
+                probs = model(x).softmax(dim=1)
                 for metric in metrics.values():
-                    metric.update(logits, y)
+                    metric.update(probs, y)
                 count += 1
                 if count > 10 and debug:
-                    break
+                    break            
 
         results = {}
         for name, metric in metrics.items():
@@ -85,3 +88,5 @@ class ClassificationEvaluator:
                 logger.error(f"Error saving report to {save_path}: {traceback.format_exc()}")
 
         return results
+
+    
