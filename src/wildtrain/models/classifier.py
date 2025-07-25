@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torchvision.transforms as T
+import torchvision.transforms.v2 as T
 import timm
 from typing import Optional
 
@@ -59,6 +59,7 @@ class GenericClassifier(nn.Module):
     ):
         preprocessing = torch.nn.Sequential(
             T.Resize(self.input_size.item(), interpolation=T.InterpolationMode.NEAREST),
+            T.ToDtype(torch.float32),
             T.Normalize(mean=self.mean, std=self.std),
         )
         return preprocessing
@@ -82,6 +83,7 @@ class GenericClassifier(nn.Module):
             model = timm.create_model(
                 self.backbone, pretrained=self.pretrained, num_classes=0
             )
+            model.set_input_size((self.input_size.item(),self.input_size.item()))
         else:
             raise ValueError(f"Unsupported backbone source: {self.backbone_source}")
 
@@ -109,9 +111,16 @@ class GenericClassifier(nn.Module):
             ]
             scores = probs.cpu().max(dim=1).values.tolist()
             return [{"class": c, "score": s, "class_id":l} for c, s, l in zip(classes, scores, labels)]
+    
+    @classmethod
+    def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = "cpu"):
+        try:
+            return cls.load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
+        except Exception:
+            return cls._load_from_checkpoint(checkpoint_path=checkpoint_path, map_location=map_location,) 
 
     @classmethod
-    def load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None):
+    def _load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None) -> 'GenericClassifier':
         
         if state_dict is not None:
             label_to_class_map = state_dict["label_to_class_map"]
@@ -129,6 +138,8 @@ class GenericClassifier(nn.Module):
             model = torch.load(
                 checkpoint_path, map_location=map_location, weights_only=False
             )
+            # warmup
+            model(torch.randn(1,3,model.input_size.item(),model.input_size.item()))
         return model
 
     @classmethod
@@ -139,7 +150,7 @@ class GenericClassifier(nn.Module):
         if state_dict is None:
             raise KeyError("state_dict not found in checkpoint. Make sure to use checkpoint from pytorch lightning.")
         state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
-        return cls.load_from_checkpoint(checkpoint_path=None, map_location=map_location, state_dict=state_dict)
+        return cls._load_from_checkpoint(checkpoint_path=None, map_location=map_location, state_dict=state_dict)
 
     def state_dict(self, *args, **kwargs):
         state = super().state_dict(*args, **kwargs)

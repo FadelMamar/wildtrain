@@ -121,7 +121,7 @@ class ClassificationDataModule(L.LightningDataModule):
     def __init__(
         self,
         root_data_directory: str,
-        batch_size: int,
+        batch_size: int=8,
         transforms: Optional[dict[str, Any]] = None,
         load_as_single_class: bool = False,
         background_class_name: str = "background",

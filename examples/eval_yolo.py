@@ -12,8 +12,8 @@ print("Running YOLO evaluation...")
 results = evaluator.evaluate(debug=True)
 
 # Print results
-print("Evaluation results:")
-print(results)
+print("End.:")
+# print(results)
 
 
 
