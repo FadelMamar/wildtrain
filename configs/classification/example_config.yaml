@@ -1,21 +1,24 @@
 # Example configuration for WildTrain classification training
 task: classification
 
+run_name: "dinov2-small"
+
 dataset:
-  root_data_directory: "D:/workspace/data/demo-dataset"
+  root_data_directory: D:\PhD\workspace\data
+  rebalance: true
 
   single_class:
     enable : true
     background_class_name: "background"
     single_class_name: "wildlife"
     keep_classes: null
-    discard_classes: ["vegetation", "termite mound", "rocks", "other", "label"]
+    discard_classes: ["vegetation", "termite mound", "rocks", "other", "label","detection"]
 
   stats:
     mean: [0.554, 0.469, 0.348]
     std: [0.203, 0.173, 0.144]
   
-  input_size: 224
+  input_size: 128
 
   transforms:
     train:
@@ -49,8 +52,8 @@ model:
   std: ${dataset.stats.std}
 
 train:
-  batch_size: 4
-  epochs: 1
+  batch_size: 64
+  epochs: 20
   lr: 0.0001
   threshold: 0.5
   label_smoothing: 0.0
@@ -72,7 +75,7 @@ checkpoint:
 
 mlflow:
   experiment_name: wildtrain_classification
-  run_name: demo
+  run_name: ${run_name}
   log_model: true
 
 
