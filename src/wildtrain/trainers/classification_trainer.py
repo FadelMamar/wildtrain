@@ -2,7 +2,7 @@ import traceback
 import os
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from typing import Any
+from typing import Any, Sequence
 import mlflow
 from lightning import Trainer
 from lightning.pytorch.callbacks import (
@@ -43,7 +43,7 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Dictionary with 'train' and 'val' keys containing composed transforms
     """
-    from torchvision import transforms as T
+    import torchvision.transforms.v2 as T
     import torchvision.transforms.functional as F
 
     def create_transform_list(transform_configs: list) -> T.Compose:
@@ -93,12 +93,15 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"Unknown transform: {transform_name}")
 
             # Create the transform instance with parameters
+            for key, value in params.items():
+                if isinstance(value, Sequence) and not isinstance(value, str):
+                    params[key] = list(value)
             try:
                 transform_instance = transform_class(**params)
                 transform_list.append(transform_instance)
             except Exception as e:
                 raise ValueError(
-                    f"Failed to create transform {transform_name} with params {params}: {e}"
+                    f"Failed to create transform {transform_name} with params {params}: {traceback.format_exc()}"
                 )
 
         return T.Compose(transform_list)
