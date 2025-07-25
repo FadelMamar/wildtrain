@@ -83,7 +83,10 @@ class GenericClassifier(nn.Module):
             model = timm.create_model(
                 self.backbone, pretrained=self.pretrained, num_classes=0
             )
-            model.set_input_size((self.input_size.item(),self.input_size.item()))
+            try:
+                model.set_input_size((self.input_size.item(),self.input_size.item()))
+            except Exception:
+                pass
         else:
             raise ValueError(f"Unsupported backbone source: {self.backbone_source}")
 
