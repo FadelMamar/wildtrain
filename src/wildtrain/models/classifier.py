@@ -90,7 +90,7 @@ class GenericClassifier(nn.Module):
         if self.freeze_backbone:
             for param in model.parameters():
                 param.requires_grad = False
-            model.eval()
+            #model.eval()
             logger.info(f"Backbone {self.backbone} frozen")
 
         return model
