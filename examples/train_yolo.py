@@ -6,7 +6,7 @@ Created on Mon Jul 21 16:46:54 2025
 """
 
 from omegaconf import OmegaConf, DictConfig
-from wildtrain.trainers import UltraLightDetectionTrainer
+from wildtrain.trainers import UltralyticsDetectionTrainer
 import traceback
 
 
@@ -26,7 +26,7 @@ def main():
     # print(OmegaConf.to_yaml(config))
 
     try:
-        trainer = UltraLightDetectionTrainer(DictConfig(config))
+        trainer = UltralyticsDetectionTrainer(DictConfig(config))
         trainer.run()
         print("✅ Training completed successfully!")
     except Exception:
