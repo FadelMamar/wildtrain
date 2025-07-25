@@ -35,6 +35,8 @@ console = Console()
 def setup_logging(verbose: bool = False) -> None:
     """Setup rich logging with appropriate level."""
     level = logging.DEBUG if verbose else logging.INFO
+    log_dir = ROOT / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
         level=level,
@@ -43,9 +45,7 @@ def setup_logging(verbose: bool = False) -> None:
         handlers=[
             RichHandler(console=console, rich_tracebacks=True),
             logging.FileHandler(
-                ROOT
-                / "logs"
-                / f"cli_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log",
+                log_dir / f"cli_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log",
                 encoding="utf-8",
             ),
         ],
@@ -85,7 +85,7 @@ def train_classifier(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Initializing training...", total=None)
+        task = progress.add_task("Training...", total=None)
 
         cfg = OmegaConf.load(config)
         console.print(OmegaConf.to_yaml(cfg))

@@ -22,7 +22,7 @@ from typing import Any, Optional, Tuple
 
 from ..models.classifier import GenericClassifier
 from ..data import ClassificationDataModule
-from ..utils.logging import ROOT
+from ..utils.logging import ROOT, ENV_FILE
 from ..utils.logging import get_logger
 from ..utils.dvc_tracker import DVCTracker
 from .base import ModelTrainer
@@ -258,7 +258,8 @@ class ClassifierTrainer(ModelTrainer):
         """
         Get the callbacks for the trainer.
         """
-        load_dotenv(ROOT / ".env", override=True)
+        assert ENV_FILE.exists(), "Environment file not found"
+        load_dotenv(ENV_FILE, override=True)
         MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
         if MLFLOW_TRACKING_URI is None:
             raise ValueError("MLFLOW_TRACKING_URI is not set")
@@ -315,6 +316,9 @@ class ClassifierTrainer(ModelTrainer):
         """
         Run image classification training or evaluation based on config.
         """
+        # Set float32 matmul precision to medium
+        if torch.cuda.is_available():   
+            torch.set_float32_matmul_precision('medium')
 
         # DataModule
         data_cfg = self.config.dataset

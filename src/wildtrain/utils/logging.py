@@ -4,7 +4,7 @@ from typing import Optional
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
-
+ENV_FILE = ROOT / ".env"
 
 def setup_logging(level="INFO", log_file: Optional[str] = None):
     """Setup logging configuration."""

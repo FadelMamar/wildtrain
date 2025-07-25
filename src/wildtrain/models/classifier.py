@@ -130,6 +130,7 @@ class GenericClassifier(nn.Module):
                 label_to_class_map=label_to_class_map,
                 backbone=backbone,
                 backbone_source=backbone_source,
+                input_size=state_dict["input_size"].item(),
             )
             model.load_state_dict(state_dict)
         else:
