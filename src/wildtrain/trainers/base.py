@@ -20,6 +20,7 @@ class ModelTrainer(ABC):
         """
         self.config = config
         self.best_model_path: Optional[str] = None
+        self.best_model_score: Optional[float] = None
 
     @abstractmethod
     def run(self) -> None:

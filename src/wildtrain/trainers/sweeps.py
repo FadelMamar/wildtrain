@@ -2,68 +2,72 @@ import itertools
 import os
 from typing import Any, Dict, List
 from omegaconf import OmegaConf, DictConfig, ListConfig
+import optuna
 from .classification_trainer import ClassifierTrainer
+from abc import ABC, abstractmethod
+from ..utils.logging import get_logger
 
-class ClassifierSweeper:
-    def __init__(self, sweep_config_path: str):
+logger = get_logger(__name__)
+class Sweeper(ABC):
+    
+    @abstractmethod
+    def __call__(self, trial: optuna.Trial) -> Any:
+        pass
+
+    @abstractmethod
+    def run(self):
+        pass
+
+class ClassifierSweeper(Sweeper):
+    def __init__(self, sweep_config_path: str,debug:bool=False):
         self.sweep_config_path = sweep_config_path
-        self.sweep_cfg = OmegaConf.load(sweep_config_path)
-        self.base_cfg_path = os.path.join(os.path.dirname(sweep_config_path), self.sweep_cfg.base_config)
-        self.base_cfg = OmegaConf.load(self.base_cfg_path)
-        self.sweep_params = self.sweep_cfg.sweep.parameters
-        self.strategy = self.sweep_cfg.sweep.get('strategy', 'grid')
-        self.num_runs = self.sweep_cfg.sweep.get('num_runs', 10)
-        self.seed = self.sweep_cfg.sweep.get('seed', 42)
-        self.output_dir = self.sweep_cfg.output_dir if hasattr(self.sweep_cfg, 'output_dir') else 'runs/classification_sweeps'
-        os.makedirs(self.output_dir, exist_ok=True)
+        self.sweep_cfg = DictConfig(OmegaConf.load(self.sweep_config_path))
+        self.base_cfg = DictConfig(OmegaConf.load(self.sweep_cfg.base_config))
+        self.counter = 0
+        self.debug = debug
+    def __call__(self,trial:optuna.Trial):
+        self.counter += 1
 
-    def _generate_param_combinations(self) -> List[Dict[str, Any]]:
-        keys = list(self.sweep_params.keys())
-        values = [self.sweep_params[k] for k in keys]
-        combos = list(itertools.product(*values))
-        param_dicts = []
-        for combo in combos:
-            d = {}
-            for k, v in zip(keys, combo):
-                d[k] = v
-            param_dicts.append(d)
-        return param_dicts
+        # Model params
+        model_params = self.sweep_cfg.parameters.model
+        self.base_cfg.model.backbone = trial.suggest_categorical("backbone", model_params.backbone)
+        self.base_cfg.model.dropout = trial.suggest_categorical("dropout", model_params.dropout)
+        
+        # Train params
+        train_params = self.sweep_cfg.parameters.train
+        lr = trial.suggest_categorical("lr", train_params.lr)
+        lrf = trial.suggest_categorical("lrf", train_params.lrf)
+        label_smoothing = trial.suggest_categorical("label_smoothing", train_params.label_smoothing)
+        weight_decay = trial.suggest_categorical("weight_decay", train_params.weight_decay)
+        batch_size = trial.suggest_categorical("batch_size", train_params.batch_size)
 
-    def _set_nested(self, cfg, key, value):
-        parts = key.split('.')
-        sub = cfg
-        for p in parts[:-1]:
-            sub = sub[p]
-        sub[parts[-1]] = value
+        self.base_cfg.train.lr = lr
+        self.base_cfg.train.lrf = lrf
+        self.base_cfg.train.label_smoothing = label_smoothing
+        self.base_cfg.train.weight_decay = weight_decay
+        self.base_cfg.train.batch_size = batch_size
+
+        self.base_cfg.mlflow.run_name = f"trial_{self.counter}_{self.base_cfg.model.backbone}"
+        self.base_cfg.mlflow.experiment_name = self.sweep_cfg.sweep_name
+        self.base_cfg.checkpoint.dirpath = f"checkpoints/classification_sweeps/{self.sweep_cfg.sweep_name}"
+
+        logger.info(f"Running trial {self.counter} with params: {self.base_cfg}")
+        
+        # Train
+        trainer = ClassifierTrainer(self.base_cfg)
+        trainer.run(debug=self.debug)
+
+        return trainer.best_model_score
 
     def run(self):
-        param_combos = self._generate_param_combinations()
-        results = []
-        for i, params in enumerate(param_combos):
-            cfg = OmegaConf.load(self.base_cfg_path)
-            for k, v in params.items():
-                self._set_nested(cfg, k, v)
-            run_name = f"sweep_run_{i+1}"
-            mlflow_cfg = OmegaConf.select(cfg, 'mlflow')
-            if mlflow_cfg is None:
-                cfg.mlflow = OmegaConf.create({})
-            cfg.mlflow['run_name'] = run_name
-            out_dir = os.path.join(self.output_dir, run_name)
-            os.makedirs(out_dir, exist_ok=True)
-            checkpoint_cfg = OmegaConf.select(cfg, 'checkpoint')
-            if checkpoint_cfg is None:
-                cfg.checkpoint = OmegaConf.create({})
-            cfg.checkpoint['dirpath'] = out_dir
-            print(f"[Sweep] Running {run_name} with params: {params}")
-            # Ensure only DictConfig is passed
-            if isinstance(cfg, ListConfig):
-                cfg = OmegaConf.create(OmegaConf.to_container(cfg, resolve=True))
-            trainer = ClassifierTrainer(cfg)
-            trainer.run()
-            result = {
-                'run_name': run_name,
-                'params': params,
-                'best_model_path': getattr(trainer, 'best_model_path', None)
-            }
-            results.append(result)
-        OmegaConf.save({'results': results}, os.path.join(self.output_dir, 'sweep_results.yaml'))
+        
+        study = optuna.create_study(
+            direction="maximize",
+            study_name=self.sweep_cfg.sweep_name,
+            storage="sqlite:///{}.db".format(self.sweep_cfg.sweep_name),
+            sampler=optuna.samplers.TPESampler(seed=self.sweep_cfg.seed),
+            load_if_exists=True
+        )
+
+        study.optimize(self, n_trials=self.sweep_cfg.n_trials)
+        
