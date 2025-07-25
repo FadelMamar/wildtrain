@@ -27,11 +27,11 @@ class FilterPipeline:
         self.filters.clear()
         self.filter_history.clear()
 
-    def filter(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
+    def __call__(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
         data = coco_data
         self.filter_history.clear()
         for i, filter_obj in enumerate(self.filters):
-            data = filter_obj.filter(data)
+            data = filter_obj(data)
             self.filter_history.append(filter_obj.get_filter_info())
         return data
 

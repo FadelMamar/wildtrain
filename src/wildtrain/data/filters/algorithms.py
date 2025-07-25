@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd  # Ensure pandas is installed
 from sklearn.cluster import MiniBatchKMeans  # Use MiniBatchKMeans for scalability
 from sklearn.metrics import silhouette_score
+from collections import defaultdict
+import random
 
 from wildtrain.utils.logging import get_logger
 from .feature_extractor import FeatureExtractor
@@ -27,7 +29,7 @@ class BaseFilter(ABC):
     """
 
     @abstractmethod
-    def filter(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
+    def __call__(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Apply the filter to the input COCO data and return filtered data.
         """
@@ -38,7 +40,6 @@ class BaseFilter(ABC):
         Return information about the filter (for logging/debugging).
         """
         return {"filter_type": self.__class__.__name__}
-
     
 class UniformDistanceRandomSamplingStrategy(SamplingStrategy):
     def sample(self, cluster_df: pd.DataFrame, n_samples: int) -> List[int]:
@@ -57,11 +58,11 @@ class UniformDistanceRandomSamplingStrategy(SamplingStrategy):
         return chosen
 
 
-
+#TODO: make it work for object detection and classification -> subclassing
 class ClusteringFilter(BaseFilter):
     """
     Clustering-based filter. Ensures embeddings are present in each image as image['_embedding'].
-    If not present, computes embeddings using Dinov2Extractor and adds them in batches to avoid memory issues.
+    If not present, computes embeddings using FeatureExtractor and adds them in batches to avoid memory issues.
     Performs clustering on these embeddings and samples uniformly by distance to centroid, proportional to cluster size and x% reduction target.
     Sampling strategy is pluggable.
     """
@@ -88,7 +89,7 @@ class ClusteringFilter(BaseFilter):
         self.last_silhouette_scores = None
         self.last_samples_per_cluster = None
 
-    def filter(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
+    def __call__(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
         images = coco_data.get("images", [])
         if not images:
             logger.warning("No images found in coco_data")
@@ -225,3 +226,71 @@ class ClusteringFilter(BaseFilter):
 
     def get_filter_info(self) -> Dict[str, Any]:
         return {"filter_type": self.__class__.__name__, **vars(self.config)}
+
+
+class ClassificationRebalanceFilter(BaseFilter):
+    """
+    Filter to rebalance a skewed dataset for image classification by undersampling majority classes.
+    Input: List[dict] representing annotations (each dict must have 'class_id' or 'class_name')
+    Output: List[dict] filtered annotations with balanced class distribution
+    """
+    def __init__(self, class_key: str = "class_id", random_seed: Optional[int] = 41, method: str = "mean",exclude_extremes: bool = True):
+        """
+        Args:
+            class_key: The key in annotation dicts to use for class label (e.g., 'class_id' or 'class_name')
+            random_seed: Optional random seed for reproducibility
+        """
+        self.class_key = class_key
+        self.random_seed = random_seed
+        self.method = method
+        self.exclude_extremes = exclude_extremes
+        
+    def _get_mean_count(self, annotations: list[dict]) -> int:
+        class_to_anns = defaultdict(list)
+        for ann in annotations:
+            class_to_anns[ann[self.class_key]].append(ann)
+        class_counts = [len(anns) for anns in class_to_anns.values()]
+        if self.exclude_extremes and len(class_counts) >= 3:
+            class_counts = sorted(class_counts)
+            class_counts = class_counts[1:-1]  # Exclude smallest and largest
+        return int(round(sum(class_counts) / len(class_counts))) 
+    
+    def _get_min_count(self, annotations: list[dict]) -> int:
+        class_to_anns = defaultdict(list)
+        for ann in annotations:
+            class_to_anns[ann[self.class_key]].append(ann)
+        class_counts = [len(anns) for anns in class_to_anns.values()]
+        if self.exclude_extremes and len(class_counts) >= 3:
+            class_counts = sorted(class_counts)
+            class_counts = class_counts[1:-1]  # Exclude smallest and largest
+        return min(class_counts)
+
+    def __call__(self, annotations: list[dict]) -> list[dict]:
+        if not annotations:
+            return []
+        # Group annotations by class
+        if self.method == "mean":
+            mean_count = self._get_mean_count(annotations)
+        elif self.method == "min":
+            mean_count = self._get_min_count(annotations)
+        else:
+            raise ValueError(f"Invalid method: {self.method}")
+        
+        # Group annotations by class
+        class_to_anns = defaultdict(list)
+        for ann in annotations:
+            class_to_anns[ann[self.class_key]].append(ann)
+
+        # Undersample each class to mean_count
+        balanced_anns = []
+        rng = random.Random(self.random_seed)
+        for anns in class_to_anns.values():
+            if len(anns) > mean_count:
+                balanced_anns.extend(rng.sample(anns, mean_count))
+            else:
+                balanced_anns.extend(anns)
+        rng.shuffle(balanced_anns)
+        return balanced_anns
+
+    def get_filter_info(self) -> dict:
+        return {"filter_type": self.__class__.__name__, "class_key": self.class_key, "random_seed": self.random_seed}

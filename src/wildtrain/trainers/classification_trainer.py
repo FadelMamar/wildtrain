@@ -187,7 +187,7 @@ class ClassifierModule(L.LightningModule):
         weight = [
             len(classes) / (classes.count(i) + 1e-6) for i in range(self.num_classes)
         ]
-        weight = torch.Tensor(weight).float().clamp(1.0, 1e2).to(y.device)
+        weight = torch.Tensor(weight).float().clamp(1.0, 10.).to(y.device)
 
         logits = self(x)
         loss = F.cross_entropy(
@@ -333,6 +333,7 @@ class ClassifierTrainer(ModelTrainer):
             single_class_name=self.config.dataset.single_class.single_class_name,
             keep_classes=self.config.dataset.single_class.keep_classes,
             discard_classes=self.config.dataset.single_class.discard_classes,
+            rebalance=data_cfg.rebalance,
         )
         logger.info(f"Getting one batch of data to initialize lazy modules in classifier.")
         datamodule.setup(stage="fit")
