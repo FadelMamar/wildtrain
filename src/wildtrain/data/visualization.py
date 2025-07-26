@@ -14,12 +14,13 @@ from typing import Any, Dict, ItemsView, List, Optional, Union
 
 import fiftyone as fo
 from dotenv import load_dotenv
-from supervision.dataset.core import DetectionDataset
 from tqdm import tqdm
 from omegaconf import OmegaConf
 from wildata.datasets.roi import ROIDataset, ConcatDataset
-
+from .utils import load_yolo_dataset
 from .classification_datamodule import ClassificationDataModule
+import supervision as sv
+import numpy as np
 logger = logging.getLogger(__name__)
 
 
@@ -59,7 +60,7 @@ class FiftyOneManager:
         if self.dataset is None:
             self._init_dataset()
     
-
+    
     def load_classification_datamodule(self, root_data_directory: Optional[str] = None, batch_size: Optional[int] = None, transforms: Optional[dict] = None, load_as_single_class: Optional[bool] = None, background_class_name: Optional[str] = None, single_class_name: Optional[str] = None, keep_classes: Optional[list[str]] = None, discard_classes: Optional[list[str]] = None, stage: str = "fit", config_path: Optional[str] = None) -> ClassificationDataModule:
         """Load a ClassificationDataModule and set up datasets. If config_path is provided, load parameters from config file."""
         config: dict[str, Any] = {}
@@ -98,7 +99,6 @@ class FiftyOneManager:
             ground_truth=fo.Classification(label=class_name)
         )
         return sample
-    
     
     def import_classification_dataset(self, datamodule: ClassificationDataModule, split: str = "val"):
         """Import a classification dataset from a ClassificationDataModule into FiftyOne."""
@@ -164,7 +164,58 @@ class FiftyOneManager:
             config_path=config_path,
         )
         self.import_classification_dataset(datamodule, split=split)
- 
+    
+    def _create_yolo_sample(self, image_path:str,image_data:np.ndarray, detections:sv.Detections, classes:list[str]):
+
+        if len(detections.xyxy) == 0:
+            sample = fo.Sample(
+                filepath=str(image_path),
+            )
+            return sample
+
+        detections_list = []
+        for i,box in enumerate(detections.xyxy):
+            box[:,[0,2]] = box[:,[0,2]]/image_data.shape[1]
+            box[:,[1,3]] = box[:,[1,3]]/image_data.shape[0]
+            class_id = detections.class_id[i]
+            label = classes[class_id]
+            fo_detection = fo.Detection(
+                label=label,
+                bounding_box=box,
+            )
+            detections_list.append(fo_detection)
+
+        sample = fo.Sample(
+            filepath=str(image_path),
+            ground_truth=fo.Detections(detections)
+        )
+        return sample
+    
+    def import_yolo_dataset(self, data_yaml_path: str , split:str, is_obb: bool = False, force_mask: bool = False):
+        data_config = OmegaConf.load(data_yaml_path)
+        root_path = data_config.get("path")
+        images_directory_path = os.path.join(root_path, data_config.get(split))
+        annotations_directory_path = os.path.join(root_path, data_config.get(split))
+
+        assert os.path.exists(images_directory_path), f"Images directory path does not exist: {images_directory_path}"
+        assert os.path.exists(annotations_directory_path), f"Annotations directory path does not exist: {annotations_directory_path}"
+
+        dataset = load_yolo_dataset(images_directory_path=images_directory_path,
+                                                    annotations_directory_path=annotations_directory_path,
+                                                    data_yaml_path=data_yaml_path,
+                                                    is_obb=is_obb,
+                                                    force_mask=force_mask)
+        
+        self._ensure_dataset_initialized()
+
+        samples = []
+        for file_path,image_data,detections in dataset:
+            samples.append(self._create_yolo_sample(file_path,image_data,detections,dataset.classes))
+
+        self.dataset.add_samples(samples)
+        self.save_dataset()
+
+
     def send_predictions_to_labelstudio(
         self, annot_key: str,label_map: dict, dotenv_path: Optional[str] = None,label_type="detections"
     ):
