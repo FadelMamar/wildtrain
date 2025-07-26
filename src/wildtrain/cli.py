@@ -19,7 +19,7 @@ from .trainers.classification_trainer import ClassifierTrainer
 from .utils.logging import ROOT
 from .pipeline.detection_pipeline import DetectionPipeline
 from .pipeline.classification_pipeline import ClassificationPipeline
-from .visualization import FiftyOneManager
+from .visualization import add_predictions_from_classifier
 from .evaluators.ultralytics import UltralyticsEvaluator
 from .evaluators.classification import ClassificationEvaluator
 
@@ -208,7 +208,8 @@ def visualize_predictions(
 ) -> None:
     """Upload classifier predictions to a FiftyOne dataset for visualization."""
     console.print(f"[bold green]Uploading predictions to FiftyOne dataset:[/bold green] {dataset_name}")
-    FiftyOneManager.add_predictions_from_classifier(
+    
+    add_predictions_from_classifier(
         dataset_name=dataset_name,
         checkpoint_path=str(checkpoint_path),
         prediction_field=prediction_field,
