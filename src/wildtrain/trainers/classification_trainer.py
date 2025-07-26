@@ -274,7 +274,7 @@ class ClassifierTrainer(ModelTrainer):
             save_last=self.config.checkpoint.save_last,
             mode=self.config.checkpoint.mode,
             dirpath=ROOT / self.config.checkpoint.dirpath,
-            filename=self.config.checkpoint.filename,
+            #filename=self.config.checkpoint.filename,
             save_weights_only=self.config.checkpoint.save_weights_only,
         )
         lr_callback = LearningRateMonitor(logging_interval="epoch")
@@ -297,12 +297,15 @@ class ClassifierTrainer(ModelTrainer):
         if model.mlflow_run_id:
             try:
                 with mlflow.start_run(run_id=model.mlflow_run_id):
-                    ckpt = ROOT / self.config.checkpoint.dirpath / "best.ckpt"
-                    best_model = GenericClassifier.load_from_lightning_ckpt(ckpt,map_location=model.device)
-                    path = Path(ckpt).with_name("best_classifier.pt")
-                    torch.save(best_model, path)
-                    mlflow.log_artifact(str(path), "checkpoint")
-                    self.best_model_path = str(path)
+                    try:
+                        ckpt = ROOT / self.config.checkpoint.dirpath / "best.ckpt"
+                        best_model = GenericClassifier.load_from_lightning_ckpt(ckpt,map_location=model.device)
+                        path = Path(ckpt).with_name("best_classifier.pt")
+                        torch.save(best_model, path)
+                        mlflow.log_artifact(str(path), "checkpoint")
+                        self.best_model_path = str(path)
+                    except Exception:
+                        logger.warning(f"Error loading best model: {traceback.format_exc()}")
 
                     cfg_path = Path(ckpt).with_name("config.yaml")
                     OmegaConf.save(self.config, cfg_path)
@@ -377,5 +380,5 @@ class ClassifierTrainer(ModelTrainer):
 
         trainer.fit(model, datamodule=datamodule)
     
-        if self.config.mlflow.log_model:
-            self.log_model(model)
+        #if self.config.mlflow.log_model:
+        #    self.log_model(model)

@@ -19,17 +19,33 @@ model:
   std: [0.203, 0.173, 0.144]
 
 # ----------------------
+# MLflow configuration
+# ----------------------
+mlflow:
+  experiment_name: wildtrain_classification
+  run_name: demo
+  log_model: true
+
+# ----------------------
+# DVC dataset tracking configuration
+# ----------------------
+track_dataset: false
+dataset_name: "roi-demo" 
+
+
+# ----------------------
 # Dataset configuration
 # ----------------------
 dataset:
-  root_data_directory: "D:/workspace/data/demo-dataset"
+  root_data_directory: D:\PhD\workspace\data
+  rebalance: false
   single_class:
     enable : true
     background_class_name: "background"
     single_class_name: "wildlife"
     keep_classes: null
     discard_classes: ["vegetation", "termite mound", "rocks", "other", "label"]
-  input_size: 224
+  input_size: 128
   transforms:
     train:
       - name: Resize
@@ -84,16 +100,3 @@ checkpoint:
   filename: "best"
   min_delta: 0.001
 
-# ----------------------
-# MLflow configuration
-# ----------------------
-mlflow:
-  experiment_name: wildtrain_classification
-  run_name: demo
-  log_model: true
-
-# ----------------------
-# DVC dataset tracking configuration
-# ----------------------
-track_dataset: false
-dataset_name: "roi-demo" 
