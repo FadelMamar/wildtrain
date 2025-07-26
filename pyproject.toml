@@ -25,6 +25,7 @@ dependencies = [
     "ultralytics>=8.3.168",
     "omegaconf>=2.3.0",
     "shap>=0.48.0",
+    "optuna>=4.4.0",
 ]
 
 [project.scripts]
