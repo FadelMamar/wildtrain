@@ -259,8 +259,9 @@ class FiftyOneManager:
         if self.dataset:
             self.dataset.close()
             logger.info("Dataset closed")
-
-    def add_predictions_from_classifier(self, 
+            
+    @staticmethod
+    def add_predictions_from_classifier(dataset_name: str, 
                                         checkpoint_path: str, 
                                         prediction_field: str = "predictions", 
                                         batch_size: int = 32,
@@ -274,14 +275,14 @@ class FiftyOneManager:
         from PIL import Image
         import torchvision.transforms as T
 
-        self._ensure_dataset_initialized()
+        dataset = fo.load_dataset(dataset_name,create_if_necessary=False)
         try:
             model = GenericClassifier.load_from_checkpoint(checkpoint_path,map_location=device)
         except Exception:
             model = GenericClassifier.load_from_checkpoint(checkpoint_path,map_location="cpu")
         model.to(device)
 
-        samples = list(self.dataset)
+        samples = list(dataset)
         num_samples = len(samples)
         if debug:
             num_samples = 25

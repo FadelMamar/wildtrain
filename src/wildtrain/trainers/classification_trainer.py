@@ -2,7 +2,7 @@ import traceback
 import os
 from omegaconf import DictConfig
 from omegaconf import OmegaConf
-from typing import Any
+from typing import Any, Sequence
 import mlflow
 from lightning import Trainer
 from lightning.pytorch.callbacks import (
@@ -22,7 +22,7 @@ from typing import Any, Optional, Tuple
 
 from ..models.classifier import GenericClassifier
 from ..data import ClassificationDataModule
-from ..utils.logging import ROOT
+from ..utils.logging import ROOT, ENV_FILE
 from ..utils.logging import get_logger
 from ..utils.dvc_tracker import DVCTracker
 from .base import ModelTrainer
@@ -43,7 +43,7 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
     Returns:
         Dictionary with 'train' and 'val' keys containing composed transforms
     """
-    from torchvision import transforms as T
+    import torchvision.transforms.v2 as T
     import torchvision.transforms.functional as F
 
     def create_transform_list(transform_configs: list) -> T.Compose:
@@ -93,12 +93,15 @@ def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"Unknown transform: {transform_name}")
 
             # Create the transform instance with parameters
+            for key, value in params.items():
+                if isinstance(value, Sequence) and not isinstance(value, str):
+                    params[key] = list(value)
             try:
                 transform_instance = transform_class(**params)
                 transform_list.append(transform_instance)
             except Exception as e:
                 raise ValueError(
-                    f"Failed to create transform {transform_name} with params {params}: {e}"
+                    f"Failed to create transform {transform_name} with params {params}: {traceback.format_exc()}"
                 )
 
         return T.Compose(transform_list)
@@ -143,7 +146,6 @@ class ClassifierModule(L.LightningModule):
         self,
         model: GenericClassifier,
         epochs: int = 20,
-        threshold: float = 0.5,
         label_smoothing: float = 0.0,
         lr: float = 1e-3,
         lrf: float = 1e-2,
@@ -163,9 +165,9 @@ class ClassifierModule(L.LightningModule):
         # metrics
         cfg = dict(task="multiclass", num_classes=self.num_classes, average=None)
         self.accuracy = Accuracy(**cfg)
-        self.precision = Precision(threshold=threshold, **cfg)
-        self.recall = Recall(threshold=threshold, **cfg)
-        self.f1score = F1Score(threshold=threshold, **cfg)
+        self.precision = Precision(**cfg)
+        self.recall = Recall(**cfg)
+        self.f1score = F1Score(**cfg)
         self.ap = AUROC(**cfg)
 
         self.metrics = dict(
@@ -187,7 +189,7 @@ class ClassifierModule(L.LightningModule):
         weight = [
             len(classes) / (classes.count(i) + 1e-6) for i in range(self.num_classes)
         ]
-        weight = torch.Tensor(weight).float().clamp(1.0, 1e2).to(y.device)
+        weight = torch.Tensor(weight).float().clamp(1.0, 10.).to(y.device)
 
         logits = self(x)
         loss = F.cross_entropy(
@@ -209,7 +211,7 @@ class ClassifierModule(L.LightningModule):
         loss = F.cross_entropy(logits, y, label_smoothing=self.label_smoothing)
 
         for name, metric in self.metrics.items():
-            metric.update(logits, y)
+            metric.update(logits.softmax(dim=1), y)
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
 
@@ -258,7 +260,8 @@ class ClassifierTrainer(ModelTrainer):
         """
         Get the callbacks for the trainer.
         """
-        load_dotenv(ROOT / ".env", override=True)
+        assert ENV_FILE.exists(), "Environment file not found"
+        load_dotenv(ENV_FILE, override=True)
         MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI")
         if MLFLOW_TRACKING_URI is None:
             raise ValueError("MLFLOW_TRACKING_URI is not set")
@@ -313,6 +316,9 @@ class ClassifierTrainer(ModelTrainer):
         """
         Run image classification training or evaluation based on config.
         """
+        # Set float32 matmul precision to medium
+        if torch.cuda.is_available():   
+            torch.set_float32_matmul_precision('medium')
 
         # DataModule
         data_cfg = self.config.dataset
@@ -327,6 +333,7 @@ class ClassifierTrainer(ModelTrainer):
             single_class_name=self.config.dataset.single_class.single_class_name,
             keep_classes=self.config.dataset.single_class.keep_classes,
             discard_classes=self.config.dataset.single_class.discard_classes,
+            rebalance=data_cfg.rebalance,
         )
         logger.info(f"Getting one batch of data to initialize lazy modules in classifier.")
         datamodule.setup(stage="fit")
@@ -349,7 +356,6 @@ class ClassifierTrainer(ModelTrainer):
             epochs=self.config.train.epochs,
             model=cls_model,
             lr=self.config.train.lr,
-            threshold=self.config.train.threshold,
             label_smoothing=self.config.train.label_smoothing,
             weight_decay=self.config.train.weight_decay,
             lrf=self.config.train.lrf,

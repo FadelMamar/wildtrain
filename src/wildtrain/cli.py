@@ -19,6 +19,9 @@ from .trainers.classification_trainer import ClassifierTrainer
 from .utils.logging import ROOT
 from .pipeline.detection_pipeline import DetectionPipeline
 from .pipeline.classification_pipeline import ClassificationPipeline
+from .visualization import FiftyOneManager
+from .evaluators.ultralytics import UltralyticsEvaluator
+from .evaluators.classification import ClassificationEvaluator
 
 # Create Typer app
 app = typer.Typer(
@@ -35,6 +38,8 @@ console = Console()
 def setup_logging(verbose: bool = False) -> None:
     """Setup rich logging with appropriate level."""
     level = logging.DEBUG if verbose else logging.INFO
+    log_dir = ROOT / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
 
     logging.basicConfig(
         level=level,
@@ -43,9 +48,7 @@ def setup_logging(verbose: bool = False) -> None:
         handlers=[
             RichHandler(console=console, rich_tracebacks=True),
             logging.FileHandler(
-                ROOT
-                / "logs"
-                / f"cli_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log",
+                log_dir / f"cli_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log",
                 encoding="utf-8",
             ),
         ],
@@ -80,88 +83,25 @@ def train_classifier(
     """Train a classification model."""
     console.print(f"[bold green]Training classifier with config:[/bold green] {config}")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Initializing training...", total=None)
-
-        cfg = OmegaConf.load(config)
-        console.print(OmegaConf.to_yaml(cfg))
-        ClassifierTrainer(DictConfig(cfg)).run()
-
-        progress.update(task, description="Training completed!")
+    cfg = OmegaConf.load(config)
+    console.print(OmegaConf.to_yaml(cfg))
+    ClassifierTrainer(DictConfig(cfg)).run()
 
 
-@app.command()
-def launch_mlflow(
-    port: int = typer.Option(5000, "--port", "-p", help="Port for MLflow UI"),
-    host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host for MLflow UI"),
-    backend_store_uri: Optional[str] = typer.Option(
-        None, "--backend-store-uri", help="Backend store URI"
-    ),
-    default_artifact_root: Optional[str] = typer.Option(
-        None, "--default-artifact-root", help="Default artifact root"
-    ),
-) -> None:
-    """Launch MLflow tracking server."""
-    console.print(f"[bold green]Launching MLflow server on[/bold green] {host}:{port}")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Starting MLflow server...", total=None)
-
-        cmd = [
-            "uv",
-            "run",
-            "--no-sync",
-            "mlflow",
-            "server",
-            "--host",
-            host,
-            "--port",
-            str(port),
-            "--backend-store-uri",
-            backend_store_uri,
-        ]
-        if default_artifact_root:
-            cmd.append("--default-artifact-root")
-            cmd.append(default_artifact_root)
-
-        if platform.system() == "Windows":
-            subprocess.Popen(cmd, creationflags=subprocess.CREATE_NEW_CONSOLE)
-        else:
-            subprocess.Popen(cmd)
-
-        console.print(f"  🌐 Host: {host}")
-        console.print(f"  🔌 Port: {port}")
-        console.print(f"  💾 Backend store: {backend_store_uri or 'default'}")
-        console.print(f"  📁 Artifact root: {default_artifact_root or 'default'}")
-
-        progress.update(task, description="MLflow server started!")
-        console.print(
-            f"\n[bold blue]MLflow UI available at:[/bold blue] http://{host}:{port}"
-        )
 
 
 @app.command()
 def get_dataset_stats(
     data_dir: Path = typer.Argument(..., help="Path to dataset directory"),
+    split: str = typer.Option("train", help="Split to compute statistics for"),
     output_file: Optional[Path] = typer.Option(
         None, "--output", "-o", help="Output file for statistics"
     ),
-    format: str = typer.Option(
-        "json", "--format", "-f", help="Output format (json, yaml, csv)"
-    ),
-    include_images: bool = typer.Option(
-        False, "--include-images", help="Include image statistics"
-    ),
 ) -> None:
-    """Get dataset statistics and information."""
+    """Get dataset statistics and information (mean, std)."""
+    from wildtrain.data.classification_datamodule import ClassificationDataModule, compute_dataset_stats
+    import json
+
     console.print(f"[bold green]Analyzing dataset at:[/bold green] {data_dir}")
 
     with Progress(
@@ -169,24 +109,46 @@ def get_dataset_stats(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task("Scanning dataset...", total=None)
+        task = progress.add_task("Computing dataset statistics...", total=None)
 
-        # TODO: Implement actual dataset statistics calculation
-        console.print(f"  📁 Dataset path: {data_dir}")
-        console.print(f"  📄 Output format: {format}")
-        console.print(f"  🖼️  Include images: {'Yes' if include_images else 'No'}")
+        # Create the data module and load data
+        datamodule = ClassificationDataModule(
+            root_data_directory=str(data_dir), batch_size=32, transforms=None, load_as_single_class=True
+        )
+        if split == "train":
+            datamodule.setup(stage="fit")
+            data = datamodule.train_dataset
+        elif split == "val":
+            datamodule.setup(stage="validate")
+            data = datamodule.val_dataset
+        elif split == "test":
+            datamodule.setup(stage="test")
+            data = datamodule.test_dataset
+        else:
+            raise ValueError(f"Invalid split: {split}")
 
-        if output_file:
-            console.print(f"  💾 Output file: {output_file}")
+        mean, std = compute_dataset_stats(
+            data,
+            batch_size=32,
+            num_workers=0,
+        )
+
+        stats = {
+            "mean": mean.tolist(),
+            "std": std.tolist(),
+        }
 
         progress.update(task, description="Dataset analysis completed!")
 
-        # Mock statistics output
         console.print("\n[bold blue]Dataset Statistics:[/bold blue]")
-        console.print("  📊 Total samples: 1,000")
-        console.print("  🏷️  Classes: 10")
-        console.print("  📏 Image size: 224x224")
-        console.print("  📁 Format: JPEG")
+        console.print(f"  📊 Mean: {stats['mean']}")
+        console.print(f"  📏 Std: {stats['std']}")
+
+        if output_file:
+            with open(output_file, "w") as f:
+                json.dump(stats, f, indent=2)
+            
+            console.print(f"  💾 Statistics saved to: {output_file}")
 
 
 @app.command()
@@ -233,6 +195,56 @@ def run_classification_pipeline(
         progress.update(task, description="Pipeline completed!")
         console.print("\n[bold blue]Classification pipeline completed. Evaluation results:[/bold blue]")
         console.print(results)
+
+
+@app.command()
+def visualize_predictions(
+    dataset_name: str = typer.Argument(..., help="Name of the FiftyOne dataset to use or create"),
+    checkpoint_path: Path = typer.Argument(..., help="Path to the classifier checkpoint (.ckpt) file"),
+    prediction_field: str = typer.Option("predictions", help="Field name to store predictions in FiftyOne samples"),
+    batch_size: int = typer.Option(32, help="Batch size for prediction inference"),
+    device: str = typer.Option("cpu", help="Device to run inference on (e.g., 'cpu' or 'cuda')"),
+    debug: bool = typer.Option(False, help="If set, only process a small number of samples for debugging")
+) -> None:
+    """Upload classifier predictions to a FiftyOne dataset for visualization."""
+    console.print(f"[bold green]Uploading predictions to FiftyOne dataset:[/bold green] {dataset_name}")
+    FiftyOneManager.add_predictions_from_classifier(
+        dataset_name=dataset_name,
+        checkpoint_path=str(checkpoint_path),
+        prediction_field=prediction_field,
+        batch_size=batch_size,
+        device=device,
+        debug=debug,
+    )
+    console.print(f"[bold blue]Predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+
+
+@app.command()
+def evaluate_detector(
+    config: Path = typer.Argument(..., help="Path to YOLO evaluation YAML config file"),
+    type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
+) -> None:
+    """Evaluate a YOLO model using a YAML config file."""
+    console.print(f"[bold green]Running {type} evaluation with config:[/bold green] {config}")
+    if type == "yolo":
+        evaluator = UltralyticsEvaluator(config=str(config))
+    else:
+        raise ValueError(f"Invalid detector type: {type}")
+    results = evaluator.evaluate(debug=False)
+    console.print(f"\n[bold blue]{type} Evaluation Results:[/bold blue]")
+    console.print(results)
+
+
+@app.command()
+def evaluate_classifier(
+    config: Path = typer.Argument(..., help="Path to classification evaluation YAML config file"),
+) -> None:
+    """Evaluate a classifier using a YAML config file."""
+    console.print(f"[bold green]Running classifier evaluation with config:[/bold green] {config}")
+    evaluator = ClassificationEvaluator(str(config))
+    results = evaluator.evaluate(debug=False)
+    console.print("\n[bold blue]Classifier Evaluation Results:[/bold blue]")
+    console.print(results)
 
 
 if __name__ == "__main__":

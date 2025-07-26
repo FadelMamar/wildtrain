@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from tqdm import tqdm
 from ..utils.logging import get_logger
+from .filters import ClassificationRebalanceFilter
 
 logger = get_logger(__name__)
 
@@ -128,6 +129,7 @@ class ClassificationDataModule(L.LightningDataModule):
         single_class_name: str = "wildlife",
         keep_classes: Optional[list[str]] = None,
         discard_classes: Optional[list[str]] = None,
+        rebalance: bool = False,
     ):
         super().__init__()
         self.batch_size = batch_size
@@ -147,6 +149,13 @@ class ClassificationDataModule(L.LightningDataModule):
         )
 
         self.transforms = transforms
+        if rebalance:
+            method = "mean"
+            exclude_extremes = True
+            self.resample_func = ClassificationRebalanceFilter(class_key="class_id", random_seed=41, method=method,exclude_extremes=exclude_extremes)
+            logger.info(f"Rebalancing dataset with {method} count and {'excluding' if exclude_extremes else 'including'} extremes")
+        else:
+            self.resample_func = None
 
     def _get_class_mapping(self, dataset: ROIDataset | ConcatDataset):
         if isinstance(dataset, ConcatDataset):
@@ -159,14 +168,20 @@ class ClassificationDataModule(L.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         if stage == "fit":
-            data = load_all_splits_concatenated(
+            self.train_dataset = load_all_splits_concatenated(
                 self.root_data_directory,
-                splits=["train", "val"],
+                splits=["train",],
                 transform=self.transforms,
+                resample_function=self.resample_func,
                 **self.single_class_config,
-            )
-            self.train_dataset = data.pop("train")
-            self.val_dataset = data.pop("val")
+            ).pop("train")
+            self.val_dataset = load_all_splits_concatenated(
+                self.root_data_directory,
+                splits=["val",],
+                transform=self.transforms,
+                resample_function=None,
+                **self.single_class_config,
+            ).pop("val")
             self.class_mapping = self._get_class_mapping(self.train_dataset)
             assert self.class_mapping == self._get_class_mapping(self.val_dataset), (
                 "Class mapping mismatch between train and val datasets"

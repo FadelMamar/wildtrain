@@ -93,7 +93,7 @@ class GenericClassifier(nn.Module):
         if self.freeze_backbone:
             for param in model.parameters():
                 param.requires_grad = False
-            model.eval()
+            #model.eval()
             logger.info(f"Backbone {self.backbone} frozen")
 
         return model
@@ -133,6 +133,7 @@ class GenericClassifier(nn.Module):
                 label_to_class_map=label_to_class_map,
                 backbone=backbone,
                 backbone_source=backbone_source,
+                input_size=state_dict["input_size"].item(),
             )
             model.load_state_dict(state_dict)
         else:
@@ -142,7 +143,7 @@ class GenericClassifier(nn.Module):
                 checkpoint_path, map_location=map_location, weights_only=False
             )
             # warmup
-            model(torch.randn(1,3,model.input_size.item(),model.input_size.item()))
+            #model(torch.randn(1,3,model.input_size.item(),model.input_size.item()).to(model.device))
         return model
 
     @classmethod
