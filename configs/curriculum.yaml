@@ -1,0 +1,81 @@
+# Curriculum Learning Configuration for WildTrain
+# This file shows how to configure curriculum learning for both classification and detection tasks
+
+# Enable/disable curriculum learning
+curriculum:
+  enabled: true
+  
+  # Type of curriculum: "difficulty", "multiscale", or "both"
+  type: "both"
+  
+  # Difficulty-based curriculum settings
+  difficulty_strategy: "linear"  # "linear", "exponential", "random"
+  start_difficulty: 0.0          # Start with easiest samples
+  end_difficulty: 1.0            # End with hardest samples
+  warmup_epochs: 5               # Epochs before curriculum starts
+  
+  # Multi-scale curriculum settings
+  multiscale_enabled: true
+  base_size: 416                 # Base image size
+  scale_range: [0.5, 2.0]       # Min and max scale multipliers
+  num_scales: 5                  # Number of discrete scales
+  scale_strategy: "curriculum"   # "curriculum", "random", "cyclic"
+  cycle_length: 5                # For cyclic strategy
+  
+  # Logging settings
+  log_frequency: 10              # Log curriculum metrics every N epochs
+
+# Example configurations for different scenarios:
+
+# 1. Difficulty-only curriculum (for classification)
+curriculum_difficulty_only:
+  enabled: true
+  type: "difficulty"
+  difficulty_strategy: "exponential"
+  start_difficulty: 0.0
+  end_difficulty: 1.0
+  warmup_epochs: 3
+  multiscale_enabled: false
+  log_frequency: 5
+
+# 2. Multi-scale only curriculum (for detection)
+curriculum_multiscale_only:
+  enabled: true
+  type: "multiscale"
+  multiscale_enabled: true
+  base_size: 640
+  scale_range: [0.25, 1.5]
+  num_scales: 7
+  scale_strategy: "curriculum"
+  difficulty_strategy: "random"  # Not used for multiscale-only
+  log_frequency: 10
+
+# 3. Combined curriculum (both difficulty and scale)
+curriculum_combined:
+  enabled: true
+  type: "both"
+  difficulty_strategy: "linear"
+  start_difficulty: 0.0
+  end_difficulty: 1.0
+  warmup_epochs: 5
+  multiscale_enabled: true
+  base_size: 416
+  scale_range: [0.5, 2.0]
+  num_scales: 5
+  scale_strategy: "curriculum"
+  log_frequency: 10
+
+# 4. Random curriculum (no progression, for baseline)
+curriculum_random:
+  enabled: true
+  type: "both"
+  difficulty_strategy: "random"
+  start_difficulty: 1.0
+  end_difficulty: 1.0
+  warmup_epochs: 0
+  multiscale_enabled: true
+  base_size: 416
+  scale_range: [0.5, 2.0]
+  num_scales: 5
+  scale_strategy: "random"
+  log_frequency: 10 
