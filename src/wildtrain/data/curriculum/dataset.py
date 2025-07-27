@@ -13,11 +13,14 @@ from PIL import Image
 import supervision as sv
 import albumentations as A
 import cv2
-from .manager import CurriculumConfig
+
 from tqdm import tqdm
 from pathlib import Path
 import json
 import os
+
+from .manager import CurriculumConfig
+from ..utils import load_all_detection_datasets
 
 def group_coco_annotations_by_image_id(
         coco_annotations: list[dict],
@@ -49,8 +52,7 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
                  curriculum_config: Optional[CurriculumConfig] = None,
                  transform=None,
                  compute_difficulties: bool = True,
-                 preserve_aspect_ratio: bool = True,
-                 pad_to_square: bool = True):
+                 preserve_aspect_ratio: bool = True,):
         """
         Initialize curriculum detection dataset.
         
@@ -62,13 +64,11 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
             transform: Image transformations
             compute_difficulties: Whether to compute sample difficulties
             preserve_aspect_ratio: Whether to preserve aspect ratio when resizing
-            pad_to_square: Whether to pad images to square
         """
         super().__init__(classes, images, annotations)
         self.curriculum_config = curriculum_config
         self.transform = transform
         self.preserve_aspect_ratio = preserve_aspect_ratio
-        self.pad_to_square = pad_to_square
         
         # Compute sample difficulties if needed
         if compute_difficulties:
@@ -87,14 +87,13 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         #print("Number of annotations:",len(self.annotations))
     
     @classmethod
-    def from_coco_with_curriculum(cls,
-                                 images_directory_path: str,
-                                 annotations_path: str,
+    def from_data_directory(cls,
+                                 root_data_directory: str,
+                                 split: str,
                                  curriculum_config: Optional[CurriculumConfig] = None,
                                  transform=None,
                                  compute_difficulties: bool = True,
-                                 preserve_aspect_ratio: bool = True,
-                                 pad_to_square: bool = True):
+                                 preserve_aspect_ratio: bool = True,):
         """
         Create curriculum detection dataset from COCO format.
         
@@ -105,15 +104,19 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
             transform: Image transformations
             compute_difficulties: Whether to compute sample difficulties
             preserve_aspect_ratio: Whether to preserve aspect ratio when resizing
-            pad_to_square: Whether to pad images to square
             
         Returns:
             CurriculumDetectionDataset instance
         """
         # Use supervision's from_coco method
-        detection_dataset = sv.DetectionDataset.from_coco(
-            images_directory_path=images_directory_path,
-            annotations_path=annotations_path
+        #detection_dataset = sv.DetectionDataset.from_coco(
+        #    images_directory_path=images_directory_path,
+        #    annotations_path=annotations_path
+        #)
+
+        detection_dataset = load_all_detection_datasets(
+            root_data_directory=root_data_directory,
+            split=split
         )
 
         #with open(annotations_path, "r",encoding="utf-8") as f:
@@ -140,6 +143,7 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         #print("background_images:",len(background_images))
 
         # Create curriculum dataset using the loaded data
+
         return cls(
             classes=detection_dataset.classes,
             images=detection_dataset.image_paths, # + background_images,
@@ -148,38 +152,8 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
             transform=transform,
             compute_difficulties=compute_difficulties,
             preserve_aspect_ratio=preserve_aspect_ratio,
-            pad_to_square=pad_to_square
         )
-    
-    @classmethod
-    def from_yolo_with_curriculum(cls,
-                                  images_directory_path: str,
-                                  annotations_directory_path: str,
-                                  data_yaml_path: str,
-                                  curriculum_config: Optional[CurriculumConfig] = None,
-                                  transform=None,
-                                  compute_difficulties: bool = True,
-                                  preserve_aspect_ratio: bool = True,
-                                  pad_to_square: bool = True):
-        
-        detection_dataset = sv.DetectionDataset.from_yolo(
-            images_directory_path=images_directory_path,
-            annotations_directory_path=annotations_directory_path,
-            data_yaml_path=data_yaml_path,
-            is_obb=False,force_masks=False
-        )
-
-        return cls(
-            classes=detection_dataset.classes,
-            images=detection_dataset.image_paths,
-            annotations=detection_dataset.annotations,
-            curriculum_config=curriculum_config,
-            transform=transform,
-            compute_difficulties=compute_difficulties,
-            preserve_aspect_ratio=preserve_aspect_ratio,
-            pad_to_square=pad_to_square
-        )
-       
+           
     def _compute_sample_difficulties(self) -> List[float]:
         """Compute difficulty scores for each sample using multiple strategies."""
         difficulties = []
@@ -453,7 +427,7 @@ class CropDataset(torch.utils.data.Dataset):
         # Get indices sorted by area (largest first)
         
         for i, bbox in enumerate(detections.xyxy):
-            class_id = detections.class_id[i] if detections.class_id is not None else 0
+            class_id = detections.class_id[i]
             
             # Expand bounding box
             x1, y1, x2, y2 = bbox.tolist()          
@@ -482,11 +456,8 @@ class CropDataset(torch.utils.data.Dataset):
                                img_width: int) -> List[Dict[str, Any]]:
         """Compute indices for random crops."""
         indices = []
-        
-        # Generate 1-3 random crops
-        num_random_crops = np.random.randint(1, 4)
-        
-        for _ in range(num_random_crops):
+              
+        for _ in range(self.max_tn_crops):
            
             # Random position
             x1 = np.random.randint(0, max(1, img_width - self.crop_size))
@@ -633,10 +604,9 @@ class CropDataset(torch.utils.data.Dataset):
         
         # Convert to tensor
         crop_tensor = torch.from_numpy(crop).permute(2, 0, 1).float() / 255.0
-
-        label = crop_info['label']
-        if label == -1:
-            label = max(self.dataset.classes) + 1
+        
+        # offset class id by 1 to account for background class (-1 )
+        label = crop_info['label'] + 1 
         
         return crop_tensor, label
     

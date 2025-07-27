@@ -8,7 +8,7 @@ from wildata.datasets.detection import load_detection_dataset
 from wildata.pipeline.path_manager import PathManager
 from pathlib import Path
 from wildtrain.utils.logging import get_logger
-
+import supervision as sv
 import traceback
 
 logger = get_logger(__name__)
@@ -20,7 +20,7 @@ def load_image(path: str) -> torch.Tensor:
 def load_all_detection_datasets(
     root_data_directory: str,
     split: str,
-) -> List[dict]:
+) -> sv.DetectionDataset:
     """
     Load all available detection datasets for a given split.
     Returns a list of dictionaries containing (dataset, class_mapping, dataset_name).
@@ -37,6 +37,8 @@ def load_all_detection_datasets(
     path_manager = PathManager(Path(root_data_directory))
     all_datasets = path_manager.list_datasets()
     detection_datasets = []
+
+    logger.info(f"Loading datasets: {all_datasets}, split: {split}")
     
     for dataset_name in all_datasets:
         # Check if split exists by checking for annotations file
@@ -52,7 +54,7 @@ def load_all_detection_datasets(
                 dataset_name=dataset_name,
                 split=split
             )
-            detection_datasets.append({"dataset": dataset, "class_mapping": class_mapping, "dataset_name": dataset_name})
+            detection_datasets.append(dataset)
             logger.info(
                 f"Loaded detection dataset: {dataset_name} for split: {split} with {len(dataset)} samples"
             )
@@ -61,7 +63,9 @@ def load_all_detection_datasets(
             logger.error(traceback.format_exc())
             continue
     
+    # merge all datasets into one
+    merged_dataset = sv.DetectionDataset.merge(detection_datasets)
     logger.info(
         f"Successfully loaded {len(detection_datasets)} detection datasets for split: {split}"
     )
-    return detection_datasets
+    return merged_dataset
