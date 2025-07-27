@@ -19,9 +19,12 @@ from .trainers.classification_trainer import ClassifierTrainer
 from .utils.logging import ROOT
 from .pipeline.detection_pipeline import DetectionPipeline
 from .pipeline.classification_pipeline import ClassificationPipeline
-from .visualization import add_predictions_from_classifier
+from .visualization import add_predictions_from_classifier, add_predictions_from_detector
 from .evaluators.ultralytics import UltralyticsEvaluator
 from .evaluators.classification import ClassificationEvaluator
+from .models.detector import Detector
+from .models.localizer import UltralyticsLocalizer
+from .models.classifier import GenericClassifier
 
 # Create Typer app
 app = typer.Typer(
@@ -198,13 +201,13 @@ def run_classification_pipeline(
 
 
 @app.command()
-def visualize_predictions(
+def visualize_classifier_predictions(
     dataset_name: str = typer.Argument(..., help="Name of the FiftyOne dataset to use or create"),
-    checkpoint_path: Path = typer.Argument(..., help="Path to the classifier checkpoint (.ckpt) file"),
-    prediction_field: str = typer.Option("predictions", help="Field name to store predictions in FiftyOne samples"),
+    checkpoint_path: Path = typer.Option(...,"--weights", help="Path to the classifier checkpoint (.ckpt) file"),
+    prediction_field: str = typer.Option("classification_predictions", "--prediction-field", help="Field name to store predictions in FiftyOne samples"),
     batch_size: int = typer.Option(32, help="Batch size for prediction inference"),
-    device: str = typer.Option("cpu", help="Device to run inference on (e.g., 'cpu' or 'cuda')"),
-    debug: bool = typer.Option(False, help="If set, only process a small number of samples for debugging")
+    device: str = typer.Option("cpu", "--device", help="Device to run inference on (e.g., 'cpu' or 'cuda')"),
+    debug: bool = typer.Option(False, "--debug", help="If set, only process a small number of samples for debugging")
 ) -> None:
     """Upload classifier predictions to a FiftyOne dataset for visualization."""
     console.print(f"[bold green]Uploading predictions to FiftyOne dataset:[/bold green] {dataset_name}")
@@ -221,16 +224,70 @@ def visualize_predictions(
 
 
 @app.command()
+def visualize_detector_predictions(
+    config: Path = typer.Argument(..., help="Path to visualization configuration YAML file"),
+) -> None:
+    """Upload detector predictions to a FiftyOne dataset for visualization using YAML configuration."""
+    
+    console.print(f"[bold green]Loading visualization config from:[/bold green] {config}")
+    
+    # Load configuration
+    cfg = OmegaConf.load(config)
+        
+    console.print(OmegaConf.to_yaml(cfg))
+    
+    # Extract configuration values
+    dataset_name = cfg.fiftyone.dataset_name
+    prediction_field = cfg.fiftyone.prediction_field
+    
+    localizer_cfg = cfg.model.localizer
+    classifier_cfg = cfg.model.classifier
+    processing_cfg = cfg.processing
+    
+    console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
+    
+    # Create localizer with config
+    localizer = UltralyticsLocalizer(
+        weights=localizer_cfg.weights,
+        imgsz=localizer_cfg.imgsz,
+        device=localizer_cfg.device,
+        conf_thres=localizer_cfg.conf_thres,
+        iou_thres=localizer_cfg.iou_thres,
+        max_det=localizer_cfg.max_det,
+        overlap_metric=localizer_cfg.overlap_metric
+    )
+    
+    # Create classifier if checkpoint provided
+    classifier = None
+    if classifier_cfg.checkpoint is not None:
+        console.print(f"[bold blue]Loading classifier from:[/bold blue] {classifier_cfg.checkpoint}")
+        classifier = GenericClassifier.load_from_checkpoint(str(classifier_cfg.checkpoint))
+    
+    # Create detector
+    detector = Detector(localizer=localizer, classifier=classifier)
+    
+    add_predictions_from_detector(
+        dataset_name=dataset_name,
+        detector=detector,
+        imgsz=localizer_cfg.imgsz,
+        prediction_field=prediction_field,
+        batch_size=processing_cfg.batch_size,
+        debug=processing_cfg.debug,
+    )
+    console.print(f"[bold blue]Detector predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+
+
+@app.command()
 def evaluate_detector(
     config: Path = typer.Argument(..., help="Path to YOLO evaluation YAML config file"),
-    type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
+    model_type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
 ) -> None:
     """Evaluate a YOLO model using a YAML config file."""
-    console.print(f"[bold green]Running {type} evaluation with config:[/bold green] {config}")
-    if type == "yolo":
+    console.print(f"[bold green]Running {model_type} evaluation with config:[/bold green] {config}")
+    if model_type == "yolo":
         evaluator = UltralyticsEvaluator(config=str(config))
     else:
-        raise ValueError(f"Invalid detector type: {type}")
+        raise ValueError(f"Invalid detector type: {model_type}")
     results = evaluator.evaluate(debug=False)
     console.print(f"\n[bold blue]{type} Evaluation Results:[/bold blue]")
     console.print(results)

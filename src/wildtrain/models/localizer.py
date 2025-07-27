@@ -82,4 +82,6 @@ class UltralyticsLocalizer(ObjectLocalizer):
         detections = [det.with_nms(threshold=self.iou_thres,
                                    overlap_metric=self.metrics[self.overlap_metric],
                                    class_agnostic=self.class_agnostic) for det in detections]
+        for det in detections:
+            det.metadata["class_mapping"] = self.model.names
         return detections

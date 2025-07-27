@@ -79,6 +79,7 @@ class Detector(object):
 
         cls_results = self.classifier.predict(crops)  # (N, num_classes)
         results = deepcopy(detections)
+        class_mapping = self.classifier.label_to_class_map
 
         # Map from image index to list of (detection index in boxes, classifier result)
         img_to_det_indices = defaultdict(list)
@@ -97,7 +98,7 @@ class Detector(object):
                 xyxy=det.xyxy,
                 confidence=det.confidence * scores,
                 class_id=class_ids,
-                metadata=det.metadata.copy(),  # or update as needed
+                metadata={"class_mapping":class_mapping},
             )
 
         return results
