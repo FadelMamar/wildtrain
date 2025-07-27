@@ -39,9 +39,9 @@ def example_coco_loading():
     
     # 3. Load dataset using convenience method
     try:
-        dataset = CurriculumDetectionDataset.from_coco_with_curriculum(
-            images_directory_path=r"D:\workspace\data\demo-dataset\datasets",  # Your images directory
-            annotations_path=r"D:\workspace\data\demo-dataset\datasets\savmap\annotations\train.json",  # Your COCO annotations
+        dataset = CurriculumDetectionDataset.from_data_directory(
+            root_data_directory=r"D:\workspace\data\demo-dataset\datasets",  # Your images directory
+            split="train",
             curriculum_config=curriculum_config,
             transform=transform
         )
@@ -90,9 +90,9 @@ def Crop_loading():
 
     try:
         # 3. Load base dataset
-        dataset = CurriculumDetectionDataset.from_coco_with_curriculum(
-            images_directory_path=r"D:\workspace\data\savmap_dataset_v2\annotated_py_paul\coco-format\images",  # Your images directory
-            annotations_path=r"D:\workspace\data\savmap_dataset_v2\annotated_py_paul\coco-format\annotations.json",  # Your COCO annotations
+        dataset = CurriculumDetectionDataset.from_data_directory(
+            root_data_directory=r"D:\workspace\data\demo-dataset\datasets",  # Your images directory
+            split="train",
             curriculum_config=curriculum_config,
             transform=transform
         )
