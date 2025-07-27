@@ -1,7 +1,7 @@
 @echo off
 REM Example script to evaluate a classifier using WildTrain CLI
 
-call cd D:\PhD\workspace\wildtrain
+call cd /d "%~dp0" && cd ..
 
 REM Set example config path
 set CONFIG_PATH=configs\classification\classification_eval.yaml

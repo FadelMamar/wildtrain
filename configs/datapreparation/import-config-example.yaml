@@ -2,12 +2,12 @@
 # Usage: wildata import-dataset --config import-config-example.yaml
 
 # Required parameters
-source_path: "D:/workspace/savmap/coco/annotations/train.json"
+source_path: D:\workspace\savmap\coco\annotations\train.json
 source_format: "coco"  # or "yolo" "coco" "ls"
-dataset_name: "savmap"
+dataset_name: savmap
 
 # Pipeline configuration
-root: "D:/workspace/data/demo-dataset"
+root: D:\workspace\data\demo-dataset
 split_name: "train"  # train, val, or test
 enable_dvc: false
 
@@ -17,19 +17,21 @@ track_with_dvc: false
 bbox_tolerance: 5
 
 # Label Studio options (optional)
-dotenv_path: "D:/workspace/repos/wildtrain/.env"  # "path/to/.env"
-ls_xml_config: "D:/workspace/repos/wildtrain/configs/label_studio_config.xml"  # "path/to/label_studio_config.xml"
+dotenv_path: ".env"  # "path/to/.env"
+ls_xml_config: "configs/label_studio_config.xml"  # "path/to/label_studio_config.xml"
 ls_parse_config: false
 
 # ROI configuration (optional)
+disable_roi: true # optional
 roi_config:
   random_roi_count: 2
-  roi_box_size: 128
+  roi_box_size: 384
   min_roi_size: 32
   dark_threshold: 0.7
   background_class: "background"
   save_format: "jpg"
   quality: 95
+
 
 # Transformation pipeline configuration (optional)
 transformations:
@@ -38,7 +40,7 @@ transformations:
     tolerance: 5
     skip_invalid: false
   
-  enable_augmentation: true
+  enable_augmentation: false
   augmentation:
     rotation_range: [-45, 45]
     probability: 1.0
@@ -51,11 +53,11 @@ transformations:
     seed: 41
     num_transforms: 2
   
-  enable_tiling: true
+  enable_tiling: false
   tiling:
-    tile_size: 512
-    stride: 416
-    min_visibility: 0.1
+    tile_size: 800
+    stride: 640
+    min_visibility: 0.7
     max_negative_tiles_in_negative_image: 3
     negative_positive_ratio: 1.0
     dark_threshold: 0.5 
