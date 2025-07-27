@@ -1,7 +1,7 @@
 """
 Curriculum Learning Callback for PyTorch Lightning.
 
-This module provides a callback that automatically manages curriculum learning
+This module provides a callback that automatically manages difficulty-based curriculum learning
 during training, including epoch updates and logging.
 """
 
@@ -12,7 +12,7 @@ from .mixins import CurriculumDataModuleMixin
 
 class CurriculumCallback(L.Callback):
     """
-    PyTorch Lightning callback for managing curriculum learning.
+    PyTorch Lightning callback for managing difficulty-based curriculum learning.
     
     This callback automatically:
     1. Updates curriculum state at the start of each epoch
@@ -51,8 +51,6 @@ class CurriculumCallback(L.Callback):
                 if initial_state:
                     trainer.logger.log_metrics({
                         'curriculum/initial_difficulty': initial_state.get('difficulty', 0.0),
-                        'curriculum/initial_scale': initial_state.get('scale', 1.0),
-                        'curriculum/available_scales': len(initial_state.get('available_scales', [1.0])),
                     }, step=0)
     
     def on_train_epoch_start(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
@@ -72,28 +70,17 @@ class CurriculumCallback(L.Callback):
         # Always log basic metrics
         metrics = {
             'curriculum/difficulty': curriculum_state.get('difficulty', 0.0),
-            'curriculum/scale': curriculum_state.get('scale', 1.0),
             'curriculum/epoch': curriculum_state.get('epoch', 0),
         }
         
         # Log detailed metrics based on frequency
         if trainer.current_epoch % self.log_frequency == 0:
-            # Add detailed metrics
-            available_scales = curriculum_state.get('available_scales', [])
-            if available_scales:
-                metrics.update({
-                    'curriculum/num_scales': len(available_scales),
-                    'curriculum/min_scale': min(available_scales),
-                    'curriculum/max_scale': max(available_scales),
-                })
-            
             # Add curriculum type information
             if hasattr(self.datamodule, 'curriculum_config') and self.datamodule.curriculum_config:
                 config = self.datamodule.curriculum_config
                 metrics.update({
                     'curriculum/type': config.type,
                     'curriculum/difficulty_strategy': config.difficulty_strategy,
-                    'curriculum/scale_strategy': config.scale_strategy,
                 })
         
         trainer.logger.log_metrics(metrics, step=trainer.global_step)
@@ -109,5 +96,4 @@ class CurriculumCallback(L.Callback):
             if current_state:
                 trainer.logger.log_metrics({
                     'curriculum/epoch_end_difficulty': current_state.get('difficulty', 0.0),
-                    'curriculum/epoch_end_scale': current_state.get('scale', 1.0),
                 }, step=trainer.global_step) 

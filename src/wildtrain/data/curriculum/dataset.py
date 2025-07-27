@@ -116,25 +116,25 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
             annotations_path=annotations_path
         )
 
-        with open(annotations_path, "r",encoding="utf-8") as f:
-            coco_annotations = json.load(f)
+        #with open(annotations_path, "r",encoding="utf-8") as f:
+            #coco_annotations = json.load(f)
 
-        grouped_annotations = group_coco_annotations_by_image_id(coco_annotations["annotations"])
+        #grouped_annotations = group_coco_annotations_by_image_id(coco_annotations["annotations"])
 
         #print("Number of images:",len(coco_annotations["images"]))
         #print("Number of annotations:",len(coco_annotations["annotations"]))
         #print("Number of grouped annotations:",len(grouped_annotations))
         
-        background_images = []
-        empty_annotations = {}
-        for coco_image in coco_annotations["images"]:
-            if len(grouped_annotations.get(coco_image["id"], [])) < 1:
-                image_path = os.path.join(images_directory_path, coco_image["file_name"])
-                background_images.append(image_path)
-                empty_annotations[image_path] = sv.Detections.empty()
+        #background_images = []
+        #empty_annotations = {}
+        #for coco_image in coco_annotations["images"]:
+            #if len(grouped_annotations.get(coco_image["id"], [])) < 1:
+                #image_path = os.path.join(images_directory_path, coco_image["file_name"])
+                #background_images.append(image_path)
+                #empty_annotations[image_path] = sv.Detections.empty()
 
         # Add empty annotations to the dataset
-        detection_dataset.annotations.update(empty_annotations)
+        #detection_dataset.annotations.update(empty_annotations)
 
         #print(empty_annotations)
         #print("background_images:",len(background_images))
@@ -151,6 +151,34 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
             pad_to_square=pad_to_square
         )
     
+    @classmethod
+    def from_yolo_with_curriculum(cls,
+                                  images_directory_path: str,
+                                  annotations_directory_path: str,
+                                  data_yaml_path: str,
+                                  curriculum_config: Optional[CurriculumConfig] = None,
+                                  transform=None,
+                                  compute_difficulties: bool = True,
+                                  preserve_aspect_ratio: bool = True,
+                                  pad_to_square: bool = True):
+        
+        detection_dataset = sv.DetectionDataset.from_yolo(
+            images_directory_path=images_directory_path,
+            annotations_directory_path=annotations_directory_path,
+            data_yaml_path=data_yaml_path,
+            is_obb=False,force_masks=False
+        )
+
+        return cls(
+            classes=detection_dataset.classes,
+            images=detection_dataset.image_paths,
+            annotations=detection_dataset.annotations,
+            curriculum_config=curriculum_config,
+            transform=transform,
+            compute_difficulties=compute_difficulties,
+            preserve_aspect_ratio=preserve_aspect_ratio,
+            pad_to_square=pad_to_square
+        )
        
     def _compute_sample_difficulties(self) -> List[float]:
         """Compute difficulty scores for each sample using multiple strategies."""
@@ -238,7 +266,6 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         """
         if len(detections) == 0:
             return 0.5
-        
         
         # Reference dimensions
         img_height, img_width = 800,800
@@ -461,7 +488,6 @@ class CropDataset(torch.utils.data.Dataset):
         
         for _ in range(num_random_crops):
            
-            
             # Random position
             x1 = np.random.randint(0, max(1, img_width - self.crop_size))
             y1 = np.random.randint(0, max(1, img_height - self.crop_size))
@@ -485,7 +511,7 @@ class CropDataset(torch.utils.data.Dataset):
         x1, y1, x2, y2 = crop_info['crop_bbox']
         
         # Get original image
-        _, image, detections = self.dataset[dataset_idx]
+        _, image, _ = self.dataset[dataset_idx]
         
         # Convert to numpy if needed
         if isinstance(image, torch.Tensor):
@@ -522,7 +548,7 @@ class CropDataset(torch.utils.data.Dataset):
             
             # Get class name from dataset
             class_name = self.dataset.classes[class_id] if class_id >= 0 else "background"
-            
+                        
             # Generate filename
             base_name = Path(image_path).stem
             file_name = f"{base_name}_roi_{roi_id:06d}.jpg"
@@ -607,8 +633,12 @@ class CropDataset(torch.utils.data.Dataset):
         
         # Convert to tensor
         crop_tensor = torch.from_numpy(crop).permute(2, 0, 1).float() / 255.0
+
+        label = crop_info['label']
+        if label == -1:
+            label = max(self.dataset.classes) + 1
         
-        return crop_tensor, crop_info['label']
+        return crop_tensor, label
     
     def get_crop_info(self, idx: int) -> Dict[str, Any]:
         """

@@ -30,7 +30,7 @@ from .mixins import CurriculumDataModuleMixin
 from .callback import CurriculumCallback
 from .dataset import (
     CurriculumDetectionDataset, 
-    MultiScaleDetectionDataset,
+    CropDataset
 )
 
 __all__ = [
@@ -39,5 +39,5 @@ __all__ = [
     "CurriculumDataModuleMixin",
     "CurriculumCallback",
     "CurriculumDetectionDataset",
-    "MultiScaleDetectionDataset",
+    "CropDataset"
 ]

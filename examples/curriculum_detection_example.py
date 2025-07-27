@@ -2,68 +2,25 @@
 Example: Using the Refactored Curriculum Detection Dataset
 
 This script demonstrates how to use the new curriculum detection dataset
-that inherits from supervision.DetectionDataset.
+that inherits from supervision.DetectionDataset with convenience loading methods.
 """
 
-import torch
-import lightning as L
-from torchvision import transforms
-import numpy as np
-import supervision as sv
-from pathlib import Path
 
+from torchvision import transforms
+from tqdm import tqdm
+import traceback
 # Import the new curriculum learning components
 from wildtrain.data.curriculum import (
     CurriculumConfig, 
     CurriculumDetectionDataset,
-    MultiScaleDetectionDataset,
-    CurriculumCallback
+    CurriculumCallback,
+    CropDataset
 )
 
 
-def create_sample_detection_data():
-    """Create sample detection data for demonstration."""
-    
-    # Sample class names
-    classes = ["person", "car", "dog"]
-    
-    # Sample image paths (in real usage, these would be actual file paths)
-    image_paths = [
-        "sample1.jpg",
-        "sample2.jpg", 
-        "sample3.jpg"
-    ]
-    
-    # Sample annotations using supervision.Detections
-    annotations = {}
-    
-    # Image 1: One person (large detection = easy)
-    annotations["sample1.jpg"] = sv.Detections(
-        xyxy=np.array([[50, 50, 200, 300]]),  # Large bounding box
-        confidence=np.array([0.9]),
-        class_id=np.array([0])  # person
-    )
-    
-    # Image 2: One car (medium detection = medium difficulty)
-    annotations["sample2.jpg"] = sv.Detections(
-        xyxy=np.array([[100, 100, 250, 200]]),  # Medium bounding box
-        confidence=np.array([0.8]),
-        class_id=np.array([1])  # car
-    )
-    
-    # Image 3: One dog (small detection = hard)
-    annotations["sample3.jpg"] = sv.Detections(
-        xyxy=np.array([[150, 150, 180, 180]]),  # Small bounding box
-        confidence=np.array([0.7]),
-        class_id=np.array([2])  # dog
-    )
-    
-    return classes, image_paths, annotations
-
-
-def example_basic_curriculum_detection():
-    """Example: Basic curriculum detection dataset usage."""
-    print("=== Basic Curriculum Detection Dataset ===")
+def example_coco_loading():
+    """Example: Loading dataset from COCO format using convenience method."""
+    print("=== COCO Loading Example ===")
     
     # 1. Create curriculum configuration
     curriculum_config = CurriculumConfig(
@@ -73,168 +30,48 @@ def example_basic_curriculum_detection():
         start_difficulty=0.0,
         end_difficulty=1.0,
         warmup_epochs=0,
-        multiscale_enabled=False
     )
     
-    # 2. Create sample data
-    classes, image_paths, annotations = create_sample_detection_data()
-    
-    # 3. Create transforms
+    # 2. Create transforms
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
     
-    # 4. Create curriculum detection dataset
-    dataset = CurriculumDetectionDataset(
-        classes=classes,
-        images=image_paths,
-        annotations=annotations,
-        curriculum_config=curriculum_config,
-        transform=transform
-    )
-    
-    print(f"Dataset created with {len(dataset)} samples")
-    print(f"Available samples: {dataset.available_indices}")
-    
-    # 5. Test curriculum progression
-    print("\nTesting curriculum progression:")
-    for epoch in [0, 10, 20, 30, 40]:
-        # Update curriculum state
-        dataset.update_curriculum_state(
-            difficulty=min(1.0, epoch / 40.0),  # Linear progression
-            scale=1.0
+    # 3. Load dataset using convenience method
+    try:
+        dataset = CurriculumDetectionDataset.from_coco_with_curriculum(
+            images_directory_path=r"D:\workspace\data\demo-dataset\datasets",  # Your images directory
+            annotations_path=r"D:\workspace\data\demo-dataset\datasets\savmap\annotations\train.json",  # Your COCO annotations
+            curriculum_config=curriculum_config,
+            transform=transform
         )
+
+        for _ in tqdm(dataset,desc="Loading CurriculumDetectionDataset"):
+            continue
         
-        print(f"Epoch {epoch:2d}: difficulty={dataset.current_difficulty:.3f}, "
-              f"available_samples={len(dataset.available_indices)}")
+        print(f"✅ Dataset loaded successfully!")
+        print(f"✅ Number of samples: {len(dataset)}")
+        print(f"✅ Classes: {dataset.classes}")
+        print(f"✅ Available samples: {len(dataset.available_indices)}")
         
-        # Show which samples are available
-        if len(dataset.available_indices) > 0:
-            sample_idx = dataset.available_indices[0]
-            sample = dataset[0]  # Get first available sample
-            print(f"  Sample {sample_idx}: difficulty={sample['difficulty']:.3f}, "
-                  f"class={classes[sample['detections'].class_id[0]] if len(sample['detections']) > 0 else 'none'}")
+        # Test curriculum progression
+        print("\nTesting curriculum progression:")
+        for epoch in [0, 10, 20, 30, 40]:
+            dataset.update_curriculum_state(
+                difficulty=min(1.0, epoch / 40.0)
+            )
+            print(f"Epoch {epoch:2d}: difficulty={dataset.current_difficulty:.3f}, "
+                  f"available_samples={len(dataset.available_indices)}")
+        
+    except FileNotFoundError:
+        print("⚠️  COCO files not found. This is expected if you don't have the data files.")
+        print("   Replace the paths with your actual COCO dataset paths.")
 
 
-def example_multiscale_curriculum_detection():
-    """Example: Multi-scale curriculum detection dataset usage."""
-    print("\n=== Multi-Scale Curriculum Detection Dataset ===")
+def Crop_loading():
+    """Example demonstrating CropDataset with ClassificationRebalanceFilter."""
     
-    # 1. Create multi-scale curriculum configuration
-    curriculum_config = CurriculumConfig(
-        enabled=True,
-        type="multiscale",
-        multiscale_enabled=True,
-        base_size=416,
-        scale_range=(0.5, 2.0),
-        num_scales=5,
-        scale_strategy="curriculum",
-        difficulty_strategy="random"
-    )
-    
-    # 2. Create sample data
-    classes, image_paths, annotations = create_sample_detection_data()
-    
-    # 3. Create transforms
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    
-    # 4. Create multi-scale detection dataset
-    dataset = MultiScaleDetectionDataset(
-        classes=classes,
-        images=image_paths,
-        annotations=annotations,
-        curriculum_config=curriculum_config,
-        transform=transform,
-        preserve_aspect_ratio=True,
-        pad_to_square=True
-    )
-    
-    print(f"Multi-scale dataset created with {len(dataset)} samples")
-    
-    # Get available scales from the dataset's curriculum manager
-    available_scales = [0.5, 0.75, 1.0, 1.25, 1.5]  # Default scales
-    print(f"Available scales: {available_scales}")
-    
-    # 5. Test scale progression
-    print("\nTesting scale progression:")
-    for epoch in [0, 10, 20, 30, 40]:
-        # Update curriculum state
-        scale = available_scales[min(epoch // 10, len(available_scales) - 1)]
-        dataset.update_curriculum_state(
-            difficulty=1.0,  # Max difficulty
-            scale=scale
-        )
-        
-        print(f"Epoch {epoch:2d}: scale={dataset.current_scale:.3f}, "
-              f"target_size={int(dataset.base_size * dataset.current_scale)}px")
-
-
-def example_combined_curriculum_detection():
-    """Example: Combined difficulty and multi-scale curriculum."""
-    print("\n=== Combined Curriculum Detection Dataset ===")
-    
-    # 1. Create combined curriculum configuration
-    curriculum_config = CurriculumConfig(
-        enabled=True,
-        type="both",
-        difficulty_strategy="exponential",
-        start_difficulty=0.0,
-        end_difficulty=1.0,
-        warmup_epochs=5,
-        multiscale_enabled=True,
-        base_size=416,
-        scale_range=(0.5, 2.0),
-        num_scales=5,
-        scale_strategy="curriculum"
-    )
-    
-    # 2. Create sample data
-    classes, image_paths, annotations = create_sample_detection_data()
-    
-    # 3. Create transforms
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    
-    # 4. Create combined curriculum dataset
-    dataset = CurriculumDetectionDataset(
-        classes=classes,
-        images=image_paths,
-        annotations=annotations,
-        curriculum_config=curriculum_config,
-        transform=transform
-    )
-    
-    print(f"Combined curriculum dataset created with {len(dataset)} samples")
-    
-    # 5. Test combined progression
-    print("\nTesting combined curriculum progression:")
-    for epoch in [0, 10, 20, 30, 40, 50]:
-        # Calculate difficulty (exponential progression)
-        progress = min(1.0, max(0, epoch - curriculum_config.warmup_epochs) / (50 - curriculum_config.warmup_epochs))
-        difficulty = 1.0 - np.exp(-3.0 * progress)
-        
-        # Calculate scale (curriculum progression)
-        available_scales = [0.5, 0.75, 1.0, 1.25, 1.5]  # Default scales
-        scale_idx = min(int(progress * (len(available_scales) - 1)), len(available_scales) - 1)
-        scale = available_scales[scale_idx]
-        
-        # Update curriculum state
-        dataset.update_curriculum_state(difficulty=difficulty, scale=scale)
-        
-        print(f"Epoch {epoch:2d}: difficulty={dataset.current_difficulty:.3f}, "
-              f"scale={dataset.current_scale:.3f}, "
-              f"available_samples={len(dataset.available_indices)}")
-
-
-def example_supervision_integration():
-    """Example: Integration with supervision library features."""
-    print("\n=== Supervision Integration ===")
+    print("\n=== CropDataset with Rebalancing Example ===")
     
     # 1. Create curriculum configuration
     curriculum_config = CurriculumConfig(
@@ -242,71 +79,73 @@ def example_supervision_integration():
         type="difficulty",
         difficulty_strategy="linear",
         start_difficulty=0.0,
-        end_difficulty=1.0
+        end_difficulty=1.0,
+        warmup_epochs=0,
     )
-    
-    # 2. Create sample data
-    classes, image_paths, annotations = create_sample_detection_data()
-    
-    # 3. Create dataset
-    dataset = CurriculumDetectionDataset(
-        classes=classes,
-        images=image_paths,
-        annotations=annotations,
-        curriculum_config=curriculum_config
-    )
-    
-    print("Supervision integration features:")
-    print(f"✅ Lazy loading: {dataset._images_in_memory == {}}")
-    print(f"✅ Class names: {dataset.classes}")
-    print(f"✅ Image paths: {len(dataset.image_paths)} images")
-    print(f"✅ Annotations: {len(dataset.annotations)} annotations")
-    
-    # 4. Demonstrate supervision features
-    if len(dataset) > 0:
-        sample = dataset[0]
-        detections = sample['detections']
+
+    # 2. Create transforms
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+    ])
+
+    try:
+        # 3. Load base dataset
+        dataset = CurriculumDetectionDataset.from_coco_with_curriculum(
+            images_directory_path=r"D:\workspace\data\savmap_dataset_v2\annotated_py_paul\coco-format\images",  # Your images directory
+            annotations_path=r"D:\workspace\data\savmap_dataset_v2\annotated_py_paul\coco-format\annotations.json",  # Your COCO annotations
+            curriculum_config=curriculum_config,
+            transform=transform
+        )
+
+        print(f"✅ Base dataset loaded successfully!")
+        print(f"✅ Number of samples: {len(dataset)}")
+        print(f"✅ Classes: {dataset.classes}")
+
+        # 4. Create CropDataset
+        crop_dataset = CropDataset(
+            dataset=dataset,
+            crop_size=224,
+            max_tn_crops=1,
+            p_draw_annotations=0.0  # No annotations for cleaner crops
+        )
+
+        print(f"✅ CropDataset created successfully!")
+        print(f"✅ Number of crops: {len(crop_dataset)}")
+
+        annotations_before = crop_dataset.get_annotations_for_filter()
         
-        print(f"✅ Detection format: {type(detections)}")
-        if hasattr(detections, 'xyxy') and len(detections.xyxy) > 0:
-            print(f"✅ Bounding boxes: {detections.xyxy.shape}")
-            print(f"✅ Class IDs: {detections.class_id}")
-            print(f"✅ Confidences: {detections.confidence}")
-        else:
-            print("✅ No detections in sample")
+        # Count crops per class
+        class_counts_before = {}
+        for ann in annotations_before:
+            class_name = ann['class_name']
+            class_counts_before[class_name] = class_counts_before.get(class_name, 0) + 1
+
+        # 5. Analyze class distribution before rebalancing
+        print("\n📊 Class distribution")
+        for class_name, count in class_counts_before.items():
+            print(f"   {class_name}: {count} crops")
+
+    except FileNotFoundError:
+        print("⚠️  Dataset files not found. This is expected if you don't have the data files.")
+        print("   Replace the paths with your actual dataset paths.")
+    except Exception as e:
+        print(f"❌ Error: {e}")
+        
+        print(traceback.format_exc())
 
 
 if __name__ == "__main__":
     print("Curriculum Detection Dataset Examples")
     print("=" * 60)
+
+    Crop_loading()
     
     # Run examples
-    try:
-        example_basic_curriculum_detection()
-    except Exception as e:
-        print(f"Basic curriculum example failed: {e}")
+    #try:
+        #example_coco_loading()
+    #except Exception as e:
+        #print(f"COCO loading example failed: {traceback.format_exc()}")
     
-    try:
-        example_multiscale_curriculum_detection()
-    except Exception as e:
-        print(f"Multi-scale curriculum example failed: {e}")
     
-    try:
-        example_combined_curriculum_detection()
-    except Exception as e:
-        print(f"Combined curriculum example failed: {e}")
+
     
-    try:
-        example_supervision_integration()
-    except Exception as e:
-        print(f"Supervision integration example failed: {e}")
-    
-    print("\n" + "=" * 60)
-    print("Examples completed!")
-    print("\nKey Benefits of the Refactored Interface:")
-    print("✅ Inherits from supervision.DetectionDataset")
-    print("✅ Leverages lazy loading and memory efficiency")
-    print("✅ Uses supervision.Detections for type safety")
-    print("✅ Maintains all curriculum functionality")
-    print("✅ Backward compatible with existing code")
-    print("✅ Better integration with supervision ecosystem") 

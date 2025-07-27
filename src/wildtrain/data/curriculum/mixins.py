@@ -2,17 +2,17 @@
 Curriculum Learning Mixin for Data Modules.
 
 This module provides a mixin that can be added to any Lightning DataModule
-to enable curriculum learning functionality.
+to enable difficulty-based curriculum learning functionality.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import lightning as L
 from .manager import CurriculumConfig, CurriculumManager
 
 
 class CurriculumDataModuleMixin:
     """
-    Mixin to add curriculum learning to any Lightning DataModule.
+    Mixin to add difficulty-based curriculum learning to any Lightning DataModule.
     
     Usage:
         class MyDataModule(CurriculumDataModuleMixin, L.LightningDataModule):
@@ -30,7 +30,7 @@ class CurriculumDataModuleMixin:
             curriculum_config: Configuration for curriculum learning. If None, curriculum is disabled.
         """
         self.curriculum_config = curriculum_config
-        self.curriculum_manager = None
+        self.curriculum_manager: Optional[CurriculumManager] = None
         
         if curriculum_config and curriculum_config.enabled:
             self.curriculum_manager = CurriculumManager(curriculum_config)
@@ -72,17 +72,6 @@ class CurriculumDataModuleMixin:
         if self.curriculum_manager:
             return self.curriculum_manager.should_include_sample(sample_difficulty)
         return True  # Include all samples if curriculum is disabled
-    
-    def get_current_scale(self) -> float:
-        """
-        Get current scale for multi-scale training.
-        
-        Returns:
-            Current scale multiplier
-        """
-        if self.curriculum_manager:
-            return self.curriculum_manager.get_current_scale()
-        return 1.0  # Default scale if curriculum is disabled
     
     def get_current_difficulty(self) -> float:
         """
