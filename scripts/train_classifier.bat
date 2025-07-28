@@ -1,5 +1,4 @@
-call cd D:\workspace\repos\wildtrain
-call cd D:\PhD\workspace\wildtrain
+call cd /d %~dp0 && cd ..
 
 call set CONFIG_FILE=configs\classification\example_config.yaml
 

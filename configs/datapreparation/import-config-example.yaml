@@ -2,13 +2,13 @@
 # Usage: wildata import-dataset --config import-config-example.yaml
 
 # Required parameters
-source_path: D:\workspace\savmap\coco\annotations\train.json
+source_path: D:\workspace\data\general_dataset\tiled-data\coco-dataset\annotations\annotations_val.json
 source_format: "coco"  # or "yolo" "coco" "ls"
-dataset_name: savmap
+dataset_name: general_dataset
 
 # Pipeline configuration
 root: D:\workspace\data\demo-dataset
-split_name: "train"  # train, val, or test
+split_name: "val"  # train, val, or test
 enable_dvc: false
 
 # Processing options
@@ -22,7 +22,7 @@ ls_xml_config: "configs/label_studio_config.xml"  # "path/to/label_studio_config
 ls_parse_config: false
 
 # ROI configuration (optional)
-disable_roi: true # optional
+disable_roi: false # optional
 roi_config:
   random_roi_count: 2
   roi_box_size: 384
@@ -31,6 +31,7 @@ roi_config:
   background_class: "background"
   save_format: "jpg"
   quality: 95
+  sample_background: false
 
 
 # Transformation pipeline configuration (optional)
