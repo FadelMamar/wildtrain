@@ -426,8 +426,13 @@ class CropDataset(torch.utils.data.Dataset):
         
         # Get indices sorted by area (largest first)
         
-        for i, bbox in enumerate(detections.xyxy):
-            class_id = detections.class_id[i]
+        if detections.class_id is not None:
+            for i, bbox in enumerate(detections.xyxy):
+                class_id = detections.class_id[i]
+        else:
+            # Handle case where class_id is None
+            for i, bbox in enumerate(detections.xyxy):
+                class_id = -1  # Default class ID
             
             # Expand bounding box
             x1, y1, x2, y2 = bbox.tolist()          
@@ -558,6 +563,45 @@ class CropDataset(torch.utils.data.Dataset):
         annotations = self.get_annotations_for_filter()
         
         # Apply filter
+        filtered_annotations = filter_instance(annotations)
+        
+        # Create new dataset with filtered indices
+        filtered_indices = []
+        for filtered_ann in filtered_annotations:
+            roi_id = filtered_ann['roi_id']
+            # Find the corresponding crop index
+            for idx, crop_info in enumerate(self.crop_indices):
+                if idx == roi_id:
+                    filtered_indices.append(crop_info)
+                    break
+        
+        # Create new dataset instance
+        new_dataset = CropDataset(
+            dataset=self.dataset,
+            crop_size=self.crop_size,
+            max_tn_crops=self.max_tn_crops,
+            p_draw_annotations=self.p_draw_annotations
+        )
+        
+        # Replace crop indices with filtered ones
+        new_dataset.crop_indices = filtered_indices
+        
+        return new_dataset
+
+    def apply_clustering_filter(self, filter_instance) -> 'CropDataset':
+        """
+        Apply ClusteringFilter (via adapter) to create a clustered dataset.
+        
+        Args:
+            filter_instance: Instance of ClusteringFilter or CropClusteringAdapter
+            
+        Returns:
+            New CropDataset with clustered crop indices
+        """
+        # Get annotations in the expected format
+        annotations = self.get_annotations_for_filter()
+        
+        # Apply filter (adapter handles conversion if needed)
         filtered_annotations = filter_instance(annotations)
         
         # Create new dataset with filtered indices
