@@ -25,6 +25,7 @@ dependencies = [
     "omegaconf>=2.3.0",
     "shap>=0.48.0",
     "optuna>=4.4.0",
+    "streamlit>=1.47.1",
 ]
 
 [project.scripts]
@@ -39,6 +40,14 @@ ignore = []
 [build-system]
 requires = ["uv_build>=0.7.19,<0.8.0"]
 build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+    "pytest-xdist>=3.8.0",
+]
 
 [tool.ruff.format]
 quote-style = "double"
