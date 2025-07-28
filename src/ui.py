@@ -37,6 +37,11 @@ def setup_page_config():
         initial_sidebar_state="expanded",
     )
 
+def launch_fiftyone_ui():
+    """Launch the FiftyOne UI."""
+    button = st.button("Launch FiftyOne UI")
+    if button:
+        subprocess.Popen(["uv", "run", "fiftyone", "app", "launch"],creationflags=subprocess.CREATE_NEW_CONSOLE)
 
 def get_config_files() -> Dict[str, list]:
     """Get available configuration files from the configs directory."""
@@ -459,7 +464,10 @@ def configuration_page():
     st.subheader("Available Configuration Files")
     
     config_files = get_config_files()
-    
+
+    pipeline_files = [f.as_posix() for i,f in enumerate((ROOT / "pipelines").iterdir()) if f.is_file() and f.suffix == ".yaml"]
+    config_files["pipelines"] = pipeline_files
+
     for category, files in config_files.items():
         if files:
             with st.expander(f"{category.title()} ({len(files)} files)"):
@@ -469,14 +477,15 @@ def configuration_page():
                     with col1:
                         st.code(file_path, language="text")
                     
-                    with col2:
-                        if st.button("View", key=f"view_{file_path}"):
-                            try:
-                                with open(file_path, 'r') as f:
-                                    content = f.read()
-                                st.text_area("Configuration Content", content, height=300)
-                            except Exception as e:
-                                st.error(f"Error reading file: {e}")
+                    #with col2:
+                    if st.button("View", key=f"view_{file_path}"):
+                        try:
+                            with open(file_path, 'r') as f:
+                                content = f.read()
+                            conf = yaml.safe_load(content)
+                            st.text_area("Configuration Content", json.dumps(conf, indent=4), height=300)
+                        except Exception as e:
+                            st.error(f"Error reading file: {e}")
 
 
 def main():
@@ -491,6 +500,11 @@ def main():
         ["Home", "Training", "Evaluation", "Dataset Analysis", "Visualization", "Configuration"],
         help="Select a page to navigate"
     )
+
+
+    with st.sidebar:
+        st.divider()
+        launch_fiftyone_ui()
     
     # Page routing
     if page == "Home":
@@ -500,7 +514,8 @@ def main():
     elif page == "Evaluation":
         evaluation_page()
     elif page == "Dataset Analysis":
-        dataset_analysis_page()
+        st.info("Not implemented yet")
+    #    dataset_analysis_page()
     elif page == "Visualization":
         visualization_page()
     elif page == "Configuration":
