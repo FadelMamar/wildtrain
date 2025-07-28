@@ -25,104 +25,10 @@ from ..data import ClassificationDataModule
 from ..utils.logging import ROOT, ENV_FILE
 from ..utils.logging import get_logger
 from ..utils.dvc_tracker import DVCTracker
+from ..utils.transforms import create_transforms
 from .base import ModelTrainer
 
 logger = get_logger(__name__)
-
-
-def create_transforms(transforms: dict[str, Any]) -> dict[str, Any]:
-    """
-    Create transforms for training and validation from a dictionary.
-
-    Args:
-        transforms: Dictionary with 'train' and 'val' keys, each containing a list of
-                   transformation configurations. Each config should have:
-                   - 'name': torchvision transformation class name (e.g., 'RandomResizedCrop')
-                   - 'params': dictionary of parameters for the transformation
-
-    Returns:
-        Dictionary with 'train' and 'val' keys containing composed transforms
-    """
-    import torchvision.transforms.v2 as T
-    import torchvision.transforms.functional as F
-
-    def create_transform_list(transform_configs: list) -> T.Compose:
-        """Create a list of transforms from configuration."""
-        transform_list = []
-
-        for config in transform_configs:
-            if isinstance(config, str):
-                # Simple case: just the transform name
-                transform_name = config
-                params = {}
-            elif isinstance(config, (dict, DictConfig)):
-                # Full configuration with parameters - convert DictConfig to dict if needed
-                if isinstance(config, DictConfig):
-                    config = dict(config)
-
-                transform_name = config.get("name", config.get("type"))
-                params = config.get("params", config.get("kwargs", {}))
-
-                # Convert DictConfig params to regular dict if needed
-                if isinstance(params, DictConfig):
-                    params = dict(params)
-
-                # Ensure params is a proper dictionary with string keys
-                if not isinstance(params, dict):
-                    params = {}
-                else:
-                    # Convert any non-string keys to strings
-                    params = {str(k): v for k, v in params.items()}
-
-                if transform_name is None:
-                    raise ValueError(
-                        f"Transform config missing 'name' or 'type' key: {config}"
-                    )
-            else:
-                raise ValueError(f"Invalid transform config: {config}")
-
-            # Get the transform class from torchvision
-            if hasattr(T, transform_name):
-                transform_class = getattr(T, transform_name)
-            elif hasattr(F, transform_name):
-                # For functional transforms, we need to handle them differently
-                raise ValueError(
-                    f"Functional transforms like {transform_name} are not supported yet"
-                )
-            else:
-                raise ValueError(f"Unknown transform: {transform_name}")
-
-            # Create the transform instance with parameters
-            for key, value in params.items():
-                if isinstance(value, Sequence) and not isinstance(value, str):
-                    params[key] = list(value)
-            try:
-                transform_instance = transform_class(**params)
-                transform_list.append(transform_instance)
-            except Exception as e:
-                raise ValueError(
-                    f"Failed to create transform {transform_name} with params {params}: {traceback.format_exc()}"
-                )
-
-        return T.Compose(transform_list)
-
-    result = {}
-
-    # Create train transforms
-    if "train" in transforms:
-        result["train"] = create_transform_list(transforms["train"])
-    else:
-        # Default train transforms
-        result["train"] = T.Compose([T.ToTensor()])
-
-    # Create validation transforms
-    if "val" in transforms:
-        result["val"] = create_transform_list(transforms["val"])
-    else:
-        # Default validation transforms
-        result["val"] = T.Compose([T.ToTensor()])
-
-    return result
 
 
 def track_dataset(cfg: DictConfig) -> None:
@@ -156,33 +62,37 @@ class ClassifierModule(L.LightningModule):
         self.save_hyperparameters(ignore=["model"])
 
         self.model = model
-        self.num_classes = model.num_classes.item()
+        self.num_classes = int(model.num_classes.item())
         self.label_to_class_map = model.label_to_class_map
         
         self.mlflow_run_id = None
         self.mlflow_experiment_id = None
 
         # metrics
-        cfg = dict(task="multiclass", num_classes=self.num_classes, average=None)
+        cfg = {
+            "task": "multiclass", 
+            "num_classes": self.num_classes, 
+            "average": None
+        }
         self.accuracy = Accuracy(**cfg)
         self.precision = Precision(**cfg)
         self.recall = Recall(**cfg)
         self.f1score = F1Score(**cfg)
         self.ap = AUROC(**cfg)
 
-        self.metrics = dict(
-            accuracy=self.accuracy,
-            precision=self.precision,
-            recall=self.recall,
-            f1score=self.f1score,
-        )
+        self.metrics = {
+            "accuracy": self.accuracy,
+            "precision": self.precision,
+            "recall": self.recall,
+            "f1score": self.f1score,
+        }
 
         self.label_smoothing = label_smoothing            
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.model(x)
 
-    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> torch.Tensor:
         x, y = batch
 
         classes = y.cpu().flatten().tolist()
@@ -194,7 +104,7 @@ class ClassifierModule(L.LightningModule):
         logits = self(x)
         loss = F.cross_entropy(
             logits,
-            y.long().squeeze(1),
+            y.long().flatten(),  # Use flatten instead of squeeze(1)
             label_smoothing=self.label_smoothing,
             weight=weight,
         )
@@ -203,9 +113,9 @@ class ClassifierModule(L.LightningModule):
 
         return loss
 
-    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int):
+    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int) -> None:
         x, y = batch
-        y = y.long().squeeze(1)
+        y = y.long().flatten()  # Use flatten instead of squeeze(1)
 
         logits = self(x)
         loss = F.cross_entropy(logits, y, label_smoothing=self.label_smoothing)
@@ -215,7 +125,7 @@ class ClassifierModule(L.LightningModule):
 
         self.log("val_loss", loss, on_epoch=True, prog_bar=True)
 
-    def on_validation_epoch_end(self):
+    def on_validation_epoch_end(self) -> None:
         if self.mlflow_run_id is None:
             self.mlflow_run_id = getattr(self.logger, "run_id", None)
             self.mlflow_experiment_id = getattr(self.logger, "experiment_id", None)
@@ -295,10 +205,13 @@ class ClassifierTrainer(ModelTrainer):
         return [checkpoint_callback, early_stopping, lr_callback], mlflow_logger
 
     def log_model(self, model: ClassifierModule) -> None:
-        if model.mlflow_run_id:
+        if model.mlflow_run_id and self.best_model_path:
             with mlflow.start_run(run_id=model.mlflow_run_id):
                 try:
-                    best_model = GenericClassifier.load_from_lightning_ckpt(self.best_model_path,map_location=model.device)
+                    best_model = GenericClassifier.load_from_lightning_ckpt(
+                        str(self.best_model_path),
+                        map_location=str(model.device)
+                    )
                     path = Path(self.best_model_path).with_name("best_classifier.pt")
                     torch.save(best_model, path)
                     mlflow.log_artifact(str(path), "checkpoint")
@@ -320,21 +233,9 @@ class ClassifierTrainer(ModelTrainer):
         if torch.cuda.is_available():   
             torch.set_float32_matmul_precision('medium')
 
-        # DataModule
-        data_cfg = self.config.dataset
-        batch_size = self.config.train.batch_size
-
-        datamodule = ClassificationDataModule(
-            root_data_directory=data_cfg.root_data_directory,
-            batch_size=batch_size,
-            transforms=create_transforms(self.config.dataset.transforms),
-            load_as_single_class=self.config.dataset.single_class.enable,
-            background_class_name=self.config.dataset.single_class.background_class_name,
-            single_class_name=self.config.dataset.single_class.single_class_name,
-            keep_classes=self.config.dataset.single_class.keep_classes,
-            discard_classes=self.config.dataset.single_class.discard_classes,
-            rebalance=data_cfg.rebalance,
-        )
+        # DataModule - use the new classmethod for cleaner instantiation
+        datamodule = ClassificationDataModule.from_dict_config(self.config)
+        
         logger.info(f"Getting one batch of data to initialize lazy modules in classifier.")
         datamodule.setup(stage="fit")
         example_input, _ = next(iter(datamodule.train_dataloader()))

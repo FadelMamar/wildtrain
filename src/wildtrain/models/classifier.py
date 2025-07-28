@@ -58,7 +58,7 @@ class GenericClassifier(nn.Module):
         self,
     ):
         preprocessing = torch.nn.Sequential(
-            T.Resize(self.input_size.item(), interpolation=T.InterpolationMode.NEAREST),
+            T.Resize(self.input_size.item(), interpolation=T.InterpolationMode.BICUBIC),
             T.ToDtype(torch.float32),
             T.Normalize(mean=self.mean, std=self.std),
         )
