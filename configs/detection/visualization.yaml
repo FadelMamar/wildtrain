@@ -1,0 +1,27 @@
+# Quick-start detector visualization configuration
+# Simple configuration for common use cases
+
+fiftyone:
+  dataset_name: "savmap-train"
+  prediction_field: "detection_predictions"
+
+model:
+  localizer:
+    weights: models\best.pt
+    imgsz: 640
+    device: "cpu"
+    conf_thres: 0.2
+    iou_thres: 0.3
+    max_det: 300
+    overlap_metric: "IOU"
+  
+  classifier:
+    checkpoint: checkpoints\classification\demo\best_classifier.pt
+
+processing:
+  batch_size: 8
+  debug: true
+  num_workers: 0
+
+# Optional: Add your class names here
+class_names: null

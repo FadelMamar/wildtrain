@@ -256,7 +256,7 @@ class ClassifierTrainer(ModelTrainer):
     using PyTorch Lightning and MLflow for experiment tracking.
     """
 
-    def get_callbacks(self) -> list[Any]:
+    def get_callbacks(self) -> tuple[list[Any], MLFlowLogger]:
         """
         Get the callbacks for the trainer.
         """
@@ -273,9 +273,10 @@ class ClassifierTrainer(ModelTrainer):
             save_top_k=self.config.checkpoint.save_top_k,
             save_last=self.config.checkpoint.save_last,
             mode=self.config.checkpoint.mode,
-            dirpath=ROOT / self.config.checkpoint.dirpath,
-            #filename=self.config.checkpoint.filename,
+            dirpath=ROOT / self.config.checkpoint.dirpath / self.config.mlflow.run_name,
+            filename=self.config.checkpoint.filename,
             save_weights_only=self.config.checkpoint.save_weights_only,
+            save_on_train_epoch_end=False
         )
         lr_callback = LearningRateMonitor(logging_interval="epoch")
         early_stopping = EarlyStopping(
@@ -291,31 +292,25 @@ class ClassifierTrainer(ModelTrainer):
             #checkpoint_path_prefix="classification",
             tracking_uri=MLFLOW_TRACKING_URI,
         )
-        return [checkpoint_callback, early_stopping, lr_callback, mlflow_logger]
+        return [checkpoint_callback, early_stopping, lr_callback], mlflow_logger
 
     def log_model(self, model: ClassifierModule) -> None:
         if model.mlflow_run_id:
-            try:
-                with mlflow.start_run(run_id=model.mlflow_run_id):
-                    try:
-                        ckpt = ROOT / self.config.checkpoint.dirpath / "best.ckpt"
-                        best_model = GenericClassifier.load_from_lightning_ckpt(ckpt,map_location=model.device)
-                        path = Path(ckpt).with_name("best_classifier.pt")
-                        torch.save(best_model, path)
-                        mlflow.log_artifact(str(path), "checkpoint")
-                        self.best_model_path = str(path)
-                    except Exception:
-                        logger.warning(f"Error loading best model: {traceback.format_exc()}")
+            with mlflow.start_run(run_id=model.mlflow_run_id):
+                try:
+                    best_model = GenericClassifier.load_from_lightning_ckpt(self.best_model_path,map_location=model.device)
+                    path = Path(self.best_model_path).with_name("best_classifier.pt")
+                    torch.save(best_model, path)
+                    mlflow.log_artifact(str(path), "checkpoint")
+                except Exception:
+                    logger.error(f"Error logging best model: {traceback.format_exc()}")
 
-                    cfg_path = Path(ckpt).with_name("config.yaml")
-                    OmegaConf.save(self.config, cfg_path)
-                    mlflow.log_artifact(str(cfg_path), "config")
+                cfg_path = Path(self.best_model_path).with_name("config.yaml")
+                OmegaConf.save(self.config, cfg_path)
+                mlflow.log_artifact(str(cfg_path), "config")
 
-                    if self.config.get("track_dataset"):
-                        track_dataset(self.config)
-
-            except Exception:
-                logger.error(f"Error logging model: {traceback.format_exc()}")
+                if self.config.get("track_dataset"):
+                    track_dataset(self.config)
 
     def run(self, debug: bool = False) -> None:
         """
@@ -366,8 +361,7 @@ class ClassifierTrainer(ModelTrainer):
             lrf=self.config.train.lrf,
         )
         model.example_input_array = example_input
-        callbacks = self.get_callbacks()
-        mlflow_logger = callbacks.pop(-1)
+        callbacks, mlflow_logger = self.get_callbacks()
         trainer = Trainer(
             max_epochs=self.config.train.epochs if not debug else 1,
             accelerator=self.config.train.accelerator,
@@ -376,9 +370,13 @@ class ClassifierTrainer(ModelTrainer):
             limit_train_batches=3 if debug else None,
             limit_val_batches=3 if debug else None,
             callbacks=callbacks,
-        )
+            default_root_dir=ROOT / self.config.checkpoint.dirpath
+            )
 
         trainer.fit(model, datamodule=datamodule)
+
+        self.best_model_path = trainer.checkpoint_callback.best_model_path
+        self.best_model_score = trainer.checkpoint_callback.best_model_score
     
-        #if self.config.mlflow.log_model:
-        #    self.log_model(model)
+        if self.config.mlflow.log_model:
+            self.log_model(model)

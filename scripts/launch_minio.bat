@@ -1,3 +1,3 @@
-call cd D:\workspace\repos\wildtrain\microservices
+call cd /d "%~dp0" && cd ..\microservices
 
 call docker compose up -d

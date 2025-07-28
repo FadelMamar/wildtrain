@@ -1,35 +1,35 @@
-base_config: example_config.yaml
-sweep:
-  strategy: grid
-  parameters:
-    dataset:
-    model:
-      backbone:
-        - timm/vit_small_patch16_224.dino
-        - timm/resnet18.a1_in1k
-      dropout:
-        - 0.0
-        - 0.2
-        - 0.4
-    train:
-      lr:
-        - 0.00001
-        - 0.0001
-        - 0.001
-      lrf:
-        - 0.01
-        - 0.1
-      label_smoothing:
-        - 0.0
-        - 0.1
-      weight_decay:
-        - 0.0001
-        - 0.001
-      batch_size:
-        - 32
-      epochs:
-        - 20
-  num_runs: 8  # Only used for random search
-  seed: 42
+base_config: D:\workspace\repos\wildtrain\configs\classification\example_config.yaml
 
-output_dir: runs/classification_sweeps 
+parameters:
+  model:
+    backbone:
+      - timm/vit_small_patch16_224.dino
+      - timm/resnet18.a1_in1k
+    dropout:
+      - 0.0
+      - 0.2
+      - 0.4
+  train:
+    lr:
+      - 0.0003
+      - 0.003
+    lrf:
+      - 0.01
+      - 0.1
+      - 1.0
+    label_smoothing:
+      - 0.0
+      - 0.0001
+      - 0.001
+      - 0.01
+    weight_decay:
+      - 0.0001
+      - 0.001
+      - 0.01
+    batch_size:
+      - 32
+    
+epochs: 20
+sweep_name: classification_sweep
+n_trials: 8
+seed: 42

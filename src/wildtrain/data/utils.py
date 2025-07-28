@@ -3,50 +3,69 @@ from torchvision import transforms as T
 import torch
 from omegaconf import DictConfig, OmegaConf
 import os
-from supervision.dataset.core import DetectionDataset
-from typing import Union
+from typing import Union, List, Tuple
+from wildata.datasets.detection import load_detection_dataset
+from wildata.pipeline.path_manager import PathManager
+from pathlib import Path
+from wildtrain.utils.logging import get_logger
+import supervision as sv
+import traceback
+
+logger = get_logger(__name__)
 
 def load_image(path: str) -> torch.Tensor:
     image = Image.open(path).convert("RGB")
     return T.PILToTensor()(image)
 
-def load_coco_dataset(images_directory_path:str, annotations_path:str,):
-    return DetectionDataset.from_coco(images_directory_path=images_directory_path,
-                                      annotations_path=annotations_path)
-
-
-def load_yolo_dataset(images_directory_path:str, annotations_directory_path:str,data_yaml_path:str,force_mask:bool=False,is_obb:bool=False):
-    return DetectionDataset.from_yolo(images_directory_path=images_directory_path,
-                                        annotations_directory_path=annotations_directory_path,
-                                        data_yaml_path=data_yaml_path,
-                                        force_mask=force_mask,
-                                        is_obb=is_obb
-                                        )
-
-
-def load_dataset(config:Union[DictConfig,str,dict]):
+def load_all_detection_datasets(
+    root_data_directory: str,
+    split: str,
+) -> sv.DetectionDataset:
     """
-    Load a dataset from a config.
-    """
-
-    if isinstance(config,DictConfig):
-        config = OmegaConf.to_container(config)
-    elif isinstance(config,str):
-        config = OmegaConf.load(config)
-    elif isinstance(config,dict):
-        config = DictConfig(config)
-    else:
-        raise ValueError(f"Invalid config type: {type(config)}")
+    Load all available detection datasets for a given split.
+    Returns a list of dictionaries containing (dataset, class_mapping, dataset_name).
+    Skips datasets that do not have the requested split.
     
-    if config.get("type") == "coco":
-        return load_coco_dataset(config.get("images_directory_path"),config.get("annotations_path"))
+    Args:
+        root_data_directory (str): Root directory containing the datasets
+        split (str): Dataset split to load ('train', 'val', 'test')
         
-    elif config.get("type") == "yolo":
-        return load_yolo_dataset(config.get("images_directory_path"),
-                                config.get("annotations_directory_path"),
-                                config.get("data_yaml_path"),
-                                config.get("force_mask",False),
-                                config.get("is_obb",False)
-                            )
-    else:
-        raise ValueError(f"Invalid dataset type: {config.get('type')}")
+        
+    Returns:
+        List[Tuple[DetectionDataset, dict, str]]: List of (dataset, class_mapping, dataset_name) tuples
+    """
+    path_manager = PathManager(Path(root_data_directory))
+    all_datasets = path_manager.list_datasets()
+    detection_datasets = []
+
+    logger.info(f"Loading datasets: {all_datasets}, split: {split}")
+    
+    for dataset_name in all_datasets:
+        # Check if split exists by checking for annotations file
+        annotations_file = path_manager.get_dataset_split_annotations_file(
+            dataset_name, split
+        )
+        if not annotations_file.exists():
+            continue
+            
+        try:
+            dataset, class_mapping = load_detection_dataset(
+                root_data_directory=root_data_directory,
+                dataset_name=dataset_name,
+                split=split
+            )
+            detection_datasets.append(dataset)
+            logger.info(
+                f"Loaded detection dataset: {dataset_name} for split: {split} with {len(dataset)} samples"
+            )
+        except Exception as e:
+            logger.error(f"Error loading dataset {dataset_name}: {e}")
+            logger.error(traceback.format_exc())
+            continue
+    
+    # merge all datasets into one
+    merged_dataset = sv.DetectionDataset.merge(detection_datasets)
+    logger.info(
+        f"Successfully loaded {len(detection_datasets)} detection datasets for split: {split}"
+    )
+    return merged_dataset

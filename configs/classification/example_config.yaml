@@ -52,7 +52,7 @@ dataset:
           size: ${dataset.input_size}
 
 model:
-  backbone: timm/vit_small_patch16_224.dino
+  backbone: timm/mobilenetv4_hybrid_large.ix_e600_r384_in1k
   pretrained: true
   backbone_source: timm
   dropout: 0.2
@@ -72,14 +72,14 @@ train:
   accelerator: auto
 
 checkpoint:
-  monitor: val_f1score
+  monitor: val_f1score_class_wildlife
   save_top_k: 1
   mode: max
   save_last: true
-  dirpath: "checkpoints/classification"
+  dirpath: checkpoints/classification
   patience: 10
   save_weights_only: true
-  filename: "best"
+  filename: "{epoch:02d}-{val_f1score_class_wildlife:.2f}"
   min_delta: 0.001
 
 mlflow:

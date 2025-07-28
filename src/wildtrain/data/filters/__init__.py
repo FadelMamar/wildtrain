@@ -6,15 +6,12 @@ data points for object detection training, focusing on diversity,
 quality, and representativeness.
 """
 
-from .algorithms import ClusteringFilter, ClassificationRebalanceFilter
+from .algorithms import ClusteringFilter, ClassificationRebalanceFilter, CropClusteringAdapter
 from .feature_extractor import FeatureExtractor
-from .filter_config import FilterConfig
-from .filter_pipeline import FilterPipeline
 
 __all__ = [
     "FeatureExtractor",
-    "FilterConfig",
-    "FilterPipeline",
     "ClusteringFilter",
     "ClassificationRebalanceFilter",
+    "CropClusteringAdapter",
 ]

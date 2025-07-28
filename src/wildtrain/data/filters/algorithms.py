@@ -13,7 +13,7 @@ import random
 
 from wildtrain.utils.logging import get_logger
 from .feature_extractor import FeatureExtractor
-from .filter_config import ClusteringFilterConfig
+
 
 logger = get_logger(__name__)
 
@@ -69,35 +69,35 @@ class ClusteringFilter(BaseFilter):
 
     CLUSTER_TRIALS = [3, 5, 7, 9,]
 
-    last_silhouette_scores: Optional[Dict[int, float]]
-    last_samples_per_cluster: Optional[List[int]]
+    last_silhouette_scores: Optional[Dict[int, float]] = None
+    last_samples_per_cluster: Optional[List[int]] = None
 
     def __init__(
         self,
-        config: ClusteringFilterConfig,
         feature_extractor: Optional[FeatureExtractor] = None,
         batch_size: int = 64,
         sampling_strategy: Optional[SamplingStrategy] = None,
+        reduction_factor: float = 0.3
     ):
-        self.config = config
         self.feature_extractor = feature_extractor or FeatureExtractor()
         self.batch_size = batch_size
-        self.x_percent = getattr(config, "x_percent", 0.3)  # Default to 30% if not set
+        self.x_percent = reduction_factor  # Default to 30% if not set
         self.sampling_strategy = (
             sampling_strategy or UniformDistanceRandomSamplingStrategy()
         )
         self.last_silhouette_scores = None
         self.last_samples_per_cluster = None
 
-    def __call__(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
-        images = coco_data.get("images", [])
+    def __call__(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not images:
-            logger.warning("No images found in coco_data")
-            return coco_data
-        coco_data = self.add_embeddings(coco_data)
-        embeddings = np.stack([img["_embedding"] for img in coco_data["images"]])
-        image_ids = [img["id"] for img in coco_data["images"]]
-        file_names = [img["file_name"] for img in coco_data["images"]]
+            logger.warning("No images found in images")
+            return images
+
+        images = self.add_embeddings(images)
+
+        embeddings = np.stack([img["_embedding"] for img in images])
+        image_ids = [img["id"] for img in images]
+        file_names = [img["file_name"] for img in images]
         # Find best clustering
         best_k, best_labels, silhouette_scores = self._find_best_kmeans(embeddings)
         self.last_silhouette_scores = silhouette_scores
@@ -145,21 +145,14 @@ class ClusteringFilter(BaseFilter):
         # Filter images and annotations
         selected_image_ids = set(df.loc[selected_indices, "image_id"])  # type: ignore
         filtered_images = [
-            img for img in coco_data["images"] if img["id"] in selected_image_ids
+            img for img in images if img["id"] in selected_image_ids
         ]
-        filtered_annotations = [
-            ann
-            for ann in coco_data.get("annotations", [])
-            if ann["image_id"] in selected_image_ids
-        ]
+        
         # Clean up embeddings before export
         for img in filtered_images:
             if "_embedding" in img:
                 del img["_embedding"]
-        filtered_coco = dict(coco_data)
-        filtered_coco["images"] = filtered_images
-        filtered_coco["annotations"] = filtered_annotations
-        return filtered_coco
+        return filtered_images
 
     def _find_best_kmeans(
         self, embeddings: np.ndarray
@@ -201,18 +194,17 @@ class ClusteringFilter(BaseFilter):
             base[idx] += 1  # type: ignore
         return base.tolist()  # type: ignore
 
-    def add_embeddings(self, coco_data: Dict[str, Any]) -> Dict[str, Any]:
-        images = coco_data.get("images", [])
+    def add_embeddings(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not images:
-            logger.warning("No images found in coco_data")
-            return coco_data
+            logger.warning("No images found in images")
+            return images
         image_paths: List[Union[str, Path]] = [
             Path(img["file_name"]).resolve() for img in images
         ]
         embeddings = self._compute_embeddings_in_batches(image_paths)
         for img, emb in zip(images, embeddings):  # type: ignore
             img["_embedding"] = emb
-        return coco_data
+        return images
 
     def _compute_embeddings_in_batches(
         self, image_paths: List[Union[str, Path]]
@@ -225,7 +217,124 @@ class ClusteringFilter(BaseFilter):
         return np.vstack(all_embeddings)
 
     def get_filter_info(self) -> Dict[str, Any]:
-        return {"filter_type": self.__class__.__name__, **vars(self.config)}
+        return {"filter_type": self.__class__.__name__}
+
+
+class CropClusteringAdapter:
+    """
+    Adapter to make ClusteringFilter work with CropDataset annotations.
+    
+    This adapter converts between the CropDataset annotation format and the
+    ClusteringFilter's expected image format, allowing the ClusteringFilter
+    to work with crop annotations without modification.
+    """
+    
+    def __init__(self, clustering_filter: ClusteringFilter):
+        """
+        Initialize the adapter with a ClusteringFilter instance.
+        
+        Args:
+            clustering_filter: The ClusteringFilter to adapt
+        """
+        self.clustering_filter = clustering_filter
+    
+    def __call__(self, crop_annotations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Apply clustering filter to crop annotations using adapter pattern.
+        
+        Args:
+            crop_annotations: List of crop annotation dictionaries from CropDataset
+            
+        Returns:
+            Filtered list of crop annotation dictionaries
+        """
+        if not crop_annotations:
+            logger.warning("No crop annotations found")
+            return []
+        
+        # Convert crop annotations to ClusteringFilter format
+        images_for_filter = self._adapt_crop_annotations_to_images(crop_annotations)
+        
+        # Apply the clustering filter
+        filtered_images = self.clustering_filter(images_for_filter)
+        
+        # Convert back to crop annotation format
+        filtered_annotations = self._adapt_images_to_crop_annotations(
+            filtered_images, crop_annotations
+        )
+        
+        return filtered_annotations
+    
+    def _adapt_crop_annotations_to_images(self, crop_annotations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Convert crop annotations to the format expected by ClusteringFilter.
+        
+        Args:
+            crop_annotations: List of crop annotation dictionaries
+            
+        Returns:
+            List of image dictionaries for ClusteringFilter
+        """
+        images = []
+        
+        for ann in crop_annotations:
+            # Create image dict with required fields for ClusteringFilter
+            image = {
+                "id": ann["roi_id"],  # Use roi_id as image id
+                "file_name": ann["file_name"],  # Use the generated filename
+                "class_name": ann["class_name"],
+                "class_id": ann["class_id"],
+                "dataset_idx": ann["dataset_idx"],
+                "crop_bbox": ann["crop_bbox"],
+                "crop_type": ann["crop_type"]
+            }
+            
+            # Add original annotation info if available
+            if "original_bbox" in ann:
+                image["original_bbox"] = ann["original_bbox"]
+            if "original_annotation_id" in ann:
+                image["original_annotation_id"] = ann["original_annotation_id"]
+            
+            images.append(image)
+        
+        return images
+    
+    def _adapt_images_to_crop_annotations(
+        self, filtered_images: List[Dict[str, Any]], original_annotations: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        """
+        Convert filtered images back to crop annotation format.
+        
+        Args:
+            filtered_images: List of filtered image dictionaries from ClusteringFilter
+            original_annotations: Original crop annotations for reference
+            
+        Returns:
+            List of filtered crop annotation dictionaries
+        """
+        # Create mapping from roi_id to original annotation
+        annotation_map = {ann["roi_id"]: ann for ann in original_annotations}
+        
+        filtered_annotations = []
+        
+        for img in filtered_images:
+            roi_id = img["id"]
+            if roi_id in annotation_map:
+                # Use the original annotation structure but update with any changes
+                filtered_ann = annotation_map[roi_id].copy()
+                # Update with any fields that might have changed
+                for key, value in img.items():
+                    if key not in ["id", "_embedding"]:  # Skip internal fields
+                        filtered_ann[key] = value
+                filtered_annotations.append(filtered_ann)
+        
+        return filtered_annotations
+    
+    def get_filter_info(self) -> Dict[str, Any]:
+        """Get information about the adapted filter."""
+        base_info = self.clustering_filter.get_filter_info()
+        base_info["adapter_type"] = "CropClusteringAdapter"
+        return base_info
 
 
 class ClassificationRebalanceFilter(BaseFilter):
