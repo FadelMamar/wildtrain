@@ -38,23 +38,21 @@ app = typer.Typer(
 console = Console()
 
 
-def setup_logging(verbose: bool = False) -> None:
+def setup_logging(verbose: bool = False, log_file: Optional[Path] = None) -> None:
     """Setup rich logging with appropriate level."""
     level = logging.DEBUG if verbose else logging.INFO
     log_dir = ROOT / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
+    handlers = [RichHandler(console=console, rich_tracebacks=True)]
+    if log_file:
+        handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
+
     logging.basicConfig(
         level=level,
         format="%(message)s",
         datefmt="[%X]",
-        handlers=[
-            RichHandler(console=console, rich_tracebacks=True),
-            logging.FileHandler(
-                log_dir / f"cli_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log",
-                encoding="utf-8",
-            ),
-        ],
+        handlers=handlers,
     )
 
 
@@ -68,8 +66,7 @@ def main(
     ),
 ) -> None:
     """WildTrain - Modular Computer Vision Framework."""
-    setup_logging(verbose)
-
+    
     # Display welcome message
     welcome_text = Text("🚀 WildTrain", style="bold blue")
     subtitle = Text("Modular Computer Vision Framework", style="italic")
@@ -85,12 +82,12 @@ def train_classifier(
 ) -> None:
     """Train a classification model."""
     console.print(f"[bold green]Training classifier with config:[/bold green] {config}")
+    log_file = ROOT / "logs" / f"train_classifier_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
 
     cfg = OmegaConf.load(config)
     console.print(OmegaConf.to_yaml(cfg))
     ClassifierTrainer(DictConfig(cfg)).run()
-
-
 
 
 @app.command()
@@ -161,6 +158,9 @@ def run_detection_pipeline(
     """Run the full detection pipeline (train + eval) for object detection."""
     console.print(f"[bold green]Running detection pipeline with config:[/bold green] {config}")
 
+    log_file = ROOT / "logs" / f"run_detection_pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -183,6 +183,9 @@ def run_classification_pipeline(
 ) -> None:
     """Run the full classification pipeline (train + eval) for image classification."""
     console.print(f"[bold green]Running classification pipeline with config:[/bold green] {config}")
+
+    log_file = ROOT / "logs" / f"run_classification_pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
 
     with Progress(
         SpinnerColumn(),
@@ -212,6 +215,9 @@ def visualize_classifier_predictions(
     """Upload classifier predictions to a FiftyOne dataset for visualization."""
     console.print(f"[bold green]Uploading predictions to FiftyOne dataset:[/bold green] {dataset_name}")
     
+    log_file = ROOT / "logs" / f"visualize_classifier_predictions_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
+
     add_predictions_from_classifier(
         dataset_name=dataset_name,
         checkpoint_path=str(checkpoint_path),
@@ -266,6 +272,9 @@ def visualize_detector_predictions(
     # Create detector
     detector = Detector(localizer=localizer, classifier=classifier)
     
+    log_file = ROOT / "logs" / f"visualize_detector_predictions_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
+
     add_predictions_from_detector(
         dataset_name=dataset_name,
         detector=detector,
@@ -284,6 +293,10 @@ def evaluate_detector(
 ) -> None:
     """Evaluate a YOLO model using a YAML config file."""
     console.print(f"[bold green]Running {model_type} evaluation with config:[/bold green] {config}")
+
+    log_file = ROOT / "logs" / f"evaluate_detector_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
+
     if model_type == "yolo":
         evaluator = UltralyticsEvaluator(config=str(config))
     else:
@@ -299,6 +312,10 @@ def evaluate_classifier(
 ) -> None:
     """Evaluate a classifier using a YAML config file."""
     console.print(f"[bold green]Running classifier evaluation with config:[/bold green] {config}")
+
+    log_file = ROOT / "logs" / f"evaluate_classifier_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
+
     evaluator = ClassificationEvaluator(str(config))
     results = evaluator.evaluate(debug=False)
     console.print("\n[bold blue]Classifier Evaluation Results:[/bold blue]")
