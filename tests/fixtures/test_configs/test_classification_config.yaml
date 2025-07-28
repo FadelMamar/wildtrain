@@ -1,0 +1,21 @@
+# Test configuration for classification tasks
+data:
+  root_data_directory: "mock_path"
+  batch_size: 4
+  num_workers: 0
+  debug: true
+
+model:
+  backbone: "resnet18"
+  num_classes: 3
+  learning_rate: 0.001
+
+training:
+  max_epochs: 2
+  debug: true
+  accelerator: "cpu"
+  devices: 1
+
+logging:
+  name: "test_classification"
+  version: "test" 
