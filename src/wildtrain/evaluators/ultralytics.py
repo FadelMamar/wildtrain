@@ -28,14 +28,7 @@ class UltralyticsEvaluator(BaseEvaluator):
         self.dataloader = self._create_dataloader()    
 
     def _load_model(self) -> Any:
-        localizer = UltralyticsLocalizer(
-            weights=self.config.weights.localizer,
-            imgsz=self.config.eval.imgsz,
-            device=self.config.device,
-            conf_thres=self.config.eval.conf,
-            iou_thres=self.config.eval.iou,
-            task=self.config.eval.task,
-        )
+        localizer = UltralyticsLocalizer.from_config(self.config)
         
         classifier = None
         if self.config.weights.classifier:
