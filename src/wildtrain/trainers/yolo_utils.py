@@ -20,7 +20,7 @@ from ultralytics import YOLO
 import timm
 import albumentations as A
 import torchvision.transforms.v2 as T
-
+import yaml
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,6 +29,228 @@ from torchmetrics.functional.detection import complete_intersection_over_union
 
 logger = logging.getLogger(__name__)
 
+def load_yaml(path: str):
+    with open(path, "r") as file:
+        return yaml.safe_load(file)
+
+def save_yaml(cfg: dict, save_path: str, mode="w"):
+    with open(save_path, mode, encoding="utf-8") as file:
+        yaml.dump(cfg, file)
+
+def save_yolo_yaml_cfg(
+    root_dir: str,
+    labels_map: dict,
+    yolo_train: list | str,
+    yolo_val: list | str,
+    save_path: str,
+    mode="w",
+) -> None:
+    cfg_dict = {
+        "path": root_dir,
+        "names": labels_map,
+        "train": yolo_train,
+        "val": yolo_val,
+        "nc": len(labels_map),
+    }
+
+    save_yaml(cfg=cfg_dict, save_path=save_path, mode=mode)
+
+def remove_label_cache(data_config_yaml: str):
+    """
+    Remove the labels.cache files from the dataset directories specified in the YOLO data config YAML.
+
+    Args:
+        data_config_yaml (str): Path to the YOLO data config YAML file.
+    """
+    # Remove labels.cache
+    yolo_config = load_yaml(data_config_yaml)
+    root = yolo_config["path"]
+    for split in ["train", "val", "test"]:
+        # try:
+        if split in yolo_config.keys():
+            for p in yolo_config[split]:
+                path = os.path.join(root, p, "../labels.cache")
+                if os.path.exists(path):
+                    os.remove(path)
+                    logger.info(f"Removing: {os.path.join(root, p, '../labels.cache')}")
+        else:
+            logger.info(f"split={split} does not exist.")
+
+def sample_pos_neg(images_paths: list, ratio: float, seed: int = 41):
+    """
+    Sample positive and negative image paths based on the ratio of empty to non-empty samples.
+
+    Args:
+        images_paths (list): List of image paths.
+        ratio (float): Ratio defined as num_empty/num_non_empty.
+        seed (int, optional): Random seed. Defaults to 41.
+
+    Returns:
+        list: Selected image paths.
+    """
+
+    # build dataframe
+    is_empty = [
+        1 - Path(str(p).replace("images", "labels")).with_suffix(".txt").exists()
+        for p in images_paths
+    ]
+    data = pd.DataFrame.from_dict(
+        {"image_paths": images_paths, "is_empty": is_empty}, orient="columns"
+    )
+    # get empty and non empty
+    num_empty = (data["is_empty"] == 1).sum()
+    num_non_empty = len(data) - num_empty
+    if num_empty == 0:
+        logger.info("contains only positive samples")
+    num_sampled_empty = min(int(num_non_empty * ratio), num_empty)
+    sampled_empty = data.loc[data["is_empty"] == 1].sample(
+        n=num_sampled_empty, random_state=seed
+    )
+    # concatenate
+    sampled_data = pd.concat([sampled_empty, data.loc[data["is_empty"] == 0]])
+
+    logger.info(f"Sampling: pos={num_non_empty} & neg={num_sampled_empty}")
+
+    return sampled_data["image_paths"].to_list()
+
+def get_data_cfg_paths_for_cl(
+    ratio: float,
+    data_config_yaml: str,
+    cl_save_dir: str,
+    seed: int = 41,
+    split: str = "train",
+    pattern_glob: str = "*",
+):
+    """
+    Generate and save a YOLO data config YAML for continual learning with sampled images.
+
+    Args:
+        ratio (float): Ratio for sampling.
+        data_config_yaml (str): Path to YOLO data config YAML.
+        cl_save_dir (str): Directory to save sampled images and config.
+        seed (int, optional): Random seed. Defaults to 41.
+        split (str, optional): Dataset split. Defaults to 'train'.
+        pattern_glob (str, optional): Glob pattern for images. Defaults to '*'.
+
+    Returns:
+        str: Path to the saved config YAML.
+    """
+
+    yolo_config = load_yaml(data_config_yaml)
+
+    root = yolo_config["path"]
+    dirs_images = [os.path.join(root, p) for p in yolo_config[split]]
+
+    # sample positive and negative images
+    sampled_imgs_paths = []
+    for dir_images in dirs_images:
+        logger.info(f"Sampling positive and negative samples from {dir_images}")
+        paths = sample_pos_neg(
+            images_paths=list(Path(dir_images).glob(pattern_glob)),
+            ratio=ratio,
+            seed=seed,
+        )
+        sampled_imgs_paths = sampled_imgs_paths + paths
+
+    # save selected images in txt file
+    save_path_samples = os.path.join(
+        cl_save_dir, f"{split}_ratio_{ratio}-seed_{seed}.txt"
+    )
+    pd.Series(sampled_imgs_paths).to_csv(save_path_samples, index=False, header=False)
+    logger.info(f"Saving {len(sampled_imgs_paths)} sampled images.")
+
+    # save config
+    save_path_cfg = Path(save_path_samples).with_suffix(".yaml")
+    cfg = dict(root_dir=root, save_path=save_path_cfg, labels_map=yolo_config["names"])
+    if split == "train":
+        cfg["yolo_val"] = yolo_config["val"]
+        cfg["yolo_train"] = os.path.relpath(save_path_samples, start=root)
+
+    elif split == "val":
+        cfg["yolo_val"] = os.path.relpath(save_path_samples, start=root)
+        cfg["yolo_train"] = yolo_config["train"]
+
+    else:
+        raise NotImplementedError
+
+    # save yolo data cfg
+    save_yolo_yaml_cfg(mode="w", **cfg)
+
+    logger.info(
+        f"Saving samples at: {save_path_samples} and data_cfg at {save_path_cfg}",
+    )
+
+    return str(save_path_cfg)
+
+def merge_data_cfg(data_configs: list[str], single_class: bool = True, single_class_name: str = "wildlife",output_path: Optional[str]=None) -> dict:
+    """
+    Load and merge multiple YOLO data configuration files.
+    
+    Args:
+        data_configs: List of paths to YAML configuration files
+        
+    Returns:
+        dict: Merged configuration with common path prefix and unified names
+    """
+    if not data_configs:
+        raise ValueError("At least one data config file must be provided")
+    
+    if single_class:
+        labels_map = {0: single_class_name}
+    else:
+        raise ValueError("Not supported. Current pipeline only trains a localizer.")
+    
+    # Load all configs
+    loaded_configs = []
+    for config_path in data_configs:
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Data config file not found: {config_path}")
+        config = load_yaml(config_path)
+        loaded_configs.append(config)
+        
+    # Collect all train and val paths
+    train_paths = []
+    val_paths = []
+    
+    for config in loaded_configs:
+        config_path = config.get('path', '')
+        
+        # Handle train paths
+        if 'train' in config:
+            train_path = config['train']
+            if isinstance(train_path, str):
+                train_paths.append(os.path.join(config_path, train_path))
+            elif isinstance(train_path, list):
+                train_paths.extend([os.path.join(config_path, p) for p in train_path])
+        
+        # Handle val paths
+        if 'val' in config:
+            val_path = config['val']
+            if isinstance(val_path, str):
+                val_paths.append(os.path.join(config_path, val_path))
+            elif isinstance(val_path, list):
+                val_paths.extend([os.path.join(config_path, p) for p in val_path])
+    
+    # Add train and val to merged config if they exist
+    common_path = os.path.commonpath(train_paths + val_paths)
+    if not common_path:
+        raise ValueError("No common path prefix found among data configs")
+    
+    # Merge train and val paths
+    merged_config = {
+        'path': common_path,
+        'names': labels_map,
+        'nc': len(labels_map)
+    }
+
+    merged_config['train'] = [os.path.relpath(p, start=common_path) for p in train_paths]
+    merged_config['val'] = [os.path.relpath(p, start=common_path) for p in val_paths]
+
+    if output_path is not None:
+        save_yaml(merged_config, output_path, mode="w")
+
+    return merged_config
+    
 
 RANK = int(os.getenv("RANK", -1))
 
