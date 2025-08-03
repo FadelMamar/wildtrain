@@ -8,6 +8,7 @@ from wildata.datasets.roi import load_all_splits_concatenated, ROIDataset
 from pathlib import Path
 import numpy as np
 from tqdm import tqdm
+import sys
 from ..utils.logging import get_logger
 from .filters import ClassificationRebalanceFilter
 from .curriculum.dataset import CropDataset, CurriculumDetectionDataset
@@ -490,8 +491,8 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         return DataLoader(
             self.train_dataset, 
             batch_size=self.batch_size, 
-            shuffle=True, 
-            num_workers=0
+            shuffle=False if self.is_curriculum_enabled() else True, 
+            num_workers=0 if sys.platform == "win32" else 3
         )
 
     def val_dataloader(self):
@@ -501,7 +502,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             self.val_dataset, 
             batch_size=self.batch_size, 
             shuffle=False, 
-            num_workers=0
+            num_workers=0 if sys.platform == "win32" else 3
         )
 
     def test_dataloader(self):
@@ -511,5 +512,5 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False, 
-            num_workers=0
+            num_workers=0 if sys.platform == "win32" else 3
         )
