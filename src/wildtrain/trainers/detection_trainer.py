@@ -281,13 +281,12 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         
 
         # Training parameters
-        train_cfg:dict = self.config.train
-        train_cfg["trainer"] = CustomTrainer
-
+        train_cfg = dict(self.config.train)
 
         # Run training
         self.model.train(
             single_cls=self.config.dataset.load_as_single_class,
+            trainer=CustomTrainer,
             data=self.config.dataset.data_cfg,
             name=self.config.name,
             project=self.config.project,

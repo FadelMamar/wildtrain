@@ -1002,9 +1002,9 @@ class DetectionSystemTrainer(DetectionTrainer):
 class CustomYOLO(YOLO):
     def __init__(
         self,
-        count_regressor_layers: int = None,
-        area_regressor_layers: int = None,
-        roi_classifier_layers: dict = None,
+        count_regressor_layers: Optional[int] = None,
+        area_regressor_layers: Optional[int] = None,
+        roi_classifier_layers: Optional[dict] = None,
         pos_weight: float | None = None,
         fp_tp_loss_weight: float = 0.0,
         box_size: int = 224,
@@ -1030,6 +1030,10 @@ class CustomYOLO(YOLO):
         args_det_system["area_loss_weight"] = area_loss_weight
         args_det_system["image_encoder_backbone"] = image_encoder_backbone
         args_det_system["image_encoder_backbone_source"] = image_encoder_backbone_source
+
+        if roi_classifier_layers is not None:
+            args_det_system["roi_classifier_layers"] = dict(roi_classifier_layers)
+
 
         # add to environment variables
         os.environ["args_det_system"] = json.dumps(args_det_system)

@@ -4,6 +4,7 @@ from typing import List, Tuple, Dict, Any
 from abc import ABC, abstractmethod
 import supervision as sv
 from ultralytics import YOLO
+from omegaconf import DictConfig
 
 
 class ObjectLocalizer(ABC):
@@ -55,6 +56,18 @@ class UltralyticsLocalizer(ObjectLocalizer):
                    "IOS":sv.detection.utils.iou_and_nms.OverlapMetric.IOS
                    }
         
+    @classmethod
+    def from_config(cls, config: DictConfig):
+        return cls(
+            weights=config.weights,
+            imgsz=config.imgsz,
+            device=config.device,
+            conf_thres=config.conf_thres,
+            iou_thres=config.iou_thres,
+            overlap_metric=config.overlap_metric,
+            task=getattr(config,"task","detect"),
+            max_det=getattr(config,"max_det",300),
+        )
 
     def predict(self, images: torch.Tensor) -> list[sv.Detections]:
         """
