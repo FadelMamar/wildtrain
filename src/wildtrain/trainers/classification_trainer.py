@@ -98,7 +98,7 @@ class ClassifierModule(L.LightningModule):
 
         classes = y.cpu().flatten().tolist()
         weight = [
-            len(classes) / torch.log2(classes.count(i) + 2).item() for i in range(self.num_classes)
+            len(classes) / torch.log2(torch.tensor(classes.count(i) + 2)).item() for i in range(self.num_classes)
         ]
         weight = torch.Tensor(weight).float().to(y.device)
 

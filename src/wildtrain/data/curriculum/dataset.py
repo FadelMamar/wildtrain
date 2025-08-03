@@ -353,8 +353,14 @@ class PatchDataset(torch.utils.data.Dataset):
         
         for dataset_idx,image_path in tqdm(enumerate(self.dataset.image_paths),desc="Computing crop indices"):
             
-            with Image.open(image_path) as img:
-                w,h = img.size
+            # Get the actual image dimensions from the dataset (after transforms)
+            _, image, _ = self.dataset[dataset_idx]
+            if isinstance(image, torch.Tensor):
+                h, w = image.shape[1], image.shape[2]  # C, H, W -> H, W
+            elif hasattr(image, 'size'):  # PIL Image
+                w, h = image.size  # PIL uses (width, height)
+            else:
+                h, w = image.shape[:2]  # H, W
             
             detections = self.dataset.annotations[image_path] 
 
@@ -391,19 +397,44 @@ class PatchDataset(torch.utils.data.Dataset):
             areas.append(area)
             class_id = detections.class_id[i]
         
-            # Expand bounding box
-            x1, y1, x2, y2 = bbox.tolist()          
-                        
-            # Expand bbox
-            x1 = max(0, x1 - self.crop_size)
-            y1 = max(0, y1 - self.crop_size)
-            x2 = min(img_width, x2 + self.crop_size)
-            y2 = min(img_height, y2 + self.crop_size)
+            # Get bounding box coordinates
+            x1, y1, x2, y2 = bbox.tolist()
+            
+            # Calculate center of the bounding box
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+            
+            # Calculate crop coordinates centered on the detection
+            # Use a simpler approach: ensure crop is at least crop_size
+            crop_half_size = self.crop_size // 2
+            
+            x1_crop = max(0, int(center_x - crop_half_size))
+            y1_crop = max(0, int(center_y - crop_half_size))
+            x2_crop = min(img_width, int(center_x + crop_half_size))
+            y2_crop = min(img_height, int(center_y + crop_half_size))
+            
+            # Ensure minimum crop size by adjusting if needed
+            if x2_crop - x1_crop < self.crop_size:
+                if x1_crop == 0:
+                    x2_crop = min(img_width, self.crop_size)
+                else:
+                    x1_crop = max(0, x2_crop - self.crop_size)
+            
+            if y2_crop - y1_crop < self.crop_size:
+                if y1_crop == 0:
+                    y2_crop = min(img_height, self.crop_size)
+                else:
+                    y1_crop = max(0, y2_crop - self.crop_size)
+            
+            # Final validation
+            if x2_crop <= x1_crop or y2_crop <= y1_crop:
+                # Skip this detection if crop is invalid
+                continue
                         
             indices.append({
                 'dataset_idx': dataset_idx,
                 'image_path': image_path,
-                'crop_bbox': [x1, y1, x2, y2],
+                'crop_bbox': [x1_crop, y1_crop, x2_crop, y2_crop],
                 'original_bbox': bbox,
                 'label': class_id,
                 'crop_type': 'detection'
@@ -421,11 +452,22 @@ class PatchDataset(torch.utils.data.Dataset):
               
         for _ in range(self.max_tn_crops):
            
-            # Random position
-            x1 = np.random.randint(0, max(1, img_width - self.crop_size))
-            y1 = np.random.randint(0, max(1, img_height - self.crop_size))
-            x2 = x1 + self.crop_size
-            y2 = y1 + self.crop_size
+            # Check if image is too small for the crop size
+            if img_width < self.crop_size or img_height < self.crop_size:
+                # If image is too small, use the entire image
+                x1, y1 = 0, 0
+                x2, y2 = img_width, img_height
+            else:
+                # Random position
+                x1 = np.random.randint(0, img_width - self.crop_size + 1)
+                y1 = np.random.randint(0, img_height - self.crop_size + 1)
+                x2 = x1 + self.crop_size
+                y2 = y1 + self.crop_size
+            
+            # Validate crop coordinates
+            if x2 <= x1 or y2 <= y1:
+                # Skip this crop if coordinates are invalid
+                continue
             
             indices.append({
                 'dataset_idx': dataset_idx,
@@ -458,6 +500,8 @@ class PatchDataset(torch.utils.data.Dataset):
         # Validate crop coordinates
         h, w = img_np.shape[:2]
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        
+
         
         # Ensure coordinates are within bounds
         x1 = max(0, min(x1, w))
