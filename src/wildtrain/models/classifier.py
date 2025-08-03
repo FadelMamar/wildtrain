@@ -17,7 +17,7 @@ class GenericClassifier(nn.Module):
     def __init__(
         self,
         label_to_class_map: dict,
-        backbone: str = "resnet18",
+        backbone: str = "timm/vit_base_patch14_reg4_dinov2.lvd142m",
         backbone_source: str = "timm",
         pretrained: bool = True,
         dropout: float = 0.2,

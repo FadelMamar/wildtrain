@@ -98,9 +98,9 @@ class ClassifierModule(L.LightningModule):
 
         classes = y.cpu().flatten().tolist()
         weight = [
-            len(classes) / (classes.count(i) + 1e-6) for i in range(self.num_classes)
+            len(classes) / torch.log2(classes.count(i) + 2).item() for i in range(self.num_classes)
         ]
-        weight = torch.Tensor(weight).float().clamp(1.0, 10.).to(y.device)
+        weight = torch.Tensor(weight).float().to(y.device)
 
         logits = self(x)
         loss = F.cross_entropy(
