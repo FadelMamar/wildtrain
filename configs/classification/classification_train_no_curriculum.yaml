@@ -4,7 +4,7 @@ task: classification
 run_name: "dinov2-small"
 
 dataset:
-  root_data_directory: D:\PhD\workspace\data
+  root_data_directory: D:\workspace\data\demo-dataset
   rebalance: true
 
   single_class:

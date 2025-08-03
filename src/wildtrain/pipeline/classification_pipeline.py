@@ -5,6 +5,7 @@ from omegaconf import OmegaConf, DictConfig
 from wildtrain.trainers.classification_trainer import ClassifierTrainer
 from wildtrain.evaluators.classification import ClassificationEvaluator
 from wildtrain.utils.logging import get_logger
+from pathlib import Path
 
 logger = get_logger(__name__)
 
@@ -14,24 +15,24 @@ class ClassificationPipeline:
     """
     def __init__(self, config_path: str):
         self.config = OmegaConf.load(config_path)
-        self.results_dir = os.path.join("results", "classification")
-        os.makedirs(self.results_dir, exist_ok=True)
-        self.config_path = config_path
+        Path(self.config.results_dir).mkdir(parents=True, exist_ok=True)
         self.best_model_path: Optional[str] = None
 
     def train(self):
         logger.info("[Pipeline] Starting classification training...")
-        trainer = ClassifierTrainer(DictConfig(self.config))
-        trainer.run(debug=self.config.debug)
+        train_config = OmegaConf.load(self.config.train.config)
+        trainer = ClassifierTrainer(DictConfig(train_config))
+        trainer.run(debug=self.config.train.debug)
         logger.info("[Pipeline] Training completed.")
         self.best_model_path = trainer.best_model_path
 
     def evaluate(self):
         logger.info("[Pipeline] Starting classification evaluation...")
         assert self.best_model_path is not None, "Best model path is not set by trainer"
+        eval_config = OmegaConf.load(self.config.eval.config)
         # Prepare evaluation config
         eval_config = OmegaConf.merge(
-            self.config,
+            eval_config,
             {
                 "classifier": self.best_model_path,
                 "device": self.config.eval.device,
@@ -39,14 +40,21 @@ class ClassificationPipeline:
                 "batch_size": self.config.eval.batch_size,
             }
         )
-        evaluator = ClassificationEvaluator(eval_config)
-        results = evaluator.evaluate(debug=self.config.debug, 
-        save_path=os.path.join(self.results_dir, "eval_report.json"))
+        evaluator = ClassificationEvaluator(config=DictConfig(eval_config))
+        results = evaluator.evaluate(debug=self.config.eval.debug, 
+        save_path=os.path.join(self.config.results_dir, "eval_report.json"))
         logger.info("[Pipeline] Evaluation completed.")
         return results
 
     def run(self):
-        if self.config.mode == "train":
+        if not self.config.disable_train:
             self.train()
-        results = self.evaluate()
-        return results
+        else:
+            logger.info("[Pipeline] Training disabled.")
+
+        if not self.config.disable_eval:
+            results = self.evaluate()
+            return results
+        else:
+            logger.info("[Pipeline] Evaluation disabled.")
+            return None
