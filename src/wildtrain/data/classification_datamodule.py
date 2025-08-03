@@ -11,7 +11,7 @@ from tqdm import tqdm
 import sys
 from ..utils.logging import get_logger
 from .filters import ClassificationRebalanceFilter
-from .curriculum.dataset import CropDataset, CurriculumDetectionDataset
+from .curriculum.dataset import PatchDataset, CurriculumDetectionDataset
 from .curriculum.mixins import CurriculumDataModuleMixin
 from .curriculum import CurriculumConfig
 from omegaconf import DictConfig, OmegaConf
@@ -191,9 +191,9 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         self.transforms = transforms
         
         # Initialize datasets
-        self.train_dataset: Optional[Union[ROIDataset, ConcatDataset, CropDataset]] = None
-        self.val_dataset: Optional[Union[ROIDataset, ConcatDataset, CropDataset]] = None
-        self.test_dataset: Optional[Union[ROIDataset, ConcatDataset, CropDataset]] = None
+        self.train_dataset: Optional[Union[ROIDataset, ConcatDataset, PatchDataset]] = None
+        self.val_dataset: Optional[Union[ROIDataset, ConcatDataset, PatchDataset]] = None
+        self.test_dataset: Optional[Union[ROIDataset, ConcatDataset, PatchDataset]] = None
         self.class_mapping: dict[int, str] = {}
 
         # Rebalancing
@@ -324,14 +324,14 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             "preserve_aspect_ratio": preserve_aspect_ratio,
         }
 
-    def _get_class_mapping(self, dataset: Union[ROIDataset, ConcatDataset, CropDataset]) -> dict[int, str]:
+    def _get_class_mapping(self, dataset: Union[ROIDataset, ConcatDataset, PatchDataset]) -> dict[int, str]:
         """Get class mapping from dataset."""
         if isinstance(dataset, ConcatDataset):
             if isinstance(dataset.datasets[0], ROIDataset):
                 return dataset.datasets[0].class_mapping
         elif isinstance(dataset, ROIDataset):
             return dataset.class_mapping
-        elif isinstance(dataset, CropDataset):
+        elif isinstance(dataset, PatchDataset):
             return dataset.class_mapping
         else:
             raise ValueError(f"Dataset {type(dataset)} not supported")
@@ -361,7 +361,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             discard_classes=discard_classes,
         )
 
-    def _load_crop_dataset(self, split: str) -> CropDataset:
+    def _load_crop_dataset(self, split: str) -> PatchDataset:
         """Load crop dataset from detection data."""
         # Create curriculum detection dataset
         detection_dataset = CurriculumDetectionDataset.from_data_directory(
@@ -374,7 +374,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         )
         
         # Create crop dataset
-        crop_dataset = CropDataset(
+        crop_dataset = PatchDataset(
             dataset=detection_dataset,
             crop_size=int(self.crop_config["crop_size"]),
             max_tn_crops=int(self.crop_config["max_tn_crops"]),

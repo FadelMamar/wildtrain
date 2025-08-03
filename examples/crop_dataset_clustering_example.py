@@ -1,8 +1,8 @@
 """
-Example demonstrating CropDataset with ClusteringFilter using adapter pattern.
+Example demonstrating PatchDataset with ClusteringFilter using adapter pattern.
 
 This example shows how to:
-1. Create a CropDataset from detection annotations
+1. Create a PatchDataset from detection annotations
 2. Use CropClusteringAdapter to apply ClusteringFilter to crop annotations
 3. Use the clustered dataset with PyTorch DataLoader
 4. Analyze clustering results and crop diversity
@@ -20,7 +20,7 @@ import json
 from PIL import Image
 
 # Import our modules
-from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
+from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
 from wildtrain.data.curriculum.manager import CurriculumConfig
 from wildtrain.data.filters.algorithms import CropClusteringFilter
 
@@ -28,7 +28,7 @@ from wildtrain.data.filters.algorithms import CropClusteringFilter
 def main():
     """Main example function."""
     
-    print("CropDataset with ClusteringFilter (Adapter Pattern) Example")
+    print("PatchDataset with ClusteringFilter (Adapter Pattern) Example")
     print("=" * 70)
     
     # 1. Create curriculum configuration
@@ -60,16 +60,16 @@ def main():
         print(f"✅ Number of samples: {len(dataset)}")
         print(f"✅ Classes: {dataset.classes}")
 
-        # 4. Create CropDataset
-        print("\n🌾 Creating CropDataset...")
-        crop_dataset = CropDataset(
+        # 4. Create PatchDataset
+        print("\n🌾 Creating PatchDataset...")
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
             p_draw_annotations=0.0  # No annotations for cleaner crops
         )
 
-        print(f"✅ CropDataset created successfully!")
+        print(f"✅ PatchDataset created successfully!")
         print(f"✅ Number of crops: {len(crop_dataset)}")
 
         # 5. Analyze class distribution before clustering
@@ -98,7 +98,7 @@ def main():
         # Apply filter to create clustered dataset
         clustered_crop_dataset = crop_dataset.apply_clustering_filter(clustering_filter)
 
-        print(f"✅ Clustered CropDataset created successfully!")
+        print(f"✅ Clustered PatchDataset created successfully!")
         print(f"✅ Number of crops after clustering: {len(clustered_crop_dataset)}")
 
         # 7. Analyze class distribution after clustering

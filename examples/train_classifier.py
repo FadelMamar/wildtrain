@@ -27,7 +27,7 @@ def main():
     print("-" * 40)
 
     config = OmegaConf.load(
-        r"D:\workspace\repos\wildtrain\configs\classification\example_config.yaml"
+        r"D:\workspace\repos\wildtrain\configs\classification\classification_train.yaml"
     )
 
     print("Configuration:")

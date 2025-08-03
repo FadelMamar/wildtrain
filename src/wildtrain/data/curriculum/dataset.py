@@ -292,7 +292,7 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         # Return the expected tuple format for supervision compatibility
         return image_path, image, detections
 
-class CropDataset(torch.utils.data.Dataset):
+class PatchDataset(torch.utils.data.Dataset):
     """
     Custom dataloader for loading cropped regions of interest (ROIs) from images.
     
@@ -452,8 +452,8 @@ class CropDataset(torch.utils.data.Dataset):
         else:
             img_np = np.array(image)
         
-        if img_np.max() <= 1.0:
-                img_np = (img_np * 255).astype(np.uint8)
+        #if img_np.max() <= 1.0:
+            #img_np = (img_np * 255).astype(np.uint8)
         
         # Validate crop coordinates
         h, w = img_np.shape[:2]
@@ -468,14 +468,14 @@ class CropDataset(torch.utils.data.Dataset):
         # Check if crop is valid
         if x2 <= x1 or y2 <= y1:
             # Return a black crop if coordinates are invalid
-            return np.zeros((self.crop_size, self.crop_size, 3), dtype=np.uint8)
+            raise ValueError(f"Invalid crop coordinates: {x1}, {y1}, {x2}, {y2}")
         
         # Extract crop
         crop = img_np[y1:y2, x1:x2]
         
         # Check if crop is empty
         if crop.size == 0:
-            return np.zeros((self.crop_size, self.crop_size, 3), dtype=np.uint8)
+            raise ValueError(f"Invalid crop coordinates: {x1}, {y1}, {x2}, {y2}")
         
         # Pad crop to square
         crop = self.pad_roi(image=crop)["image"]
@@ -525,7 +525,7 @@ class CropDataset(torch.utils.data.Dataset):
         
         return annotations
     
-    def apply_rebalance_filter(self, filter_instance) -> 'CropDataset':
+    def apply_rebalance_filter(self, filter_instance) -> 'PatchDataset':
         """
         Apply ClassificationRebalanceFilter to create a balanced dataset.
         
@@ -533,7 +533,7 @@ class CropDataset(torch.utils.data.Dataset):
             filter_instance: Instance of ClassificationRebalanceFilter
             
         Returns:
-            New CropDataset with balanced crop indices
+            New PatchDataset with balanced crop indices
         """
         # Get annotations in the expected format
         annotations = self.get_annotations_for_filter()
@@ -552,7 +552,7 @@ class CropDataset(torch.utils.data.Dataset):
                     break
         
         # Create new dataset instance
-        new_dataset = CropDataset(
+        new_dataset = PatchDataset(
             dataset=self.dataset,
             crop_size=self.crop_size,
             max_tn_crops=self.max_tn_crops,
@@ -564,7 +564,7 @@ class CropDataset(torch.utils.data.Dataset):
         
         return new_dataset
 
-    def apply_clustering_filter(self, filter_instance) -> 'CropDataset':
+    def apply_clustering_filter(self, filter_instance) -> 'PatchDataset':
         """
         Apply ClusteringFilter (via adapter) to create a clustered dataset.
         
@@ -572,7 +572,7 @@ class CropDataset(torch.utils.data.Dataset):
             filter_instance: Instance of ClusteringFilter or CropClusteringAdapter
             
         Returns:
-            New CropDataset with clustered crop indices
+            New PatchDataset with clustered crop indices
         """
         # Get annotations in the expected format
         annotations = self.get_annotations_for_filter()
@@ -591,7 +591,7 @@ class CropDataset(torch.utils.data.Dataset):
                     break
         
         # Create new dataset instance
-        new_dataset = CropDataset(
+        new_dataset = PatchDataset(
             dataset=self.dataset,
             crop_size=self.crop_size,
             max_tn_crops=self.max_tn_crops,

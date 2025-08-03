@@ -1,5 +1,5 @@
 """
-Integration tests for CropDataset with ClassificationRebalanceFilter functionality.
+Integration tests for PatchDataset with ClassificationRebalanceFilter functionality.
 
 This test suite validates:
 1. ClassificationRebalanceFilter with different methods (mean, min)
@@ -21,15 +21,15 @@ import numpy as np
 from typing import Optional
 
 # Import WildTrain modules
-from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
+from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
 from wildtrain.data.curriculum.manager import CurriculumConfig
 from wildtrain.data.filters import ClassificationRebalanceFilter
 
 
 @pytest.mark.integration
 @pytest.mark.data
-class TestCropDatasetRebalancing:
-    """Test suite for CropDataset rebalancing functionality."""
+class TestPatchDatasetRebalancing:
+    """Test suite for PatchDataset rebalancing functionality."""
     
     def __init__(self):
         """Initialize test class attributes."""
@@ -67,7 +67,7 @@ class TestCropDatasetRebalancing:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_crop_dataset_creation(self):
-        """Test CropDataset creation for rebalancing tests."""
+        """Test PatchDataset creation for rebalancing tests."""
         # Load base dataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
@@ -76,17 +76,17 @@ class TestCropDatasetRebalancing:
             transform=self.transform
         )
         
-        # Create CropDataset
-        crop_dataset = CropDataset(
+        # Create PatchDataset
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
             p_draw_annotations=0.0
         )
         
-        # Validate CropDataset
-        assert len(crop_dataset) > 0, "CropDataset should not be empty"
-        assert hasattr(crop_dataset, 'apply_rebalance_filter'), "CropDataset should have apply_rebalance_filter method"
+        # Validate PatchDataset
+        assert len(crop_dataset) > 0, "PatchDataset should not be empty"
+        assert hasattr(crop_dataset, 'apply_rebalance_filter'), "PatchDataset should have apply_rebalance_filter method"
         
         return crop_dataset
     
@@ -445,8 +445,8 @@ class TestCropDatasetRebalancing:
             transform=self.transform
         )
         
-        # Create CropDataset with more crops
-        crop_dataset = CropDataset(
+        # Create PatchDataset with more crops
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=5,  # More crops per image

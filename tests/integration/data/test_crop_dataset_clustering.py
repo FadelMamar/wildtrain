@@ -1,8 +1,8 @@
 """
-Integration tests for CropDataset with ClusteringFilter functionality.
+Integration tests for PatchDataset with ClusteringFilter functionality.
 
 This test suite validates:
-1. CropDataset creation with mock detection data
+1. PatchDataset creation with mock detection data
 2. ClusteringFilter application with different reduction factors
 3. CropClusteringAdapter functionality and adapter pattern
 4. DataLoader compatibility with clustered datasets
@@ -20,7 +20,7 @@ import shutil
 from typing import Optional
 
 # Import WildTrain modules
-from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
+from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
 from wildtrain.data.curriculum.manager import CurriculumConfig
 from wildtrain.data.filters import ClusteringFilter, CropClusteringAdapter
 
@@ -28,8 +28,8 @@ DATASET_PATH = r"D:\workspace\data\demo-dataset"
 
 @pytest.mark.integration
 @pytest.mark.data
-class TestCropDatasetClustering:
-    """Test suite for CropDataset clustering functionality."""
+class TestPatchDatasetClustering:
+    """Test suite for PatchDataset clustering functionality."""
     
     def __init__(self):
         """Initialize test class attributes."""
@@ -66,7 +66,7 @@ class TestCropDatasetClustering:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     def test_crop_dataset_creation(self):
-        """Test CropDataset creation with mock detection data."""
+        """Test PatchDataset creation with mock detection data."""
         # Load base dataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
@@ -79,17 +79,17 @@ class TestCropDatasetClustering:
         assert len(dataset) > 0, "Base dataset should not be empty"
         assert hasattr(dataset, 'classes'), "Dataset should have classes attribute"
         
-        # Create CropDataset
-        crop_dataset = CropDataset(
+        # Create PatchDataset
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
             p_draw_annotations=0.0  # No annotations for cleaner crops
         )
         
-        # Validate CropDataset
-        assert len(crop_dataset) > 0, "CropDataset should not be empty"
-        assert hasattr(crop_dataset, 'get_annotations_for_filter'), "CropDataset should have get_annotations_for_filter method"
+        # Validate PatchDataset
+        assert len(crop_dataset) > 0, "PatchDataset should not be empty"
+        assert hasattr(crop_dataset, 'get_annotations_for_filter'), "PatchDataset should have get_annotations_for_filter method"
         
         # Test getting annotations for filtering
         annotations = crop_dataset.get_annotations_for_filter()
@@ -103,7 +103,7 @@ class TestCropDatasetClustering:
     
     def test_clustering_filter_application(self):
         """Test ClusteringFilter application with different reduction factors."""
-        # Load base dataset and create CropDataset
+        # Load base dataset and create PatchDataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
             split="train",
@@ -111,7 +111,7 @@ class TestCropDatasetClustering:
             transform=self.transform
         )
         
-        crop_dataset = CropDataset(
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
@@ -152,7 +152,7 @@ class TestCropDatasetClustering:
     
     def test_adapter_pattern_functionality(self):
         """Test CropClusteringAdapter functionality and adapter pattern."""
-        # Load base dataset and create CropDataset
+        # Load base dataset and create PatchDataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
             split="train",
@@ -160,7 +160,7 @@ class TestCropDatasetClustering:
             transform=self.transform
         )
         
-        crop_dataset = CropDataset(
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
@@ -190,7 +190,7 @@ class TestCropDatasetClustering:
         """Test DataLoader compatibility with clustered datasets."""
         from torch.utils.data import DataLoader
         
-        # Load base dataset and create CropDataset
+        # Load base dataset and create PatchDataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
             split="train",
@@ -198,7 +198,7 @@ class TestCropDatasetClustering:
             transform=self.transform
         )
         
-        crop_dataset = CropDataset(
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
@@ -236,7 +236,7 @@ class TestCropDatasetClustering:
     
     def test_utility_methods(self):
         """Test utility methods (get_crops_by_class, get_crops_by_type, get_crop_info)."""
-        # Load base dataset and create CropDataset
+        # Load base dataset and create PatchDataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
             split="train",
@@ -244,7 +244,7 @@ class TestCropDatasetClustering:
             transform=self.transform
         )
         
-        crop_dataset = CropDataset(
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
@@ -284,7 +284,7 @@ class TestCropDatasetClustering:
     
     def test_class_distribution_analysis(self):
         """Test class distribution analysis before/after clustering."""
-        # Load base dataset and create CropDataset
+        # Load base dataset and create PatchDataset
         dataset = CurriculumDetectionDataset.from_data_directory(
             root_data_directory=self.dataset_path,
             split="train",
@@ -292,7 +292,7 @@ class TestCropDatasetClustering:
             transform=self.transform
         )
         
-        crop_dataset = CropDataset(
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
@@ -384,8 +384,8 @@ class TestCropDatasetClustering:
             transform=self.transform
         )
         
-        # Create CropDataset with more crops
-        crop_dataset = CropDataset(
+        # Create PatchDataset with more crops
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=5,  # More crops per image
