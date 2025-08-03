@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..utils.logging import ROOT, get_logger
 from .base import ModelTrainer
-from .yolo_utils import CustomYOLO, CustomTrainer
+from .yolo_utils import CustomYOLO
 
 logger = get_logger(__name__)
 
@@ -262,6 +262,8 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             task="detect",
         )
 
+        logger.info(f"Loading model of type: {model.__class__.__name__}.")
+
         if self.config.model.weights is not None:
             model.load(self.config.model.weights)
 
@@ -279,14 +281,12 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         # Load model
         self.model = self.get_model()
         
-
         # Training parameters
         train_cfg = dict(self.config.train)
 
         # Run training
         self.model.train(
             single_cls=self.config.dataset.load_as_single_class,
-            trainer=CustomTrainer,
             data=self.config.dataset.data_cfg,
             name=self.config.name,
             project=self.config.project,

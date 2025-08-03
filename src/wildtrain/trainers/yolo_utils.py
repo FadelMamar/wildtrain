@@ -502,45 +502,6 @@ class CustomLoss(v8DetectionLoss):
 
         return loss * batch_size, loss.detach()  # loss(box, cls, dfl)
 
-
-class CustomDetModel(DetectionModel):
-    def __init__(self, *args, pos_weight: float = 1.0, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.pos_weight = pos_weight
-
-    def init_criterion(self):
-        return (
-            E2EDetectLoss(self)
-            if getattr(self, "end2end", False)
-            else CustomLoss(
-                model=self,
-                pos_weight=self.pos_weight,
-                fp_tp_loss_weight=0.0,
-                count_loss_weight=0.0,
-                area_loss_weight=0.0,
-            )
-        )
-
-
-class CustomTrainer(DetectionTrainer):
-    def get_model(self, cfg, weights, verbose=True):
-        """Returns a customized detection model instance configured with specified config and weights."""
-
-        pos_weight = json.loads(os.environ.get("pos_weight", "1.0"))
-
-        model = CustomDetModel(
-            cfg,
-            nc=self.data["nc"],
-            ch=3,
-            pos_weight=pos_weight,
-            verbose=verbose and RANK == -1,
-        )
-        if weights:
-            model.load(weights)
-
-        return model
-
-
 class RegressorHead(torch.nn.Module):
     def __init__(self, out_channels: int = 64):
         super().__init__()
