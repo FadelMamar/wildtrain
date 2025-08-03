@@ -15,6 +15,7 @@ from collections import Counter
 import json
 import tempfile
 import os
+from typing import List, Dict, Any, Optional
 
 # Import WildTrain modules
 from wildtrain.data.filters import ClassificationRebalanceFilter
@@ -27,33 +28,56 @@ class TestClassificationFiltering:
     
     @pytest.fixture(autouse=True)
     def setup_test_data(self):
-        """Set up test data and configuration."""
-        # Create synthetic annotation data with imbalanced classes
-        self.imbalanced_annotations = [
-            {"id": i, "file_name": f"image_{i:03d}.jpg", "class_id": 0, "class_name": "class_0"}
-            for i in range(50)  # 50 samples of class 0
-        ] + [
-            {"id": i + 50, "file_name": f"image_{i + 50:03d}.jpg", "class_id": 1, "class_name": "class_1"}
-            for i in range(20)  # 20 samples of class 1
-        ] + [
-            {"id": i + 70, "file_name": f"image_{i + 70:03d}.jpg", "class_id": 2, "class_name": "class_2"}
-            for i in range(10)  # 10 samples of class 2
-        ]
+        """Set up test data with synthetic annotations."""
+        # Create imbalanced dataset (class 0: 100 samples, class 1: 50 samples, class 2: 25 samples)
+        self.imbalanced_annotations: List[Dict[str, Any]] = []
+        for i in range(100):  # Class 0: 100 samples
+            self.imbalanced_annotations.append({
+                "id": i,
+                "file_name": f"image_{i:03d}.jpg",
+                "class_id": 0,
+                "class_name": "class_0"
+            })
         
-        # Create balanced annotation data
-        self.balanced_annotations = [
-            {"id": i, "file_name": f"image_{i:03d}.jpg", "class_id": i % 3, "class_name": f"class_{i % 3}"}
-            for i in range(30)  # 10 samples per class
-        ]
+        for i in range(50):  # Class 1: 50 samples
+            self.imbalanced_annotations.append({
+                "id": i + 100,
+                "file_name": f"image_{i + 100:03d}.jpg",
+                "class_id": 1,
+                "class_name": "class_1"
+            })
         
-        # Create single class annotation data
-        self.single_class_annotations = [
-            {"id": i, "file_name": f"image_{i:03d}.jpg", "class_id": 0, "class_name": "class_0"}
-            for i in range(20)
-        ]
+        for i in range(25):  # Class 2: 25 samples
+            self.imbalanced_annotations.append({
+                "id": i + 150,
+                "file_name": f"image_{i + 150:03d}.jpg",
+                "class_id": 2,
+                "class_name": "class_2"
+            })
         
-        # Create empty annotation data
-        self.empty_annotations = []
+        # Create balanced dataset for comparison
+        self.balanced_annotations: List[Dict[str, Any]] = []
+        for i in range(30):  # 30 samples per class
+            for class_id in range(3):
+                self.balanced_annotations.append({
+                    "id": i * 3 + class_id,
+                    "file_name": f"balanced_image_{i * 3 + class_id:03d}.jpg",
+                    "class_id": class_id,
+                    "class_name": f"class_{class_id}"
+                })
+        
+        # Create single class dataset
+        self.single_class_annotations: List[Dict[str, Any]] = []
+        for i in range(50):
+            self.single_class_annotations.append({
+                "id": i,
+                "file_name": f"single_class_image_{i:03d}.jpg",
+                "class_id": 0,
+                "class_name": "class_0"
+            })
+        
+        # Create empty dataset
+        self.empty_annotations: List[Dict[str, Any]] = []
     
     def test_imbalanced_data_balancing_mean_method(self):
         """Test ClassificationRebalanceFilter with imbalanced data using mean method."""
@@ -325,16 +349,23 @@ class TestClassificationFiltering:
         class_counts_after = Counter(class_ids_after)
         
         assert len(class_counts_after) == 3, "All 3 classes should be present"
+        
+        # The number of samples should be reasonable
+        assert class_counts_after[0] <= len(annotations_with_category), \
+            "Should not have more samples than original"
     
     def test_error_handling(self):
         """Test error handling for invalid configurations."""
-        # Test with invalid method
-        with pytest.raises(ValueError):
-            ClassificationRebalanceFilter(
-                class_key="class_id",
-                method="invalid_method",
-                random_seed=42
-            )
+        # Test with invalid method - validation happens in __call__, not __init__
+        filter_instance = ClassificationRebalanceFilter(
+            class_key="class_id",
+            method="invalid_method",
+            random_seed=42
+        )
+        
+        # The error should be raised when calling the filter, not during initialization
+        with pytest.raises(ValueError, match="Invalid method: invalid_method"):
+            filter_instance(self.imbalanced_annotations)
         
         # Test with invalid class_key (key that doesn't exist in annotations)
         filter_instance = ClassificationRebalanceFilter(

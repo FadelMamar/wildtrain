@@ -22,6 +22,7 @@ from typing import Any, Optional, Tuple
 
 from ..models.classifier import GenericClassifier
 from ..data import ClassificationDataModule
+from ..data.curriculum import CurriculumCallback
 from ..utils.logging import ROOT, ENV_FILE
 from ..utils.logging import get_logger
 from ..utils.dvc_tracker import DVCTracker
@@ -202,7 +203,11 @@ class ClassifierTrainer(ModelTrainer):
             #checkpoint_path_prefix="classification",
             tracking_uri=MLFLOW_TRACKING_URI,
         )
-        return [checkpoint_callback, early_stopping, lr_callback], mlflow_logger
+        
+        # Create base callbacks list
+        callbacks = [checkpoint_callback, early_stopping, lr_callback]
+        
+        return callbacks, mlflow_logger
 
     def log_model(self, model: ClassifierModule) -> None:
         if model.mlflow_run_id and self.best_model_path:
@@ -263,6 +268,15 @@ class ClassifierTrainer(ModelTrainer):
         )
         model.example_input_array = example_input
         callbacks, mlflow_logger = self.get_callbacks()
+        
+        # Add curriculum callback if curriculum is enabled
+        if datamodule.is_curriculum_enabled():
+            logger.info("Curriculum learning is enabled. Adding CurriculumCallback.")
+            curriculum_callback = CurriculumCallback(datamodule)
+            callbacks.insert(0, curriculum_callback)  # Add at the beginning to ensure it runs early
+        else:
+            logger.info("Curriculum learning is disabled.")
+        
         trainer = Trainer(
             max_epochs=self.config.train.epochs if not debug else 1,
             accelerator=self.config.train.accelerator,

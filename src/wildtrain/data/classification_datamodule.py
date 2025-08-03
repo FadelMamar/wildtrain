@@ -11,6 +11,8 @@ from tqdm import tqdm
 from ..utils.logging import get_logger
 from .filters import ClassificationRebalanceFilter
 from .curriculum.dataset import CropDataset, CurriculumDetectionDataset
+from .curriculum.mixins import CurriculumDataModuleMixin
+from .curriculum import CurriculumConfig
 from omegaconf import DictConfig, OmegaConf
 from ..utils.transforms import create_transforms
 
@@ -117,7 +119,7 @@ def compute_dataset_stats(
     return mean, std
 
 
-class ClassificationDataModule(L.LightningDataModule):
+class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin):
     """
     Unified LightningDataModule for multiclass image classification.
     
@@ -148,7 +150,18 @@ class ClassificationDataModule(L.LightningDataModule):
         compute_difficulties: bool = True,
         preserve_aspect_ratio: bool = True,
     ):
+        # Initialize the curriculum mixin first
+        if curriculum_config is not None:
+            # Convert dict to CurriculumConfig if needed
+            if isinstance(curriculum_config, dict):
+                curriculum_config = CurriculumConfig(**curriculum_config)
+            elif not isinstance(curriculum_config, CurriculumConfig):
+                logger.warning(f"Invalid curriculum_config type: {type(curriculum_config)}. Disabling curriculum.")
+                curriculum_config = None
+        
+        CurriculumDataModuleMixin.__init__(self, curriculum_config)
         super().__init__()
+        
         self.batch_size = batch_size
         self.root_data_directory = Path(root_data_directory).resolve()
         self.dataset_type = dataset_type
@@ -186,7 +199,7 @@ class ClassificationDataModule(L.LightningDataModule):
         if rebalance:
             method = "mean"
             exclude_extremes = True
-            self.resample_func = ClassificationRebalanceFilter(
+            self.resample_func: Optional[ClassificationRebalanceFilter] = ClassificationRebalanceFilter(
                 class_key="class_id", 
                 random_seed=41, 
                 method=method,
@@ -194,7 +207,7 @@ class ClassificationDataModule(L.LightningDataModule):
             )
             logger.info(f"Rebalancing dataset with {method} count and {'excluding' if exclude_extremes else 'including'} extremes")
         else:
-            self.resample_func = None
+            self.resample_func: Optional[ClassificationRebalanceFilter] = None
 
     @classmethod
     def from_yaml(cls, config_path: Union[str, Path]) -> 'ClassificationDataModule':
@@ -272,6 +285,12 @@ class ClassificationDataModule(L.LightningDataModule):
         keep_classes = single_class_config.get("keep_classes")
         discard_classes = single_class_config.get("discard_classes")
         
+        # Convert to proper types if needed
+        if keep_classes is not None and not isinstance(keep_classes, list):
+            keep_classes = [keep_classes] if keep_classes else None
+        if discard_classes is not None and not isinstance(discard_classes, list):
+            discard_classes = [discard_classes] if discard_classes else None
+        
         # Rebalancing
         rebalance = dataset_config.get("rebalance", False)
         
@@ -319,6 +338,16 @@ class ClassificationDataModule(L.LightningDataModule):
 
     def _load_roi_dataset(self, splits: list[str], resample_function=None) -> dict[str, Union[ROIDataset, ConcatDataset]]:
         """Load ROI dataset using wildata."""
+        # Ensure proper types for keep_classes and discard_classes
+        keep_classes = self.single_class_config["keep_classes"]
+        discard_classes = self.single_class_config["discard_classes"]
+        
+        # Convert to proper types if needed
+        if keep_classes is not None and not isinstance(keep_classes, list):
+            keep_classes = [keep_classes] if keep_classes else None
+        if discard_classes is not None and not isinstance(discard_classes, list):
+            discard_classes = [discard_classes] if discard_classes else None
+        
         return load_all_splits_concatenated(
             self.root_data_directory,
             splits=splits,
@@ -327,8 +356,8 @@ class ClassificationDataModule(L.LightningDataModule):
             load_as_single_class=bool(self.single_class_config["load_as_single_class"]),
             background_class_name=str(self.single_class_config["background_class_name"]),
             single_class_name=str(self.single_class_config["single_class_name"]),
-            keep_classes=self.single_class_config["keep_classes"],
-            discard_classes=self.single_class_config["discard_classes"],
+            keep_classes=keep_classes,
+            discard_classes=discard_classes,
         )
 
     def _load_crop_dataset(self, split: str) -> CropDataset:

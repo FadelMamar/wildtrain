@@ -17,22 +17,30 @@ from torchvision import transforms
 from pathlib import Path
 import tempfile
 import shutil
+from typing import Optional
 
 # Import WildTrain modules
 from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
 from wildtrain.data.curriculum.manager import CurriculumConfig
 from wildtrain.data.filters import ClusteringFilter, CropClusteringAdapter
 
+DATASET_PATH = r"D:\workspace\data\demo-dataset"
 
 @pytest.mark.integration
 @pytest.mark.data
 class TestCropDatasetClustering:
     """Test suite for CropDataset clustering functionality."""
     
+    def __init__(self):
+        """Initialize test class attributes."""
+        self.dataset_path: str = DATASET_PATH
+        self.curriculum_config: Optional[CurriculumConfig] = None
+        self.transform: Optional[transforms.Compose] = None
+        self.temp_dir: str = ""
+    
     @pytest.fixture(autouse=True)
-    def setup_test_data(self, mock_dataset_path):
+    def setup_test_data(self, real_dataset_path):
         """Set up test data and configuration."""
-        self.dataset_path = mock_dataset_path
         
         # Create curriculum configuration
         self.curriculum_config = CurriculumConfig(
@@ -175,8 +183,8 @@ class TestCropDatasetClustering:
         assert adapter_info['reduction_factor'] == 0.5, "Reduction factor should match"
         
         # Test that adapter wraps the original filter
-        assert hasattr(clustering_adapter, 'filter'), "Adapter should have filter attribute"
-        assert clustering_adapter.filter == clustering_filter, "Adapter should wrap the original filter"
+        assert hasattr(clustering_adapter, 'clustering_filter'), "Adapter should have clustering_filter attribute"
+        assert clustering_adapter.clustering_filter == clustering_filter, "Adapter should wrap the original filter"
     
     def test_dataloader_compatibility(self):
         """Test DataLoader compatibility with clustered datasets."""

@@ -6,7 +6,6 @@ to enable difficulty-based curriculum learning functionality.
 """
 
 from typing import Optional, Dict, Any, Union
-import lightning as L
 from .manager import CurriculumConfig, CurriculumManager
 
 

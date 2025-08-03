@@ -10,9 +10,12 @@ from sklearn.cluster import MiniBatchKMeans  # Use MiniBatchKMeans for scalabili
 from sklearn.metrics import silhouette_score
 from collections import defaultdict
 import random
+from PIL import Image # Added for in-memory image processing
+import torch # Added for in-memory image processing
 
 from wildtrain.utils.logging import get_logger
-from .feature_extractor import FeatureExtractor
+from wildtrain.data.filters.feature_extractor import FeatureExtractor
+from wildtrain.data.curriculum.dataset import CropDataset  # Add import for CropDataset
 
 
 logger = get_logger(__name__)
@@ -286,7 +289,8 @@ class CropClusteringAdapter:
                 "class_id": ann["class_id"],
                 "dataset_idx": ann["dataset_idx"],
                 "crop_bbox": ann["crop_bbox"],
-                "crop_type": ann["crop_type"]
+                "crop_type": ann["crop_type"],
+                "_crop_info": ann  # Store the original crop info for later extraction
             }
             
             # Add original annotation info if available
@@ -403,3 +407,102 @@ class ClassificationRebalanceFilter(BaseFilter):
 
     def get_filter_info(self) -> dict:
         return {"filter_type": self.__class__.__name__, "class_key": self.class_key, "random_seed": self.random_seed}
+
+
+class CropClusteringFilter(ClusteringFilter):
+    """
+    Specialized ClusteringFilter for crop datasets that handles in-memory crops.
+    
+    This filter extracts crop images from the dataset and computes embeddings
+    directly from the image data instead of trying to load files from disk.
+    """
+    
+    def __init__(self, 
+                 crop_dataset: 'CropDataset',
+                 feature_extractor: Optional['FeatureExtractor'] = None,
+                 batch_size: int = 64,
+                 sampling_strategy: Optional[SamplingStrategy] = None,
+                 reduction_factor: float = 0.3):
+        """
+        Initialize the crop clustering filter.
+        
+        Args:
+            crop_dataset: The CropDataset instance to filter
+            feature_extractor: Feature extractor for computing embeddings
+            batch_size: Batch size for processing
+            sampling_strategy: Sampling strategy for cluster selection
+            reduction_factor: Fraction of crops to keep
+        """
+        super().__init__(feature_extractor, batch_size, sampling_strategy, reduction_factor)
+        self.crop_dataset = crop_dataset
+    
+    def add_embeddings(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Add embeddings to images by extracting crops and computing features.
+        
+        Args:
+            images: List of image dictionaries with crop info
+            
+        Returns:
+            List of images with embeddings added
+        """
+        if not images:
+            logger.warning("No images found in images")
+            return images
+        
+        # Extract crop images and compute embeddings
+        crop_images = []
+        for img in images:
+            crop_info = img.get("_crop_info")
+            if crop_info is not None:
+                # Extract the actual crop image
+                crop_image = self.crop_dataset._extract_crop(crop_info)
+                crop_images.append(crop_image)
+            else:
+                # Fallback: create a placeholder
+                crop_images.append(np.zeros((224, 224, 3), dtype=np.uint8))
+        
+        # Compute embeddings in batches
+        embeddings = self._compute_embeddings_from_images(crop_images)
+        
+        # Add embeddings to images
+        for img, emb in zip(images, embeddings):
+            img["_embedding"] = emb
+        
+        return images
+    
+    def _compute_embeddings_from_images(self, crop_images: List[np.ndarray]) -> np.ndarray:
+        """
+        Compute embeddings from crop images.
+        
+        Args:
+            crop_images: List of crop images as numpy arrays
+            
+        Returns:
+            Array of embeddings
+        """
+        all_embeddings = []
+        
+        for i in range(0, len(crop_images), self.batch_size):
+            batch_images = crop_images[i:i + self.batch_size]
+            
+            # Convert to PIL Images for the feature extractor
+            batch_pil_images = []
+            for img_array in batch_images:
+                pil_image = Image.fromarray(img_array)
+                batch_pil_images.append(pil_image)
+            
+            # Compute embeddings for this batch using the feature extractor's transform
+            batch_tensors = torch.stack([
+                self.feature_extractor.transform(pil_image).float().to(self.feature_extractor.device) 
+                for pil_image in batch_pil_images
+            ])
+            
+            # Get embeddings from the model
+            with torch.no_grad():
+                outputs = self.feature_extractor.model(batch_tensors)
+                batch_embeddings = outputs.cpu().reshape(len(batch_pil_images), -1).numpy()
+            
+            all_embeddings.append(batch_embeddings)
+        
+        return np.vstack(all_embeddings)

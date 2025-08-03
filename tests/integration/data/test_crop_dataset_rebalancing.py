@@ -18,6 +18,7 @@ from pathlib import Path
 import tempfile
 import shutil
 import numpy as np
+from typing import Optional
 
 # Import WildTrain modules
 from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
@@ -30,10 +31,17 @@ from wildtrain.data.filters import ClassificationRebalanceFilter
 class TestCropDatasetRebalancing:
     """Test suite for CropDataset rebalancing functionality."""
     
+    def __init__(self):
+        """Initialize test class attributes."""
+        self.dataset_path: str = ""
+        self.curriculum_config: Optional[CurriculumConfig] = None
+        self.transform: Optional[transforms.Compose] = None
+        self.temp_dir: str = ""
+    
     @pytest.fixture(autouse=True)
-    def setup_test_data(self, mock_dataset_path):
+    def setup_test_data(self, real_dataset_path):
         """Set up test data and configuration."""
-        self.dataset_path = mock_dataset_path
+        self.dataset_path = real_dataset_path
         
         # Create curriculum configuration
         self.curriculum_config = CurriculumConfig(

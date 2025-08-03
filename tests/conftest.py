@@ -27,56 +27,27 @@ def test_data_dir():
 
 
 @pytest.fixture(scope="session")
-def mock_dataset_path(test_data_dir):
-    """Provide path to mock dataset for testing."""
-    dataset_path = Path(test_data_dir) / "mock_dataset"
-    dataset_path.mkdir(exist_ok=True)
+def real_dataset_path():
+    """Provide path to real dataset for testing."""
+    # Use the actual demo dataset path
+    dataset_path = Path(r"D:\workspace\data\demo-dataset")
     
-    # Create mock images
-    images_dir = dataset_path / "images"
-    images_dir.mkdir(exist_ok=True)
-    
-    # Create 10 mock images
-    for i in range(10):
-        img = Image.new('RGB', (224, 224), color=(i * 25, i * 25, i * 25))
-        img.save(images_dir / f"image_{i:03d}.jpg")
-    
-    # Create mock COCO annotations
-    annotations = {
-        "images": [
-            {
-                "id": i,
-                "file_name": f"image_{i:03d}.jpg",
-                "width": 224,
-                "height": 224
-            }
-            for i in range(10)
-        ],
-        "annotations": [
-            {
-                "id": i,
-                "image_id": i,
-                "category_id": i % 3,  # 3 classes: 0, 1, 2
-                "bbox": [50, 50, 100, 100],
-                "area": 10000,
-                "iscrowd": 0
-            }
-            for i in range(10)
-        ],
-        "categories": [
-            {"id": 0, "name": "class_0"},
-            {"id": 1, "name": "class_1"},
-            {"id": 2, "name": "class_2"}
-        ]
-    }
-    
-    annotations_file = dataset_path / "annotations" / "train.json"
-    annotations_file.parent.mkdir(exist_ok=True)
-    
-    with open(annotations_file, 'w') as f:
-        json.dump(annotations, f)
+    if not dataset_path.exists():
+        pytest.skip(f"Real dataset not found at {dataset_path}")
     
     return str(dataset_path)
+
+
+@pytest.fixture(scope="session")
+def real_dataset_datasets_path():
+    """Provide path to the datasets subdirectory."""
+    # Use the actual datasets subdirectory
+    datasets_path = Path(r"D:\workspace\data\demo-dataset\datasets")
+    
+    if not datasets_path.exists():
+        pytest.skip(f"Real datasets directory not found at {datasets_path}")
+    
+    return str(datasets_path)
 
 
 @pytest.fixture(scope="session")
@@ -106,7 +77,7 @@ def test_config():
     """Provide basic test configuration."""
     return {
         "data": {
-            "root_data_directory": "mock_path",
+            "root_data_directory": r"D:\workspace\data\demo-dataset",
             "batch_size": 4,
             "num_workers": 0
         },

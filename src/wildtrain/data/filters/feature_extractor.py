@@ -12,7 +12,8 @@ import numpy as np
 import torch
 from PIL import Image
 import timm
-from torchvision.transforms import Compose, Resize, Normalize,PILToTensor, InterpolationMode
+from torchvision.transforms.v2 import Compose, Resize, Normalize, ToDtype,ToImage, InterpolationMode
+import torch.nn.functional as F
 
 from wildtrain.utils.logging import get_logger
 
@@ -39,7 +40,8 @@ class FeatureExtractor:
             device: Device to run inference on ('cpu', 'cuda',)
         """
         self.transform = Compose([
-            PILToTensor(),
+            ToImage(),
+            ToDtype(torch.float32),
             Resize(input_size,interpolation=InterpolationMode.NEAREST),
             Normalize(mean=mean, std=std),
         ])
