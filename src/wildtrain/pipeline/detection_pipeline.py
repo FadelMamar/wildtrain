@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Optional
 from omegaconf import OmegaConf, DictConfig
 from wildtrain.trainers.detection_trainer import UltralyticsDetectionTrainer
 from wildtrain.evaluators.ultralytics import UltralyticsEvaluator
@@ -14,17 +15,23 @@ class DetectionPipeline:
     def __init__(self, config_path: str):
         self.config = OmegaConf.load(config_path)
         Path(self.config.results_dir).mkdir(parents=True, exist_ok=True)
+        self.best_model_path: Optional[str] = None
 
     def train(self):
         logger.info("[Pipeline] Starting training...")
         train_config = OmegaConf.load(self.config.train.config)
         trainer = UltralyticsDetectionTrainer(DictConfig(train_config))
         trainer.run(debug=self.config.train.debug)
+        self.best_model_path = trainer.best_model_path
+        
+        logger.info(f"[Pipeline] Best model path: {self.best_model_path}")
         logger.info("[Pipeline] Training completed.")
 
     def evaluate(self):
         logger.info("[Pipeline] Starting evaluation...")
         eval_config = OmegaConf.load(self.config.eval.config)
+        eval_config.weights.localizer = self.best_model_path
+
         evaluator = UltralyticsEvaluator(config=DictConfig(eval_config))
         results = evaluator.evaluate(debug=self.config.eval.debug)
         logger.info("[Pipeline] Evaluation completed.")
