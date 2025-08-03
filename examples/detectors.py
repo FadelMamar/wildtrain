@@ -25,6 +25,7 @@ device = "cpu"
 localizer = UltralyticsLocalizer(weights="D:/workspace/repos/wildtrain/models/best.pt", 
                                  conf_thres=0.2,
                                  iou_thres=0.5,
+                                 imgsz=800,
                                  device=device)
 
 # Instantiate the classifier
