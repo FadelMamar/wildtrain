@@ -82,10 +82,6 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         # Current curriculum state
         self.current_difficulty = 1.0
 
-        #print("Number of classes:",len(self.classes))
-        #print("Number of images:",len(self.image_paths))
-        #print("Number of annotations:",len(self.annotations))
-    
     @classmethod
     def from_data_directory(cls,
                                  root_data_directory: str,
@@ -98,8 +94,8 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         Create curriculum detection dataset from COCO format.
         
         Args:
-            images_directory_path: Path to directory containing images
-            annotations_path: Path to COCO annotations JSON file
+            root_data_directory: Path to the root data directory
+            split: Dataset split to load ('train', 'val', 'test')
             curriculum_config: Curriculum configuration
             transform: Image transformations
             compute_difficulties: Whether to compute sample difficulties
@@ -108,42 +104,11 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         Returns:
             CurriculumDetectionDataset instance
         """
-        # Use supervision's from_coco method
-        #detection_dataset = sv.DetectionDataset.from_coco(
-        #    images_directory_path=images_directory_path,
-        #    annotations_path=annotations_path
-        #)
 
         detection_dataset = load_all_detection_datasets(
             root_data_directory=root_data_directory,
             split=split
         )
-
-        #with open(annotations_path, "r",encoding="utf-8") as f:
-            #coco_annotations = json.load(f)
-
-        #grouped_annotations = group_coco_annotations_by_image_id(coco_annotations["annotations"])
-
-        #print("Number of images:",len(coco_annotations["images"]))
-        #print("Number of annotations:",len(coco_annotations["annotations"]))
-        #print("Number of grouped annotations:",len(grouped_annotations))
-        
-        #background_images = []
-        #empty_annotations = {}
-        #for coco_image in coco_annotations["images"]:
-            #if len(grouped_annotations.get(coco_image["id"], [])) < 1:
-                #image_path = os.path.join(images_directory_path, coco_image["file_name"])
-                #background_images.append(image_path)
-                #empty_annotations[image_path] = sv.Detections.empty()
-
-        # Add empty annotations to the dataset
-        #detection_dataset.annotations.update(empty_annotations)
-
-        #print(empty_annotations)
-        #print("background_images:",len(background_images))
-
-        # Create curriculum dataset using the loaded data
-
         return cls(
             classes=detection_dataset.classes,
             images=detection_dataset.image_paths, # + background_images,
@@ -405,6 +370,7 @@ class CropDataset(torch.utils.data.Dataset):
                 detection_indices = self._compute_detection_indices(
                     detections, image_path, dataset_idx, h, w
                 )
+                #print("detection_info",detection_indices,detections)
                 crop_indices.extend(detection_indices)
         
         return crop_indices
@@ -417,26 +383,14 @@ class CropDataset(torch.utils.data.Dataset):
                                   img_width: int) -> List[Dict[str, Any]]:
         """Compute indices for detection-based crops."""
         indices = []
-        
-        if detections.is_empty() or len(detections.xyxy) == 0 or detections.xyxy is None:
-            return indices
-        
+                
         # Sort detections by area (largest first for better crops)
         areas = []
-        for bbox in detections.xyxy:
+        for i,bbox in enumerate(detections.xyxy):
             area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
             areas.append(area)
+            class_id = detections.class_id[i]
         
-        # Get indices sorted by area (largest first)
-        
-        if detections.class_id is not None:
-            for i, bbox in enumerate(detections.xyxy):
-                class_id = detections.class_id[i]
-        else:
-            # Handle case where class_id is None
-            for i, bbox in enumerate(detections.xyxy):
-                class_id = -1  # Default class ID
-            
             # Expand bounding box
             x1, y1, x2, y2 = bbox.tolist()          
                         
@@ -445,7 +399,7 @@ class CropDataset(torch.utils.data.Dataset):
             y1 = max(0, y1 - self.crop_size)
             x2 = min(img_width, x2 + self.crop_size)
             y2 = min(img_height, y2 + self.crop_size)
-                       
+                        
             indices.append({
                 'dataset_idx': dataset_idx,
                 'image_path': image_path,
@@ -652,7 +606,7 @@ class CropDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         """Return number of crops."""
         return len(self.crop_indices)
-    
+        
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         """
         Get a crop and its label (lazy generation).
