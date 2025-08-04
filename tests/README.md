@@ -49,7 +49,7 @@ tests/
 
 #### Data Processing & Filtering
 - [ ] **test_crop_dataset_clustering.py**
-  - [ ] Test CropDataset creation with mock detection data
+  - [ ] Test PatchDataset creation with mock detection data
   - [ ] Test ClusteringFilter application with different reduction factors (0.3, 0.5, 0.7)
   - [ ] Test CropClusteringAdapter functionality and adapter pattern
   - [ ] Test DataLoader compatibility with clustered datasets
@@ -181,7 +181,7 @@ tests/
   - [ ] Test CurriculumDetectionDataset loading
   - [ ] Test curriculum progression (difficulty scaling)
   - [ ] Test available_indices updates
-  - [ ] Test CropDataset integration with curriculum
+  - [ ] Test PatchDataset integration with curriculum
   - [ ] Test different curriculum configurations
   - [ ] Test curriculum state management
   - [ ] Test curriculum callback functionality
