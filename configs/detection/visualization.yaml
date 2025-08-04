@@ -9,7 +9,7 @@ model:
   localizer:
     weights: models\best.pt
     imgsz: 640
-    device: "cpu"
+    device: "cuda"
     conf_thres: 0.2
     iou_thres: 0.3
     max_det: 300
