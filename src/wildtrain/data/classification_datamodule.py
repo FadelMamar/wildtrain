@@ -154,7 +154,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         # Initialize the curriculum mixin first
         if curriculum_config is not None:
             # Convert dict to CurriculumConfig if needed
-            if isinstance(curriculum_config, dict):
+            if isinstance(curriculum_config, dict) or isinstance(curriculum_config, DictConfig):
                 curriculum_config = CurriculumConfig(**curriculum_config)
             elif not isinstance(curriculum_config, CurriculumConfig):
                 logger.warning(f"Invalid curriculum_config type: {type(curriculum_config)}. Disabling curriculum.")
@@ -166,6 +166,9 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         self.batch_size = batch_size
         self.root_data_directory = Path(root_data_directory).resolve()
         self.dataset_type = dataset_type
+
+        if not load_as_single_class:
+            raise ValueError("Current workflow does not support multi-class datasets")
 
         # ROI dataset configuration
         self.single_class_config = {
@@ -246,11 +249,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         
         # Extract parameters using helper method
         params = cls._extract_config_params(dataset_config)
-        
-        logger.info(f"Creating ClassificationDataModule from DictConfig")
-        logger.info(f"Dataset type: {params['dataset_type']}")
-        logger.info(f"Root directory: {params['root_data_directory']}")
-        
+                
         return cls(**params)
 
     @classmethod
@@ -373,12 +372,27 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             preserve_aspect_ratio=self.preserve_aspect_ratio,
         )
         
+        # Ensure proper types for keep_classes and discard_classes
+        keep_classes = self.single_class_config["keep_classes"]
+        discard_classes = self.single_class_config["discard_classes"]
+        
+        # Convert to proper types if needed
+        if keep_classes is not None and not isinstance(keep_classes, list):
+            keep_classes = [keep_classes] if keep_classes else None
+        if discard_classes is not None and not isinstance(discard_classes, list):
+            discard_classes = [discard_classes] if discard_classes else None
+        
         # Create crop dataset
         crop_dataset = PatchDataset(
             dataset=detection_dataset,
             crop_size=int(self.crop_config["crop_size"]),
             max_tn_crops=int(self.crop_config["max_tn_crops"]),
             p_draw_annotations=self.crop_config["p_draw_annotations"],
+            load_as_single_class=bool(self.single_class_config["load_as_single_class"]),
+            background_class_name=str(self.single_class_config["background_class_name"]),
+            single_class_name=str(self.single_class_config["single_class_name"]),
+            keep_classes=keep_classes,
+            discard_classes=discard_classes,
         )
         
         # Apply rebalancing if needed

@@ -22,6 +22,11 @@ import os
 from .manager import CurriculumConfig
 from ..utils import load_all_detection_datasets
 
+from wildtrain.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
+
 def group_coco_annotations_by_image_id(
         coco_annotations: list[dict],
     ) -> dict[int, list[dict]]:
@@ -306,6 +311,11 @@ class PatchDataset(torch.utils.data.Dataset):
                  crop_size: int = 224,
                  max_tn_crops: int = 1,
                  p_draw_annotations: float = 0.,
+                 load_as_single_class: bool = True,
+                 background_class_name: str = "background",
+                 single_class_name: str = "wildlife",
+                 keep_classes: Optional[List[str]] = None,
+                 discard_classes: Optional[List[str]] = None
                  ):
         """
         Initialize crop dataloader.
@@ -313,20 +323,32 @@ class PatchDataset(torch.utils.data.Dataset):
         Args:
             dataset: CurriculumDetectionDataset to load crops from
             crop_size: Size of the square crop (width = height)
-            expand_ratio: Ratio to expand bounding box (0.1 = 10% expansion)
-            max_crops_per_image: Maximum number of crops to extract per image
-            min_crop_size: Minimum size of crop to consider valid
-            random_crops: Whether to also generate random crops
-            random_crop_prob: Probability of generating a random crop
+            max_tn_crops: Maximum number of crops to extract per image
+            p_draw_annotations: Probability of drawing annotations
+            load_as_single_class: Whether to binarize classes to {0: background, 1: wildlife}
+            background_class_name: Name for background class
+            single_class_name: Name for wildlife class
+            keep_classes: List of classes to keep (others become background)
+            discard_classes: List of classes to discard (become background)
         """
         super().__init__()
         self.dataset = dataset
         self.crop_size = crop_size
         self.max_tn_crops = max_tn_crops
         self.p_draw_annotations = p_draw_annotations
+        self.load_as_single_class = load_as_single_class
+        self.background_class_name = background_class_name
+        self.single_class_name = single_class_name
+        self.keep_classes = keep_classes
+        self.discard_classes = discard_classes
+
+        # Multi-class: original classes + background
+        self.class_mapping = {i+1: class_name for i, class_name in enumerate(self.dataset.classes)}
+        self.class_mapping[0] = self.background_class_name
         
         # Pre-compute crop indices for lazy generation
         self.crop_indices = self._compute_crop_indices()
+        self._update_crop_indices()
 
         self.pad_roi = A.Compose(
             [
@@ -344,9 +366,46 @@ class PatchDataset(torch.utils.data.Dataset):
             ]
         )
 
-        self.class_mapping = {i+1: class_name for i, class_name in enumerate(self.dataset.classes)}
-        self.class_mapping[0] = "background"
+        # Set up class mapping based on single class configuration
+        if self.load_as_single_class:
+            # Binary classification: {0: background, 1: wildlife}
+            self.class_mapping = {
+                0: self.background_class_name,
+                1: self.single_class_name
+            }            
     
+    def _update_crop_indices(self,):
+        if self.keep_classes:
+            updated_crop_indices = [crop_info for crop_info in self.crop_indices if crop_info['class_name'] in self.keep_classes]
+            self.class_mapping = {k: v for k, v in self.class_mapping.items() if v in self.keep_classes}
+            logger.info(
+                f"Keeping classes: {self.keep_classes}. Updated class mapping: {self.class_mapping}"
+            )
+            self.crop_indices = updated_crop_indices
+        elif self.discard_classes:
+            updated_crop_indices = [crop_info for crop_info in self.crop_indices if crop_info['class_name'] not in self.discard_classes]
+            self.class_mapping = {k: v for k, v in self.class_mapping.items() if v not in self.discard_classes}
+            logger.info(
+                f"Discarding classes: {self.discard_classes}. Updated class mapping: {self.class_mapping}"
+            )
+            self.crop_indices = updated_crop_indices
+              
+    
+    def _is_wildlife_class(self, class_id: int) -> bool:
+        """
+        Determine if a class should be treated as wildlife (class 1) or background (class 0).
+        
+        Args:
+            class_id: Original class ID
+            
+        Returns:
+            True if class should be wildlife, False if background
+        """
+        if class_id < 0:  # Random crops or invalid classes
+            return False
+        else:
+            return True
+
     def _compute_crop_indices(self) -> List[Dict[str, Any]]:
         """Pre-compute crop indices for lazy generation."""
         crop_indices = []
@@ -376,7 +435,6 @@ class PatchDataset(torch.utils.data.Dataset):
                 detection_indices = self._compute_detection_indices(
                     detections, image_path, dataset_idx, h, w
                 )
-                #print("detection_info",detection_indices,detections)
                 crop_indices.extend(detection_indices)
         
         return crop_indices
@@ -437,7 +495,8 @@ class PatchDataset(torch.utils.data.Dataset):
                 'crop_bbox': [x1_crop, y1_crop, x2_crop, y2_crop],
                 'original_bbox': bbox,
                 'label': class_id,
-                'crop_type': 'detection'
+                'crop_type': 'detection',
+                "class_name": self.dataset.classes[class_id]
             })
         
         return indices
@@ -475,7 +534,8 @@ class PatchDataset(torch.utils.data.Dataset):
                 'crop_bbox': [x1, y1, x2, y2],
                 'original_bbox': None,
                 'label': -1,  # -1 indicates random crop (no specific label)
-                'crop_type': 'random'
+                'crop_type': 'random',
+                "class_name": self.background_class_name
             })
         
         return indices
@@ -540,10 +600,20 @@ class PatchDataset(torch.utils.data.Dataset):
             # Generate filename
             dataset_idx = crop_info['dataset_idx']
             image_path = crop_info['image_path']
-            class_id = crop_info['label']
+            original_class_id = crop_info['label']
+            class_name = crop_info['class_name']
             
-            # Get class name from dataset
-            class_name = self.dataset.classes[class_id] if class_id >= 0 else "background"
+            # Apply single class binarization if enabled
+            if self.load_as_single_class:
+                if self._is_wildlife_class(original_class_id):
+                    class_id = 1  # wildlife
+                    class_name = self.single_class_name
+                else:
+                    class_id = 0  # background
+                    class_name = self.background_class_name
+            else:
+                # Multi-class: use original class
+                class_id = original_class_id + 1  # offset for background
                         
             # Generate filename
             base_name = Path(image_path).stem
@@ -600,7 +670,12 @@ class PatchDataset(torch.utils.data.Dataset):
             dataset=self.dataset,
             crop_size=self.crop_size,
             max_tn_crops=self.max_tn_crops,
-            p_draw_annotations=self.p_draw_annotations
+            p_draw_annotations=self.p_draw_annotations,
+            load_as_single_class=self.load_as_single_class,
+            background_class_name=self.background_class_name,
+            single_class_name=self.single_class_name,
+            keep_classes=self.keep_classes,
+            discard_classes=self.discard_classes
         )
         
         # Replace crop indices with filtered ones
@@ -639,7 +714,12 @@ class PatchDataset(torch.utils.data.Dataset):
             dataset=self.dataset,
             crop_size=self.crop_size,
             max_tn_crops=self.max_tn_crops,
-            p_draw_annotations=self.p_draw_annotations
+            p_draw_annotations=self.p_draw_annotations,
+            load_as_single_class=self.load_as_single_class,
+            background_class_name=self.background_class_name,
+            single_class_name=self.single_class_name,
+            keep_classes=self.keep_classes,
+            discard_classes=self.discard_classes
         )
         
         # Replace crop indices with filtered ones
@@ -669,8 +749,18 @@ class PatchDataset(torch.utils.data.Dataset):
         # Convert to tensor
         crop_tensor = torch.from_numpy(crop).permute(2, 0, 1).float() / 255.0
         
-        # offset class id by 1 to account for background class (-1 )
-        label = crop_info['label'] + 1 
+        # Get original label
+        original_label = crop_info['label']
+        
+        # Apply single class binarization if enabled
+        if self.load_as_single_class:
+            if self._is_wildlife_class(original_label):
+                label = 1  # wildlife
+            else:
+                label = 0  # background
+        else:
+            # Multi-class: offset class id by 1 to account for background class (-1)
+            label = original_label + 1 
         
         return crop_tensor, label
     
