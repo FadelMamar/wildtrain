@@ -2,9 +2,9 @@
 echo 🚀 Starting WildTrain Streamlit UI...
 echo.
 
-call cd /d %~dp0 && cd ..
+call cd /d %~dp0
 
-call .\scripts\launch_mlflow.bat
+start .\scripts\launch_mlflow.bat
 
 REM Run the UI
 call uv run streamlit run src/ui.py --server.port 8555 --server.address localhost
