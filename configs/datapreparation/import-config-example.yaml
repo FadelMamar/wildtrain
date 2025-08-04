@@ -2,13 +2,13 @@
 # Usage: wildata import-dataset --config import-config-example.yaml
 
 # Required parameters
-source_path: D:\workspace\data\general_dataset\tiled-data\coco-dataset\annotations\annotations_val.json
+source_path: D:\workspace\data\general_dataset\tiled-data\coco-dataset\annotations\annotations_train.json
 source_format: "coco"  # or "yolo" "coco" "ls"
 dataset_name: general_dataset
 
 # Pipeline configuration
 root: D:\workspace\data\demo-dataset
-split_name: "val"  # train, val, or test
+split_name: "train"  # train, val, or test
 enable_dvc: false
 
 # Processing options

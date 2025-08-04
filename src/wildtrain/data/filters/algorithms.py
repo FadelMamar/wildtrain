@@ -15,7 +15,7 @@ import torch # Added for in-memory image processing
 
 from wildtrain.utils.logging import get_logger
 from wildtrain.data.filters.feature_extractor import FeatureExtractor
-from wildtrain.data.curriculum.dataset import CropDataset  # Add import for CropDataset
+from wildtrain.data.curriculum.dataset import PatchDataset  # Add import for PatchDataset
 
 
 logger = get_logger(__name__)
@@ -225,9 +225,9 @@ class ClusteringFilter(BaseFilter):
 
 class CropClusteringAdapter:
     """
-    Adapter to make ClusteringFilter work with CropDataset annotations.
+    Adapter to make ClusteringFilter work with PatchDataset annotations.
     
-    This adapter converts between the CropDataset annotation format and the
+    This adapter converts between the PatchDataset annotation format and the
     ClusteringFilter's expected image format, allowing the ClusteringFilter
     to work with crop annotations without modification.
     """
@@ -246,7 +246,7 @@ class CropClusteringAdapter:
         Apply clustering filter to crop annotations using adapter pattern.
         
         Args:
-            crop_annotations: List of crop annotation dictionaries from CropDataset
+            crop_annotations: List of crop annotation dictionaries from PatchDataset
             
         Returns:
             Filtered list of crop annotation dictionaries
@@ -418,7 +418,7 @@ class CropClusteringFilter(ClusteringFilter):
     """
     
     def __init__(self, 
-                 crop_dataset: 'CropDataset',
+                 crop_dataset: 'PatchDataset',
                  feature_extractor: Optional['FeatureExtractor'] = None,
                  batch_size: int = 64,
                  sampling_strategy: Optional[SamplingStrategy] = None,
@@ -427,7 +427,7 @@ class CropClusteringFilter(ClusteringFilter):
         Initialize the crop clustering filter.
         
         Args:
-            crop_dataset: The CropDataset instance to filter
+            crop_dataset: The PatchDataset instance to filter
             feature_extractor: Feature extractor for computing embeddings
             batch_size: Batch size for processing
             sampling_strategy: Sampling strategy for cluster selection

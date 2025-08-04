@@ -16,6 +16,7 @@ from datetime import datetime
 
 
 from .trainers.classification_trainer import ClassifierTrainer
+from .trainers.detection_trainer import UltralyticsDetectionTrainer
 from .utils.logging import ROOT
 from .pipeline.detection_pipeline import DetectionPipeline
 from .pipeline.classification_pipeline import ClassificationPipeline
@@ -41,11 +42,10 @@ console = Console()
 def setup_logging(verbose: bool = False, log_file: Optional[Path] = None) -> None:
     """Setup rich logging with appropriate level."""
     level = logging.DEBUG if verbose else logging.INFO
-    log_dir = ROOT / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
 
-    handlers = [RichHandler(console=console, rich_tracebacks=True)]
+    handlers:list = [RichHandler(console=console, rich_tracebacks=True)]
     if log_file:
+        Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         handlers.append(logging.FileHandler(log_file, encoding="utf-8"))
 
     logging.basicConfig(
@@ -82,13 +82,25 @@ def train_classifier(
 ) -> None:
     """Train a classification model."""
     console.print(f"[bold green]Training classifier with config:[/bold green] {config}")
-    log_file = ROOT / "logs" / f"train_classifier_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "train_classifier" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
     cfg = OmegaConf.load(config)
     console.print(OmegaConf.to_yaml(cfg))
     ClassifierTrainer(DictConfig(cfg)).run()
 
+@app.command()
+def train_detector(
+    config: Path = typer.Argument(..., help="Path to training configuration file"),
+) -> None:
+    """Train a detection model."""
+    console.print(f"[bold green]Training detector with config:[/bold green] {config}")
+    log_file = ROOT / "logs" / "train_detector" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    setup_logging(log_file=log_file)
+
+    cfg = OmegaConf.load(config)
+    console.print(OmegaConf.to_yaml(cfg))
+    UltralyticsDetectionTrainer(DictConfig(cfg)).run()
 
 @app.command()
 def get_dataset_stats(
@@ -158,23 +170,14 @@ def run_detection_pipeline(
     """Run the full detection pipeline (train + eval) for object detection."""
     console.print(f"[bold green]Running detection pipeline with config:[/bold green] {config}")
 
-    log_file = ROOT / "logs" / f"run_detection_pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "run_detection_pipeline" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Initializing pipeline...", total=None)
-        pipeline = DetectionPipeline(str(config))
-        progress.update(task, description="Training...")
-        pipeline.train()
-        progress.update(task, description="Evaluating...")
-        results = pipeline.evaluate()
-        progress.update(task, description="Pipeline completed!")
-        console.print("\n[bold blue]Detection pipeline completed. Evaluation results:[/bold blue]")
-        console.print(results)
+    
+    pipeline = DetectionPipeline(str(config))
+    results = pipeline.run()
+    console.print("\n[bold blue]Detection pipeline completed. Evaluation results:[/bold blue]")
+    console.print(results)
 
 
 @app.command()
@@ -184,23 +187,14 @@ def run_classification_pipeline(
     """Run the full classification pipeline (train + eval) for image classification."""
     console.print(f"[bold green]Running classification pipeline with config:[/bold green] {config}")
 
-    log_file = ROOT / "logs" / f"run_classification_pipeline_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "run_classification_pipeline" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Initializing pipeline...", total=None)
-        pipeline = ClassificationPipeline(str(config))
-        progress.update(task, description="Training...")
-        pipeline.train()
-        progress.update(task, description="Evaluating...")
-        results = pipeline.evaluate()
-        progress.update(task, description="Pipeline completed!")
-        console.print("\n[bold blue]Classification pipeline completed. Evaluation results:[/bold blue]")
-        console.print(results)
+
+    pipeline = ClassificationPipeline(str(config))
+    results = pipeline.run()
+    console.print("\n[bold blue]Classification pipeline completed. Evaluation results:[/bold blue]")
+    console.print(results)
 
 
 @app.command()
@@ -215,7 +209,7 @@ def visualize_classifier_predictions(
     """Upload classifier predictions to a FiftyOne dataset for visualization."""
     console.print(f"[bold green]Uploading predictions to FiftyOne dataset:[/bold green] {dataset_name}")
     
-    log_file = ROOT / "logs" / f"visualize_classifier_predictions_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "visualize_classifier_predictions" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
     add_predictions_from_classifier(
@@ -253,15 +247,7 @@ def visualize_detector_predictions(
     console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
     
     # Create localizer with config
-    localizer = UltralyticsLocalizer(
-        weights=localizer_cfg.weights,
-        imgsz=localizer_cfg.imgsz,
-        device=localizer_cfg.device,
-        conf_thres=localizer_cfg.conf_thres,
-        iou_thres=localizer_cfg.iou_thres,
-        max_det=localizer_cfg.max_det,
-        overlap_metric=localizer_cfg.overlap_metric
-    )
+    localizer = UltralyticsLocalizer.from_config(localizer_cfg)
     
     # Create classifier if checkpoint provided
     classifier = None
@@ -272,7 +258,7 @@ def visualize_detector_predictions(
     # Create detector
     detector = Detector(localizer=localizer, classifier=classifier)
     
-    log_file = ROOT / "logs" / f"visualize_detector_predictions_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "visualize_detector_predictions" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
     add_predictions_from_detector(
@@ -294,7 +280,7 @@ def evaluate_detector(
     """Evaluate a YOLO model using a YAML config file."""
     console.print(f"[bold green]Running {model_type} evaluation with config:[/bold green] {config}")
 
-    log_file = ROOT / "logs" / f"evaluate_detector_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "evaluate_detector" / f"evaluate_detector_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
     if model_type == "yolo":
@@ -313,7 +299,7 @@ def evaluate_classifier(
     """Evaluate a classifier using a YAML config file."""
     console.print(f"[bold green]Running classifier evaluation with config:[/bold green] {config}")
 
-    log_file = ROOT / "logs" / f"evaluate_classifier_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+    log_file = ROOT / "logs" / "evaluate_classifier" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
     evaluator = ClassificationEvaluator(str(config))

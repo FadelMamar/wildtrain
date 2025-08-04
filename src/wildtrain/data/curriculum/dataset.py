@@ -18,9 +18,15 @@ from tqdm import tqdm
 from pathlib import Path
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from .manager import CurriculumConfig
 from ..utils import load_all_detection_datasets
+
+from wildtrain.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def group_coco_annotations_by_image_id(
         coco_annotations: list[dict],
@@ -82,10 +88,6 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         # Current curriculum state
         self.current_difficulty = 1.0
 
-        #print("Number of classes:",len(self.classes))
-        #print("Number of images:",len(self.image_paths))
-        #print("Number of annotations:",len(self.annotations))
-    
     @classmethod
     def from_data_directory(cls,
                                  root_data_directory: str,
@@ -98,8 +100,8 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         Create curriculum detection dataset from COCO format.
         
         Args:
-            images_directory_path: Path to directory containing images
-            annotations_path: Path to COCO annotations JSON file
+            root_data_directory: Path to the root data directory
+            split: Dataset split to load ('train', 'val', 'test')
             curriculum_config: Curriculum configuration
             transform: Image transformations
             compute_difficulties: Whether to compute sample difficulties
@@ -108,42 +110,11 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         Returns:
             CurriculumDetectionDataset instance
         """
-        # Use supervision's from_coco method
-        #detection_dataset = sv.DetectionDataset.from_coco(
-        #    images_directory_path=images_directory_path,
-        #    annotations_path=annotations_path
-        #)
 
         detection_dataset = load_all_detection_datasets(
             root_data_directory=root_data_directory,
             split=split
         )
-
-        #with open(annotations_path, "r",encoding="utf-8") as f:
-            #coco_annotations = json.load(f)
-
-        #grouped_annotations = group_coco_annotations_by_image_id(coco_annotations["annotations"])
-
-        #print("Number of images:",len(coco_annotations["images"]))
-        #print("Number of annotations:",len(coco_annotations["annotations"]))
-        #print("Number of grouped annotations:",len(grouped_annotations))
-        
-        #background_images = []
-        #empty_annotations = {}
-        #for coco_image in coco_annotations["images"]:
-            #if len(grouped_annotations.get(coco_image["id"], [])) < 1:
-                #image_path = os.path.join(images_directory_path, coco_image["file_name"])
-                #background_images.append(image_path)
-                #empty_annotations[image_path] = sv.Detections.empty()
-
-        # Add empty annotations to the dataset
-        #detection_dataset.annotations.update(empty_annotations)
-
-        #print(empty_annotations)
-        #print("background_images:",len(background_images))
-
-        # Create curriculum dataset using the loaded data
-
         return cls(
             classes=detection_dataset.classes,
             images=detection_dataset.image_paths, # + background_images,
@@ -327,7 +298,7 @@ class CurriculumDetectionDataset(sv.DetectionDataset):
         # Return the expected tuple format for supervision compatibility
         return image_path, image, detections
 
-class CropDataset(torch.utils.data.Dataset):
+class PatchDataset(torch.utils.data.Dataset):
     """
     Custom dataloader for loading cropped regions of interest (ROIs) from images.
     
@@ -341,6 +312,11 @@ class CropDataset(torch.utils.data.Dataset):
                  crop_size: int = 224,
                  max_tn_crops: int = 1,
                  p_draw_annotations: float = 0.,
+                 load_as_single_class: bool = True,
+                 background_class_name: str = "background",
+                 single_class_name: str = "wildlife",
+                 keep_classes: Optional[List[str]] = None,
+                 discard_classes: Optional[List[str]] = None
                  ):
         """
         Initialize crop dataloader.
@@ -348,20 +324,32 @@ class CropDataset(torch.utils.data.Dataset):
         Args:
             dataset: CurriculumDetectionDataset to load crops from
             crop_size: Size of the square crop (width = height)
-            expand_ratio: Ratio to expand bounding box (0.1 = 10% expansion)
-            max_crops_per_image: Maximum number of crops to extract per image
-            min_crop_size: Minimum size of crop to consider valid
-            random_crops: Whether to also generate random crops
-            random_crop_prob: Probability of generating a random crop
+            max_tn_crops: Maximum number of crops to extract per image
+            p_draw_annotations: Probability of drawing annotations
+            load_as_single_class: Whether to binarize classes to {0: background, 1: wildlife}
+            background_class_name: Name for background class
+            single_class_name: Name for wildlife class
+            keep_classes: List of classes to keep (others become background)
+            discard_classes: List of classes to discard (become background)
         """
         super().__init__()
         self.dataset = dataset
         self.crop_size = crop_size
         self.max_tn_crops = max_tn_crops
         self.p_draw_annotations = p_draw_annotations
+        self.load_as_single_class = load_as_single_class
+        self.background_class_name = background_class_name
+        self.single_class_name = single_class_name
+        self.keep_classes = keep_classes
+        self.discard_classes = discard_classes
+
+        # Multi-class: original classes + background
+        self.class_mapping = {i+1: class_name for i, class_name in enumerate(self.dataset.classes)}
+        self.class_mapping[0] = self.background_class_name
         
         # Pre-compute crop indices for lazy generation
         self.crop_indices = self._compute_crop_indices()
+        self._update_crop_indices()
 
         self.pad_roi = A.Compose(
             [
@@ -379,34 +367,75 @@ class CropDataset(torch.utils.data.Dataset):
             ]
         )
 
-        self.class_mapping = {i+1: class_name for i, class_name in enumerate(self.dataset.classes)}
-        self.class_mapping[0] = "background"
+        # Set up class mapping based on single class configuration
+        if self.load_as_single_class:
+            # Binary classification: {0: background, 1: wildlife}
+            self.class_mapping = {
+                0: self.background_class_name,
+                1: self.single_class_name
+            }            
     
+    def _update_crop_indices(self,):
+        if self.keep_classes:
+            updated_crop_indices = [crop_info for crop_info in self.crop_indices if crop_info['class_name'] in self.keep_classes]
+            self.class_mapping = {k: v for k, v in self.class_mapping.items() if v in self.keep_classes}
+            logger.info(
+                f"Keeping classes: {self.keep_classes}. Updated class mapping: {self.class_mapping}"
+            )
+            self.crop_indices = updated_crop_indices
+        elif self.discard_classes:
+            updated_crop_indices = [crop_info for crop_info in self.crop_indices if crop_info['class_name'] not in self.discard_classes]
+            self.class_mapping = {k: v for k, v in self.class_mapping.items() if v not in self.discard_classes}
+            logger.info(
+                f"Discarding classes: {self.discard_classes}. Updated class mapping: {self.class_mapping}"
+            )
+            self.crop_indices = updated_crop_indices
+              
+    def _is_wildlife_class(self, class_id: int) -> bool:
+        """
+        Determine if a class should be treated as wildlife (class 1) or background (class 0).
+        
+        Args:
+            class_id: Original class ID
+            
+        Returns:
+            True if class should be wildlife, False if background
+        """
+        if class_id < 0:  # Random crops or invalid classes
+            return False
+        else:
+            return True
+
     def _compute_crop_indices(self) -> List[Dict[str, Any]]:
         """Pre-compute crop indices for lazy generation."""
         crop_indices = []
-        
-        for dataset_idx,image_path in tqdm(enumerate(self.dataset.image_paths),desc="Computing crop indices"):
-            
-            with Image.open(image_path) as img:
-                w,h = img.size
-            
-            detections = self.dataset.annotations[image_path] 
 
+        def iterator():
+            for dataset_idx,image_path in enumerate(self.dataset.image_paths):
+                with Image.open(image_path) as img:
+                    w, h = img.size
+                detections = self.dataset.annotations[image_path] 
+                yield w,h,detections,image_path,dataset_idx
+
+        def func(args):
+            w,h,detections,image_path,dataset_idx = args
             # Add random crop indices if enabled
             if detections.is_empty() or len(detections.xyxy) == 0 or detections.xyxy is None:
-                random_indices = self._compute_random_indices(
+                indices = self._compute_random_indices(
                     image_path, dataset_idx, h, w
                 )
-                crop_indices.extend(random_indices)
-            
             else:
                 # Add detection crop indices
-                detection_indices = self._compute_detection_indices(
+                indices = self._compute_detection_indices(
                     detections, image_path, dataset_idx, h, w
                 )
-                crop_indices.extend(detection_indices)
-        
+            return indices
+            
+        with tqdm(total=len(self.dataset.image_paths),desc="Computing crop indices",unit="images") as pbar:
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                for result in executor.map(func, iterator()):
+                    crop_indices.extend(result)
+                    pbar.update(1)        
         return crop_indices
     
     def _compute_detection_indices(self, 
@@ -417,42 +446,56 @@ class CropDataset(torch.utils.data.Dataset):
                                   img_width: int) -> List[Dict[str, Any]]:
         """Compute indices for detection-based crops."""
         indices = []
-        
-        if detections.is_empty() or len(detections.xyxy) == 0 or detections.xyxy is None:
-            return indices
-        
+                
         # Sort detections by area (largest first for better crops)
         areas = []
-        for bbox in detections.xyxy:
+        for i,bbox in enumerate(detections.xyxy):
             area = (bbox[2] - bbox[0]) * (bbox[3] - bbox[1])
             areas.append(area)
+            class_id = detections.class_id[i]
         
-        # Get indices sorted by area (largest first)
-        
-        if detections.class_id is not None:
-            for i, bbox in enumerate(detections.xyxy):
-                class_id = detections.class_id[i]
-        else:
-            # Handle case where class_id is None
-            for i, bbox in enumerate(detections.xyxy):
-                class_id = -1  # Default class ID
+            # Get bounding box coordinates
+            x1, y1, x2, y2 = bbox.tolist()
             
-            # Expand bounding box
-            x1, y1, x2, y2 = bbox.tolist()          
+            # Calculate center of the bounding box
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+            
+            # Calculate crop coordinates centered on the detection
+            # Use a simpler approach: ensure crop is at least crop_size
+            crop_half_size = self.crop_size // 2
+            
+            x1_crop = max(0, int(center_x - crop_half_size))
+            y1_crop = max(0, int(center_y - crop_half_size))
+            x2_crop = min(img_width, int(center_x + crop_half_size))
+            y2_crop = min(img_height, int(center_y + crop_half_size))
+            
+            # Ensure minimum crop size by adjusting if needed
+            if x2_crop - x1_crop < self.crop_size:
+                if x1_crop == 0:
+                    x2_crop = min(img_width, self.crop_size)
+                else:
+                    x1_crop = max(0, x2_crop - self.crop_size)
+            
+            if y2_crop - y1_crop < self.crop_size:
+                if y1_crop == 0:
+                    y2_crop = min(img_height, self.crop_size)
+                else:
+                    y1_crop = max(0, y2_crop - self.crop_size)
+            
+            # Final validation
+            if x2_crop <= x1_crop or y2_crop <= y1_crop:
+                # Skip this detection if crop is invalid
+                continue
                         
-            # Expand bbox
-            x1 = max(0, x1 - self.crop_size)
-            y1 = max(0, y1 - self.crop_size)
-            x2 = min(img_width, x2 + self.crop_size)
-            y2 = min(img_height, y2 + self.crop_size)
-                       
             indices.append({
                 'dataset_idx': dataset_idx,
                 'image_path': image_path,
-                'crop_bbox': [x1, y1, x2, y2],
+                'crop_bbox': [x1_crop, y1_crop, x2_crop, y2_crop],
                 'original_bbox': bbox,
                 'label': class_id,
-                'crop_type': 'detection'
+                'crop_type': 'detection',
+                "class_name": self.dataset.classes[class_id]
             })
         
         return indices
@@ -467,11 +510,22 @@ class CropDataset(torch.utils.data.Dataset):
               
         for _ in range(self.max_tn_crops):
            
-            # Random position
-            x1 = np.random.randint(0, max(1, img_width - self.crop_size))
-            y1 = np.random.randint(0, max(1, img_height - self.crop_size))
-            x2 = x1 + self.crop_size
-            y2 = y1 + self.crop_size
+            # Check if image is too small for the crop size
+            if img_width < self.crop_size or img_height < self.crop_size:
+                # If image is too small, use the entire image
+                x1, y1 = 0, 0
+                x2, y2 = img_width, img_height
+            else:
+                # Random position
+                x1 = np.random.randint(0, img_width - self.crop_size + 1)
+                y1 = np.random.randint(0, img_height - self.crop_size + 1)
+                x2 = x1 + self.crop_size
+                y2 = y1 + self.crop_size
+            
+            # Validate crop coordinates
+            if x2 <= x1 or y2 <= y1:
+                # Skip this crop if coordinates are invalid
+                continue
             
             indices.append({
                 'dataset_idx': dataset_idx,
@@ -479,7 +533,8 @@ class CropDataset(torch.utils.data.Dataset):
                 'crop_bbox': [x1, y1, x2, y2],
                 'original_bbox': None,
                 'label': -1,  # -1 indicates random crop (no specific label)
-                'crop_type': 'random'
+                'crop_type': 'random',
+                "class_name": self.background_class_name
             })
         
         return indices
@@ -498,12 +553,14 @@ class CropDataset(torch.utils.data.Dataset):
         else:
             img_np = np.array(image)
         
-        if img_np.max() <= 1.0:
-                img_np = (img_np * 255).astype(np.uint8)
+        #if img_np.max() <= 1.0:
+            #img_np = (img_np * 255).astype(np.uint8)
         
         # Validate crop coordinates
         h, w = img_np.shape[:2]
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        
+
         
         # Ensure coordinates are within bounds
         x1 = max(0, min(x1, w))
@@ -514,14 +571,14 @@ class CropDataset(torch.utils.data.Dataset):
         # Check if crop is valid
         if x2 <= x1 or y2 <= y1:
             # Return a black crop if coordinates are invalid
-            return np.zeros((self.crop_size, self.crop_size, 3), dtype=np.uint8)
+            raise ValueError(f"Invalid crop coordinates: {x1}, {y1}, {x2}, {y2}")
         
         # Extract crop
         crop = img_np[y1:y2, x1:x2]
         
         # Check if crop is empty
         if crop.size == 0:
-            return np.zeros((self.crop_size, self.crop_size, 3), dtype=np.uint8)
+            raise ValueError(f"Invalid crop coordinates: {x1}, {y1}, {x2}, {y2}")
         
         # Pad crop to square
         crop = self.pad_roi(image=crop)["image"]
@@ -542,10 +599,20 @@ class CropDataset(torch.utils.data.Dataset):
             # Generate filename
             dataset_idx = crop_info['dataset_idx']
             image_path = crop_info['image_path']
-            class_id = crop_info['label']
+            original_class_id = crop_info['label']
+            class_name = crop_info['class_name']
             
-            # Get class name from dataset
-            class_name = self.dataset.classes[class_id] if class_id >= 0 else "background"
+            # Apply single class binarization if enabled
+            if self.load_as_single_class:
+                if self._is_wildlife_class(original_class_id):
+                    class_id = 1  # wildlife
+                    class_name = self.single_class_name
+                else:
+                    class_id = 0  # background
+                    class_name = self.background_class_name
+            else:
+                # Multi-class: use original class
+                class_id = original_class_id + 1  # offset for background
                         
             # Generate filename
             base_name = Path(image_path).stem
@@ -571,7 +638,7 @@ class CropDataset(torch.utils.data.Dataset):
         
         return annotations
     
-    def apply_rebalance_filter(self, filter_instance) -> 'CropDataset':
+    def apply_rebalance_filter(self, filter_instance) -> 'PatchDataset':
         """
         Apply ClassificationRebalanceFilter to create a balanced dataset.
         
@@ -579,7 +646,7 @@ class CropDataset(torch.utils.data.Dataset):
             filter_instance: Instance of ClassificationRebalanceFilter
             
         Returns:
-            New CropDataset with balanced crop indices
+            New PatchDataset with balanced crop indices
         """
         # Get annotations in the expected format
         annotations = self.get_annotations_for_filter()
@@ -598,11 +665,16 @@ class CropDataset(torch.utils.data.Dataset):
                     break
         
         # Create new dataset instance
-        new_dataset = CropDataset(
+        new_dataset = PatchDataset(
             dataset=self.dataset,
             crop_size=self.crop_size,
             max_tn_crops=self.max_tn_crops,
-            p_draw_annotations=self.p_draw_annotations
+            p_draw_annotations=self.p_draw_annotations,
+            load_as_single_class=self.load_as_single_class,
+            background_class_name=self.background_class_name,
+            single_class_name=self.single_class_name,
+            keep_classes=self.keep_classes,
+            discard_classes=self.discard_classes
         )
         
         # Replace crop indices with filtered ones
@@ -610,7 +682,7 @@ class CropDataset(torch.utils.data.Dataset):
         
         return new_dataset
 
-    def apply_clustering_filter(self, filter_instance) -> 'CropDataset':
+    def apply_clustering_filter(self, filter_instance) -> 'PatchDataset':
         """
         Apply ClusteringFilter (via adapter) to create a clustered dataset.
         
@@ -618,7 +690,7 @@ class CropDataset(torch.utils.data.Dataset):
             filter_instance: Instance of ClusteringFilter or CropClusteringAdapter
             
         Returns:
-            New CropDataset with clustered crop indices
+            New PatchDataset with clustered crop indices
         """
         # Get annotations in the expected format
         annotations = self.get_annotations_for_filter()
@@ -637,11 +709,16 @@ class CropDataset(torch.utils.data.Dataset):
                     break
         
         # Create new dataset instance
-        new_dataset = CropDataset(
+        new_dataset = PatchDataset(
             dataset=self.dataset,
             crop_size=self.crop_size,
             max_tn_crops=self.max_tn_crops,
-            p_draw_annotations=self.p_draw_annotations
+            p_draw_annotations=self.p_draw_annotations,
+            load_as_single_class=self.load_as_single_class,
+            background_class_name=self.background_class_name,
+            single_class_name=self.single_class_name,
+            keep_classes=self.keep_classes,
+            discard_classes=self.discard_classes
         )
         
         # Replace crop indices with filtered ones
@@ -652,7 +729,7 @@ class CropDataset(torch.utils.data.Dataset):
     def __len__(self) -> int:
         """Return number of crops."""
         return len(self.crop_indices)
-    
+        
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         """
         Get a crop and its label (lazy generation).
@@ -671,8 +748,18 @@ class CropDataset(torch.utils.data.Dataset):
         # Convert to tensor
         crop_tensor = torch.from_numpy(crop).permute(2, 0, 1).float() / 255.0
         
-        # offset class id by 1 to account for background class (-1 )
-        label = crop_info['label'] + 1 
+        # Get original label
+        original_label = crop_info['label']
+        
+        # Apply single class binarization if enabled
+        if self.load_as_single_class:
+            if self._is_wildlife_class(original_label):
+                label = 1  # wildlife
+            else:
+                label = 0  # background
+        else:
+            # Multi-class: offset class id by 1 to account for background class (-1)
+            label = original_label + 1 
         
         return crop_tensor, label
     

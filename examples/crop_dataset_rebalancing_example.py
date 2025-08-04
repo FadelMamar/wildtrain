@@ -1,8 +1,8 @@
 """
-Example demonstrating CropDataset with ClassificationRebalanceFilter.
+Example demonstrating PatchDataset with ClassificationRebalanceFilter.
 
 This example shows how to:
-1. Create a CropDataset from detection annotations
+1. Create a PatchDataset from detection annotations
 2. Apply ClassificationRebalanceFilter to balance class distribution
 3. Use the balanced dataset with PyTorch DataLoader
 4. Analyze class distributions before and after rebalancing
@@ -15,7 +15,7 @@ import traceback
 from pathlib import Path
 
 # Import our modules
-from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
+from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
 from wildtrain.data.curriculum.manager import CurriculumConfig
 from wildtrain.data.filters import ClassificationRebalanceFilter
 
@@ -23,7 +23,7 @@ from wildtrain.data.filters import ClassificationRebalanceFilter
 def main():
     """Main example function."""
     
-    print("CropDataset with Rebalancing Example")
+    print("PatchDataset with Rebalancing Example")
     print("=" * 60)
     
     # 1. Create curriculum configuration
@@ -55,17 +55,22 @@ def main():
         print(f"✅ Number of samples: {len(dataset)}")
         print(f"✅ Classes: {dataset.classes}")
 
-        # 4. Create CropDataset
-        print("\n🌾 Creating CropDataset...")
-        crop_dataset = CropDataset(
+        # 4. Create PatchDataset
+        print("\n Creating PatchDataset...")
+        crop_dataset = PatchDataset(
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
-            p_draw_annotations=0.0  # No annotations for cleaner crops
+            p_draw_annotations=0.0,  # No annotations for cleaner crops
+            load_as_single_class=True,
+            background_class_name="background",
+            single_class_name="wildlife",
+            keep_classes=None,
+            discard_classes=["rocks","vegetation","other","termite mound"]
         )
 
-        print(f"✅ CropDataset created successfully!")
-        print(f"✅ Number of crops: {len(crop_dataset)}")
+        print(f"✅ PatchDataset created successfully!")
+        print(f"✅ Number of patches: {len(crop_dataset)}")
 
         # 5. Analyze class distribution before rebalancing
         print("\n📊 Class distribution before rebalancing:")
@@ -94,8 +99,8 @@ def main():
         # Apply filter to create balanced dataset
         balanced_crop_dataset = crop_dataset.apply_rebalance_filter(rebalance_filter)
 
-        print(f"✅ Balanced CropDataset created successfully!")
-        print(f"✅ Number of crops after balancing: {len(balanced_crop_dataset)}")
+        print(f"✅ Balanced PatchDataset created successfully!")
+        print(f"✅ Number of patches after balancing: {len(balanced_crop_dataset)}")
 
         # 7. Analyze class distribution after rebalancing
         print("\n📊 Class distribution after rebalancing:")
@@ -131,12 +136,7 @@ def main():
 
         # 9. Demonstrate utility methods
         print("\n🔧 Testing utility methods:")
-        
-        # Get crops by class (assuming class_id 24 is wildlife)
-        if len(dataset.classes) > 24:
-            wildlife_crops = balanced_crop_dataset.get_crops_by_class(24)
-            print(f"   Wildlife crops: {len(wildlife_crops)} indices")
-        
+                
         # Get crops by type
         detection_crops = balanced_crop_dataset.get_crops_by_type('detection')
         random_crops = balanced_crop_dataset.get_crops_by_type('random')
@@ -194,33 +194,5 @@ def main():
         print(traceback.format_exc())
 
 
-def demonstrate_usage():
-    """Demonstrate typical usage patterns."""
-    
-    print("\n" + "="*60)
-    print("USAGE PATTERNS")
-    print("="*60)
-    
-    print("""
-1. Basic Usage:
-   crop_dataset = CropDataset(dataset, crop_size=224)
-   balanced_dataset = crop_dataset.apply_rebalance_filter(filter)
-
-2. With DataLoader:
-   dataloader = DataLoader(balanced_dataset, batch_size=32, shuffle=True)
-
-3. Different Filter Methods:
-   - method="mean": Balance to mean class count
-   - method="min": Balance to minimum class count
-   - exclude_extremes=True: Exclude smallest and largest classes
-
-4. Utility Methods:
-   - get_crops_by_class(class_id): Filter by class
-   - get_crops_by_type('detection'): Filter by crop type
-   - get_crop_info(idx): Get detailed crop metadata
-    """)
-
-
 if __name__ == "__main__":
     main()
-    demonstrate_usage() 

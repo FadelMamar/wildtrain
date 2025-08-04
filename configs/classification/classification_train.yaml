@@ -6,7 +6,7 @@ dataset:
   root_data_directory: D:\workspace\data\demo-dataset
   
   # Dataset type: "roi" for pre-computed crops, "crop" for dynamic crop extraction
-  dataset_type: "crop"  # or "crop"
+  dataset_type: "crop"  # or "crop" or "roi" 
 
   curriculum_config:
     enabled: true
@@ -47,11 +47,11 @@ dataset:
   
   # ROI dataset parameters (used when dataset_type = "roi")
   single_class:
-    enable: false
+    enable: true
     background_class_name: "background"
     single_class_name: "wildlife"
     keep_classes: null
-    discard_classes: null
+    discard_classes: ["rocks","vegetation","other","termite mound"]
   
   # Rebalancing
   rebalance: false
@@ -86,14 +86,14 @@ train:
   accelerator: auto
 
 checkpoint:
-  monitor: train_loss
+  monitor: val_f1score
   save_top_k: 1
-  mode: min
+  mode: max
   save_last: true
   dirpath: checkpoints/classification
   patience: 10
   save_weights_only: true
-  filename: "{epoch:02d}-{train_loss:.2f}"
+  filename: "{epoch:02d}-{val_f1score:.2f}"
   min_delta: 0.001
 
 mlflow:

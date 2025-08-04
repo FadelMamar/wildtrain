@@ -159,9 +159,9 @@ def validate_class_distribution(annotations: List[Dict], expected_classes: int =
 
 
 def validate_crop_dataset_structure(crop_dataset, expected_crops: int = None):
-    """Validate CropDataset structure and properties."""
-    assert hasattr(crop_dataset, '__len__'), "CropDataset must have __len__ method"
-    assert hasattr(crop_dataset, '__getitem__'), "CropDataset must have __getitem__ method"
+    """Validate PatchDataset structure and properties."""
+    assert hasattr(crop_dataset, '__len__'), "PatchDataset must have __len__ method"
+    assert hasattr(crop_dataset, '__getitem__'), "PatchDataset must have __getitem__ method"
     
     if expected_crops is not None:
         assert len(crop_dataset) == expected_crops, f"Expected {expected_crops} crops, got {len(crop_dataset)}"
@@ -169,8 +169,8 @@ def validate_crop_dataset_structure(crop_dataset, expected_crops: int = None):
     # Test getting a sample
     if len(crop_dataset) > 0:
         sample = crop_dataset[0]
-        assert isinstance(sample, (tuple, list)), "CropDataset should return tuple/list"
-        assert len(sample) == 2, "CropDataset should return (crop, label)"
+        assert isinstance(sample, (tuple, list)), "PatchDataset should return tuple/list"
+        assert len(sample) == 2, "PatchDataset should return (crop, label)"
 
 
 def validate_dataloader_compatibility(dataset, batch_size: int = 4):

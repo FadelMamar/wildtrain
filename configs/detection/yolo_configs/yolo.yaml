@@ -19,6 +19,7 @@ pretraining:
   lr0: 0.0001
   lrf: 0.1
   freeze: 0
+  save_dir: null
 
 model:
   pretrained: true
@@ -41,7 +42,7 @@ custom_yolo_kwargs:
   roi_classifier_layers: {"p3": 13, "p4": 10}
   fp_tp_loss_weight: 0.5
   count_loss_weight: 0.5
-  area_loss_weight: 0.0
+  area_loss_weight: 0.25
   box_size: 224
 
 train:
