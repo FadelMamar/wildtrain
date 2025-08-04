@@ -4,7 +4,7 @@ echo.
 
 
 REM Run the UI
-call uv run --no-sync streamlit run src/ui.py --server.port 8501 --server.address localhost
+call uv run streamlit run src/ui.py --server.port 8541 --server.address localhost
 
 if errorlevel 1 (
     echo ❌ Error running Streamlit UI

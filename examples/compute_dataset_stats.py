@@ -15,12 +15,12 @@ def main():
     Example usage of the compute_dataset_stats function.
     """
     # Example configuration
-    data_dir = "D:/workspace/data/demo-dataset"  # Update this to your data directory
+    data_dir = "D:\PhD\workspace\data"  # Update this to your data directory
     batch_size = 32
 
     # Create the data module
     datamodule = ClassificationDataModule(
-        root_data_directory=data_dir, batch_size=batch_size, transforms=None
+        root_data_directory=data_dir, batch_size=batch_size, transforms=None,load_as_single_class=True
     )
 
     # Setup the data module to load datasets

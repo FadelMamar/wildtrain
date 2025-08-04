@@ -1,16 +1,24 @@
 # Example configuration for classifier evaluation
 
-classifier: D:/workspace/repos/wildtrain/checkpoints/classification/best-v5.ckpt  # Path to the best checkpoint
+classifier: D:\PhD\workspace\wildtrain\mlartifacts/547271105631132050/26ba2cd4606c4b66b51025fb0257ddc8/artifacts/checkpoint/best_classifier.pt  # Path to the best checkpoint
 split: val  # 'val' or 'test'
-device: cpu  # or 'cuda' if available
-batch_size: 4
+device: cuda  # or 'cuda' if available
+batch_size: 64
+
+input_size: 224
 
 dataset:
-  root_data_directory: "D:/workspace/data/demo-dataset"
+  root_data_directory: D:\PhD\workspace\data
   single_class:
     enable : true
     background_class_name: "background"
     single_class_name: "wildlife"
     keep_classes: null
-    discard_classes: ["vegetation", "termite mound", "rocks", "other", "label"]
+    discard_classes: ["vegetation", "termite mound", "rocks", "other", "label","detection"]
+  
+  transforms:
+   val:
+      - name: Resize
+        params:
+          size: ${dataset.input_size}
 
