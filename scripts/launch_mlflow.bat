@@ -1,5 +1,4 @@
-call cd D:\workspace\repos\wildtrain
-call cd D:\PhD\workspace\wildtrain
-call uv run --no-sync mlflow server --backend-store-uri runs\mlflow
+call cd /d %~dp0 && cd ..
+call uv run mlflow server --backend-store-uri runs\mlflow
 
 

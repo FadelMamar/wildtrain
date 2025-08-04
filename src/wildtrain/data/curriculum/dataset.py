@@ -378,6 +378,9 @@ class CropDataset(torch.utils.data.Dataset):
                 ),
             ]
         )
+
+        self.class_mapping = {i+1: class_name for i, class_name in enumerate(self.dataset.classes)}
+        self.class_mapping[0] = "background"
     
     def _compute_crop_indices(self) -> List[Dict[str, Any]]:
         """Pre-compute crop indices for lazy generation."""
@@ -391,7 +394,7 @@ class CropDataset(torch.utils.data.Dataset):
             detections = self.dataset.annotations[image_path] 
 
             # Add random crop indices if enabled
-            if detections.is_empty():
+            if detections.is_empty() or len(detections.xyxy) == 0 or detections.xyxy is None:
                 random_indices = self._compute_random_indices(
                     image_path, dataset_idx, h, w
                 )
@@ -415,7 +418,7 @@ class CropDataset(torch.utils.data.Dataset):
         """Compute indices for detection-based crops."""
         indices = []
         
-        if len(detections) == 0:
+        if detections.is_empty() or len(detections.xyxy) == 0 or detections.xyxy is None:
             return indices
         
         # Sort detections by area (largest first for better crops)
@@ -498,12 +501,31 @@ class CropDataset(torch.utils.data.Dataset):
         if img_np.max() <= 1.0:
                 img_np = (img_np * 255).astype(np.uint8)
         
+        # Validate crop coordinates
+        h, w = img_np.shape[:2]
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        
+        # Ensure coordinates are within bounds
+        x1 = max(0, min(x1, w))
+        y1 = max(0, min(y1, h))
+        x2 = max(x1, min(x2, w))
+        y2 = max(y1, min(y2, h))
+        
+        # Check if crop is valid
+        if x2 <= x1 or y2 <= y1:
+            # Return a black crop if coordinates are invalid
+            return np.zeros((self.crop_size, self.crop_size, 3), dtype=np.uint8)
+        
         # Extract crop
-        crop = img_np[int(y1):int(y2), int(x1):int(x2)]
+        crop = img_np[y1:y2, x1:x2]
+        
+        # Check if crop is empty
+        if crop.size == 0:
+            return np.zeros((self.crop_size, self.crop_size, 3), dtype=np.uint8)
         
         # Pad crop to square
         crop = self.pad_roi(image=crop)["image"]
-        
+
         return crop
     
     def get_annotations_for_filter(self) -> List[Dict[str, Any]]:

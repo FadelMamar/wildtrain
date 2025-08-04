@@ -14,11 +14,15 @@ from tqdm import tqdm
 import traceback
 from pathlib import Path
 import numpy as np
+import os
+import tempfile
+import json
+from PIL import Image
 
 # Import our modules
 from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, CropDataset
 from wildtrain.data.curriculum.manager import CurriculumConfig
-from wildtrain.data.filters import ClusteringFilter, CropClusteringAdapter
+from wildtrain.data.filters.algorithms import CropClusteringFilter
 
 
 def main():
@@ -85,16 +89,14 @@ def main():
         print("\n🔄 Creating ClusteringFilter with adapter...")
         
         # Create the base clustering filter
-        clustering_filter = ClusteringFilter(
+        clustering_filter = CropClusteringFilter(
+            crop_dataset=crop_dataset,
             batch_size=32,
             reduction_factor=0.5  # Keep 50% of crops
         )
         
-        # Create the adapter to make it work with crop annotations
-        clustering_adapter = CropClusteringAdapter(clustering_filter)
-
         # Apply filter to create clustered dataset
-        clustered_crop_dataset = crop_dataset.apply_clustering_filter(clustering_adapter)
+        clustered_crop_dataset = crop_dataset.apply_clustering_filter(clustering_filter)
 
         print(f"✅ Clustered CropDataset created successfully!")
         print(f"✅ Number of crops after clustering: {len(clustered_crop_dataset)}")
@@ -134,9 +136,9 @@ def main():
         # 9. Demonstrate utility methods
         print("\n🔧 Testing utility methods:")
         
-        # Get crops by class (assuming class_id 24 is wildlife)
-        if len(dataset.classes) > 24:
-            wildlife_crops = clustered_crop_dataset.get_crops_by_class(24)
+        # Get crops by class (assuming class_id 0 is wildlife)
+        if len(dataset.classes) > 0:
+            wildlife_crops = clustered_crop_dataset.get_crops_by_class(0)
             print(f"   Wildlife crops: {len(wildlife_crops)} indices")
         
         # Get crops by type
@@ -154,30 +156,34 @@ def main():
         print("\n🔄 Testing different clustering configurations:")
         
         # More aggressive clustering (keep only 30%)
-        aggressive_filter = ClusteringFilter(
+        aggressive_filter = CropClusteringFilter(
+            crop_dataset=crop_dataset,
             batch_size=32,
             reduction_factor=0.3
         )
         
-        aggressive_adapter = CropClusteringAdapter(aggressive_filter)
-        aggressive_clustered = crop_dataset.apply_clustering_filter(aggressive_adapter)
+        aggressive_clustered = crop_dataset.apply_clustering_filter(aggressive_filter)
         print(f"   Aggressive clustering: {len(aggressive_clustered)} crops")
         
         # Less aggressive clustering (keep 70%)
-        conservative_filter = ClusteringFilter(
+        conservative_filter = CropClusteringFilter(
+            crop_dataset=crop_dataset,
             batch_size=32,
             reduction_factor=0.7
         )
         
-        conservative_adapter = CropClusteringAdapter(conservative_filter)
-        conservative_clustered = crop_dataset.apply_clustering_filter(conservative_adapter)
+        conservative_clustered = crop_dataset.apply_clustering_filter(conservative_filter)
         print(f"   Conservative clustering: {len(conservative_clustered)} crops")
 
         # 11. Show adapter information
         print("\n📝 Adapter information:")
-        adapter_info = clustering_adapter.get_filter_info()
-        for key, value in adapter_info.items():
-            print(f"   {key}: {value}")
+        try:
+            # adapter_info = clustering_adapter.clustering_filter.get_filter_info() # This line is removed
+            # for key, value in adapter_info.items(): # This line is removed
+            #     print(f"   {key}: {value}") # This line is removed
+            pass # This line is added
+        except AttributeError:
+            print("   ClusteringFilter does not have a get_filter_info method.")
 
         # 12. Show annotation format
         print("\n📝 Example annotation format:")
@@ -188,82 +194,20 @@ def main():
                 print(f"     {key}: {value}")
 
         print("\n✅ All tests completed successfully!")
+        
+        
 
     except FileNotFoundError:
-        print("⚠️  Dataset files not found. This is expected if you don't have the data files.")
-        print("   Replace the paths with your actual dataset paths.")
-        print("\n   Expected paths:")
-        print("   - Images: D:\\workspace\\data\\demo-dataset\\datasets")
-        print("   - Annotations: D:\\workspace\\data\\demo-dataset\\datasets\\savmap\\annotations\\train.json")
+        print(traceback.format_exc())
+        raise
+
     except Exception as e:
         print(f"❌ Error: {e}")
         print(traceback.format_exc())
 
 
-def demonstrate_usage():
-    """Demonstrate typical usage patterns."""
-    
-    print("\n" + "="*70)
-    print("USAGE PATTERNS")
-    print("="*70)
-    
-    print("""
-1. Basic Usage with Adapter:
-   clustering_filter = ClusteringFilter(reduction_factor=0.5)
-   clustering_adapter = CropClusteringAdapter(clustering_filter)
-   clustered_dataset = crop_dataset.apply_clustering_filter(clustering_adapter)
 
-2. With DataLoader:
-   dataloader = DataLoader(clustered_dataset, batch_size=32, shuffle=True)
-
-3. Different Clustering Configurations:
-   - reduction_factor=0.3: Keep 30% of crops (aggressive)
-   - reduction_factor=0.5: Keep 50% of crops (balanced)
-   - reduction_factor=0.7: Keep 70% of crops (conservative)
-
-4. Utility Methods:
-   - get_crops_by_class(class_id): Filter by class
-   - get_crops_by_type('detection'): Filter by crop type
-   - get_crop_info(idx): Get detailed crop metadata
-
-5. Adapter Information:
-   - get_filter_info(): Get clustering configuration and results
-   - last_silhouette_scores: Access clustering quality metrics
-   - last_samples_per_cluster: Access cluster allocation results
-    """)
-
-
-def demonstrate_adapter_pattern():
-    """Demonstrate the adapter pattern benefits."""
-    
-    print("\n" + "="*70)
-    print("ADAPTER PATTERN BENEFITS")
-    print("="*70)
-    
-    print("""
-1. Interface Compatibility:
-   - ClusteringFilter expects: List[Dict] with 'id' and 'file_name'
-   - CropDataset provides: List[Dict] with 'roi_id' and crop-specific fields
-   - Adapter converts between these formats seamlessly
-
-2. Reuse Without Modification:
-   - ClusteringFilter remains unchanged
-   - No code duplication
-   - Single responsibility principle maintained
-
-3. Flexibility:
-   - Can use any ClusteringFilter configuration
-   - Easy to extend for other filter types
-   - Clean separation of concerns
-
-4. Maintainability:
-   - Changes to ClusteringFilter automatically benefit crop filtering
-   - Adapter logic is isolated and testable
-   - Clear interface boundaries
-    """)
 
 
 if __name__ == "__main__":
     main()
-    demonstrate_usage()
-    demonstrate_adapter_pattern() 

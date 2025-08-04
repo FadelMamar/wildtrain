@@ -1,5 +1,6 @@
 @echo off
 REM Example script to run the classification pipeline using WildTrain CLI
+call cd /d %~dp0 && cd ..
 
 REM Set example config path
 set CONFIG_PATH=pipelines\classification_pipeline_config.yaml

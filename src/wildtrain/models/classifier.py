@@ -17,7 +17,7 @@ class GenericClassifier(nn.Module):
     def __init__(
         self,
         label_to_class_map: dict,
-        backbone: str = "resnet18",
+        backbone: str = "timm/vit_base_patch14_reg4_dinov2.lvd142m",
         backbone_source: str = "timm",
         pretrained: bool = True,
         dropout: float = 0.2,
@@ -58,7 +58,7 @@ class GenericClassifier(nn.Module):
         self,
     ):
         preprocessing = torch.nn.Sequential(
-            T.Resize(self.input_size.item(), interpolation=T.InterpolationMode.NEAREST),
+            T.Resize(self.input_size.item(), interpolation=T.InterpolationMode.BICUBIC),
             T.ToDtype(torch.float32),
             T.Normalize(mean=self.mean, std=self.std),
         )
