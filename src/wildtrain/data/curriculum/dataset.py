@@ -18,6 +18,7 @@ from tqdm import tqdm
 from pathlib import Path
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 
 from .manager import CurriculumConfig
 from ..utils import load_all_detection_datasets
@@ -390,7 +391,6 @@ class PatchDataset(torch.utils.data.Dataset):
             )
             self.crop_indices = updated_crop_indices
               
-    
     def _is_wildlife_class(self, class_id: int) -> bool:
         """
         Determine if a class should be treated as wildlife (class 1) or background (class 0).
@@ -409,34 +409,33 @@ class PatchDataset(torch.utils.data.Dataset):
     def _compute_crop_indices(self) -> List[Dict[str, Any]]:
         """Pre-compute crop indices for lazy generation."""
         crop_indices = []
-        
-        for dataset_idx,image_path in tqdm(enumerate(self.dataset.image_paths),desc="Computing crop indices"):
-            
-            # Get the actual image dimensions from the dataset (after transforms)
-            _, image, _ = self.dataset[dataset_idx]
-            if isinstance(image, torch.Tensor):
-                h, w = image.shape[1], image.shape[2]  # C, H, W -> H, W
-            elif hasattr(image, 'size'):  # PIL Image
-                w, h = image.size  # PIL uses (width, height)
-            else:
-                h, w = image.shape[:2]  # H, W
-            
-            detections = self.dataset.annotations[image_path] 
 
+        def iterator():
+            for dataset_idx,image_path in enumerate(self.dataset.image_paths):
+                with Image.open(image_path) as img:
+                    w, h = img.size
+                detections = self.dataset.annotations[image_path] 
+                yield w,h,detections,image_path,dataset_idx
+
+        def func(args):
+            w,h,detections,image_path,dataset_idx = args
             # Add random crop indices if enabled
             if detections.is_empty() or len(detections.xyxy) == 0 or detections.xyxy is None:
-                random_indices = self._compute_random_indices(
+                indices = self._compute_random_indices(
                     image_path, dataset_idx, h, w
                 )
-                crop_indices.extend(random_indices)
-            
             else:
                 # Add detection crop indices
-                detection_indices = self._compute_detection_indices(
+                indices = self._compute_detection_indices(
                     detections, image_path, dataset_idx, h, w
                 )
-                crop_indices.extend(detection_indices)
-        
+            return indices
+            
+        with tqdm(total=len(self.dataset.image_paths),desc="Computing crop indices",unit="images") as pbar:
+            with ThreadPoolExecutor(max_workers=3) as executor:
+                for result in executor.map(func, iterator()):
+                    crop_indices.extend(result)
+                    pbar.update(1)        
         return crop_indices
     
     def _compute_detection_indices(self, 
