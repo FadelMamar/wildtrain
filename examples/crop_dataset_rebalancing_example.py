@@ -61,7 +61,12 @@ def main():
             dataset=dataset,
             crop_size=224,
             max_tn_crops=1,
-            p_draw_annotations=0.0  # No annotations for cleaner crops
+            p_draw_annotations=0.0,  # No annotations for cleaner crops
+            load_as_single_class=True,
+            background_class_name="background",
+            single_class_name="wildlife",
+            keep_classes=None,
+            discard_classes=["rocks","vegetation","other","termite mound"]
         )
 
         print(f"✅ PatchDataset created successfully!")
