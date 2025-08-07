@@ -582,4 +582,7 @@ def show_config_template(
         console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
         raise typer.Exit(1)
 
+# Add API subcommand
+from ..api import cli_app
 
+app.add_typer(cli_app, name="api", help="API server commands")

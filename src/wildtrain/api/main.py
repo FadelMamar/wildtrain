@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 import logging
 from pathlib import Path
 from typing import Dict, Any
-
+import typer
 from .routers import training, evaluation, pipeline, visualization, dataset, config
 from .utils.error_handling import WildTrainAPIException, wildtrain_exception_handler
 from .dependencies import get_settings
@@ -14,6 +14,7 @@ from .dependencies import get_settings
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
@@ -74,15 +75,51 @@ def create_app() -> FastAPI:
             content={
                 "success": False,
                 "message": "Internal server error",
-                "error": str(exc) if get_settings().debug else "An unexpected error occurred"
+                "error": str(exc) if settings.debug else "An unexpected error occurred"
             }
         )
     
     return app
 
 # Create the app instance
-app = create_app()
+fastapi_app = create_app()
 
-if __name__ == "__main__":
+cli_app = typer.Typer(name="api", help="WildTrain API server commands")
+
+@cli_app.command()
+def serve(
+    host: str = typer.Option(settings.host, "--host", "-h", help="Host to bind to"),
+    port: int = typer.Option(settings.port, "--port", "-p", help="Port to bind to"),
+    reload: bool = typer.Option(
+        settings.debug, "--reload", "-r", help="Enable auto-reload"
+    ),
+    workers: int = typer.Option(
+        1, "--workers", "-w", help="Number of worker processes"
+    ),
+):
+    """Start the Wildtrain API server."""
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+    typer.echo(f"Starting Wildtrain API server on {host}:{port}")
+    typer.echo(f"Debug mode: {reload}")
+    typer.echo(f"Workers: {workers}")
+    typer.echo(f"API documentation: http://{host}:{port}/docs")
+
+    uvicorn.run(
+        fastapi_app,
+        host=host,
+        port=port,
+        reload=reload,
+        workers=workers,
+    )
+
+
+@cli_app.command()
+def check():
+    """Check API configuration."""
+    typer.echo("WildTraina API Configuration:")
+    typer.echo(f"  Host: {settings.host}")
+    typer.echo(f"  Port: {settings.port}")
+    typer.echo(f"  Debug: {settings.debug}")
+    typer.echo(f"  Upload directory: {settings.upload_dir}")
+    typer.echo(f"  CORS origins: {settings.cors_origins}")

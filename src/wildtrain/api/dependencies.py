@@ -16,7 +16,7 @@ class APISettings(BaseSettings):
     # API Configuration
     debug: bool = Field(default=False, description="Enable debug mode")
     host: str = Field(default="0.0.0.0", description="API host")
-    port: int = Field(default=8000, description="API port")
+    port: int = Field(default=8442, description="API port")
     
     # File Storage
     upload_dir: Path = Field(default=Path("./uploads"), description="Upload directory")
