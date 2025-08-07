@@ -1,5 +1,5 @@
 """WildTrain FastAPI REST API package."""
-from .main import cli_app, fastapi_app
+from .main import fastapi_app, create_app
 
 __version__ = "0.1.0"
-__all__ = ["cli_app", "fastapi_app"]
+__all__ = ["fastapi_app", "create_app"]
