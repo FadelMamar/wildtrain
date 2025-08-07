@@ -107,7 +107,7 @@ def validate_config(
 
 @app.command()
 def train_classifier(
-    config: Path = typer.Option(..., help="Path to training configuration file"),
+    config: Path = typer.Option("", help="Path to training configuration file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of training")
 ) -> None:
     """Train a classification model."""
@@ -245,7 +245,7 @@ def get_dataset_stats(
 
 @app.command()
 def run_detection_pipeline(
-    config: Path = typer.Option(..., help="Path to unified detection pipeline YAML config"),
+    config: Path = typer.Option("", help="Path to unified detection pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full detection pipeline (train + eval) for object detection."""
@@ -289,7 +289,7 @@ def run_detection_pipeline(
 
 @app.command()
 def run_classification_pipeline(
-    config: Path = typer.Option(..., help="Path to unified classification pipeline YAML config"),
+    config: Path = typer.Option("", help="Path to unified classification pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full classification pipeline (train + eval) for image classification."""
@@ -333,7 +333,7 @@ def run_classification_pipeline(
 
 @app.command()
 def visualize_classifier_predictions(
-    config: Path = typer.Option(..., help="Path to classification visualization configuration YAML file"),
+    config: Path = typer.Option("", help="Path to classification visualization configuration YAML file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of visualization")
 ) -> None:
     """Upload classifier predictions to a FiftyOne dataset for visualization using YAML configuration."""
@@ -392,7 +392,7 @@ def visualize_classifier_predictions(
 
 @app.command()
 def visualize_detector_predictions(
-    config: Path = typer.Option(..., help="Path to visualization configuration YAML file"),
+    config: Path = typer.Option("", help="Path to visualization configuration YAML file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of visualization")
 ) -> None:
     """Upload detector predictions to a FiftyOne dataset for visualization using YAML configuration."""
@@ -463,7 +463,7 @@ def visualize_detector_predictions(
 
 @app.command()
 def evaluate_detector(
-    config: Path = typer.Option(..., help="Path to YOLO evaluation YAML config file"),
+    config: Path = typer.Option("", help="Path to YOLO evaluation YAML config file"),
     model_type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
     template: bool = typer.Option(False, "--template", help="Show default configuration template instead of evaluation")
 ) -> None:
@@ -511,7 +511,7 @@ def evaluate_detector(
 
 @app.command()
 def evaluate_classifier(
-    config: Path = typer.Option(..., help="Path to classification evaluation YAML config file"),
+    config: Path = typer.Option("", help="Path to classification evaluation YAML config file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of evaluation")
 ) -> None:
     """Evaluate a classifier using a YAML config file."""

@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Dict, Any, Type, TypeVar, Union
+from typing import Dict, Any, Type, TypeVar, Union, Optional
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ValidationError
 from rich.console import Console
@@ -257,18 +257,31 @@ class ConfigLoader:
         if "properties" not in schema:
             return template
         
+        # Get the $defs section for resolving references
+        defs = schema.get("$defs", {})
+        
         for prop_name, prop_schema in schema["properties"].items():
             if prop_name == "model_config":  # Skip internal Pydantic config
                 continue
                 
-            template[prop_name] = ConfigLoader._get_example_value(prop_schema)
+            template[prop_name] = ConfigLoader._get_example_value(prop_schema, defs)
         
         return template
     
     @staticmethod
-    def _get_example_value(schema: Dict[str, Any]) -> Any:
+    def _get_example_value(schema: Dict[str, Any], defs: Optional[Dict[str, Any]] = None) -> Any:
         """Get an example value for a schema property."""
         prop_type = schema.get("type", "string")
+        
+        # Handle $ref references
+        if "$ref" in schema:
+            ref_path = schema["$ref"]
+            if ref_path.startswith("#/$defs/") and defs:
+                ref_name = ref_path.split("/")[-1]
+                if ref_name in defs:
+                    return ConfigLoader._get_example_value(defs[ref_name], defs)
+            # If we can't resolve the ref, fall back to default
+            return "example_string"
         
         if "enum" in schema:
             # Use first enum value as example
@@ -280,12 +293,12 @@ class ConfigLoader:
             for nested_prop_name, nested_prop_schema in schema["properties"].items():
                 if nested_prop_name == "model_config":
                     continue
-                nested_obj[nested_prop_name] = ConfigLoader._get_example_value(nested_prop_schema)
+                nested_obj[nested_prop_name] = ConfigLoader._get_example_value(nested_prop_schema, defs)
             return nested_obj
         
         if prop_type == "array" and "items" in schema:
             # Create array with single example item
-            example_item = ConfigLoader._get_example_value(schema["items"])
+            example_item = ConfigLoader._get_example_value(schema["items"], defs)
             return [example_item]
         
         # Handle different types with sensible defaults
@@ -308,18 +321,38 @@ class ConfigLoader:
         
         elif prop_type == "integer":
             if "minimum" in schema:
-                return max(schema["minimum"], 1)
+                min_val = schema["minimum"]
+                if min_val <= 0:
+                    return 1
+                elif min_val <= 10:
+                    return min_val
+                else:
+                    return max(min_val, 1)
+            elif "default" in schema:
+                return schema["default"]
             else:
                 return 1
         
         elif prop_type == "number":
             if "minimum" in schema:
-                return max(schema["minimum"], 0.1)
+                min_val = schema["minimum"]
+                if min_val <= 0:
+                    return 0.1
+                else:
+                    return max(min_val, 0.1)
+            elif "default" in schema:
+                return schema["default"]
             else:
                 return 0.1
         
         elif prop_type == "boolean":
-            return False
+            if "default" in schema:
+                return schema["default"]
+            else:
+                return False
+        
+        elif prop_type == "null":
+            return None
         
         else:
             return "example_value"
