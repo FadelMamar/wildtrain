@@ -37,7 +37,7 @@ class JobInfo:
     logs: list = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-
+#TODO replace with dramatiq https://dramatiq.io/motivation.html#compared-to
 class JobManager:
     """Manages background jobs and their status."""
     

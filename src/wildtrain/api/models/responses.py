@@ -12,6 +12,7 @@ class TrainingResponse(JobResponse):
     model_path: Optional[str] = Field(default=None, description="Path to trained model")
     logs_path: Optional[str] = Field(default=None, description="Path to training logs")
     metrics: Optional[Dict[str, Any]] = Field(default=None, description="Training metrics")
+    job_id: Optional[str] = Field(default=None, description="Job ID")
 
 
 class EvaluationResponse(BaseResponse):
@@ -20,6 +21,7 @@ class EvaluationResponse(BaseResponse):
     results_path: Optional[str] = Field(default=None, description="Path to evaluation results")
     confusion_matrix: Optional[Dict[str, Any]] = Field(default=None, description="Confusion matrix")
     class_metrics: Optional[Dict[str, Any]] = Field(default=None, description="Per-class metrics")
+    job_id: Optional[str] = Field(default=None, description="Job ID")
 
 
 class PipelineResponse(JobResponse):

@@ -68,60 +68,7 @@ async def get_config_template(config_type: str) -> TemplateResponse:
         logger.info(f"Generating template for config type: {config_type}")
         
         # Simulate template generation
-        templates = {
-            "classification": """
-dataset:
-  root_data_directory: "./data"
-  dataset_type: "roi"
-  input_size: 224
-  batch_size: 32
-  num_workers: 4
-  stats:
-    mean: [0.485, 0.456, 0.406]
-    std: [0.229, 0.224, 0.225]
-model:
-  backbone: "resnet50"
-  pretrained: true
-  dropout: 0.2
-train:
-  epochs: 100
-  lr: 0.001
-  batch_size: 32
-""",
-            "detection": """
-dataset:
-  root_data_directory: "./data"
-  dataset_type: "roi"
-  input_size: 640
-  batch_size: 16
-model_type: "yolo"
-detection_model_config:
-  imgsz: 640
-  device: "cpu"
-train:
-  epochs: 100
-  lr: 0.01
-  batch_size: 16
-""",
-            "classification_eval": """
-classifier: "./models/classifier.ckpt"
-split: "val"
-device: "cpu"
-batch_size: 32
-dataset:
-  root_data_directory: "./data"
-""",
-            "detection_eval": """
-weights:
-  localizer: "./models/detector.pt"
-data: "./data/data.yaml"
-device: "cpu"
-eval:
-  imgsz: 640
-  split: "val"
-  batch_size: 8
-"""
-        }
+        templates = ...
         
         template = templates.get(config_type, "# Configuration template for " + config_type)
         

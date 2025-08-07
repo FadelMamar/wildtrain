@@ -3,8 +3,9 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import logging
+from pydantic import Field
 
 logger = logging.getLogger(__name__)
 
