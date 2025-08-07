@@ -604,12 +604,9 @@ class PatchDataset(torch.utils.data.Dataset):
             
             # Apply single class binarization if enabled
             if self.load_as_single_class:
-                if self._is_wildlife_class(original_class_id):
-                    class_id = 1  # wildlife
-                    class_name = self.single_class_name
-                else:
-                    class_id = 0  # background
-                    class_name = self.background_class_name
+                # background is 0, wildlife is 1
+                class_id = 0 if original_class_id < 0 else 1
+                class_name = self.background_class_name if class_id == 0 else self.single_class_name
             else:
                 # Multi-class: use original class
                 class_id = original_class_id + 1  # offset for background
@@ -753,10 +750,8 @@ class PatchDataset(torch.utils.data.Dataset):
         
         # Apply single class binarization if enabled
         if self.load_as_single_class:
-            if self._is_wildlife_class(original_label):
-                label = 1  # wildlife
-            else:
-                label = 0  # background
+            # background is 0, wildlife is 1
+            label = 0 if original_label < 0 else 1
         else:
             # Multi-class: offset class id by 1 to account for background class (-1)
             label = original_label + 1 
