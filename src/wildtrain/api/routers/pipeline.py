@@ -18,6 +18,7 @@ from ..models.responses import (
 from ..utils.background_tasks import job_manager, create_background_job, JobStatus
 from ..utils.error_handling import JobNotFoundError
 from ..dependencies import get_logger
+from ..services.pipeline_service import PipelineService
 
 logger = get_logger("pipeline")
 
@@ -27,8 +28,19 @@ router = APIRouter()
 @router.post("/classification", response_model=PipelineResponse)
 async def run_classification_pipeline(request: ClassificationPipelineRequest) -> PipelineResponse:
     """Run classification pipeline."""
-    
+
     try:
+        if request.template_only:
+            # Return template instead of pipeline
+            template = PipelineService.generate_classification_pipeline_template()
+            return PipelineResponse(
+                success=True,
+                message="Classification pipeline template generated",
+                job_id="template",
+                status="completed",
+                progress=1.0
+            )
+
         # Create background job for pipeline
         job_id = create_background_job(
             task_func=_run_classification_pipeline_task,
@@ -41,7 +53,7 @@ async def run_classification_pipeline(request: ClassificationPipelineRequest) ->
                 "config": request.config.model_dump()
             }
         )
-        
+
         return PipelineResponse(
             success=True,
             message="Classification pipeline job created",
@@ -49,7 +61,7 @@ async def run_classification_pipeline(request: ClassificationPipelineRequest) ->
             status="pending",
             progress=0.0
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to create classification pipeline job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -58,8 +70,19 @@ async def run_classification_pipeline(request: ClassificationPipelineRequest) ->
 @router.post("/detection", response_model=PipelineResponse)
 async def run_detection_pipeline(request: DetectionPipelineRequest) -> PipelineResponse:
     """Run detection pipeline."""
-    
+
     try:
+        if request.template_only:
+            # Return template instead of pipeline
+            template = PipelineService.generate_detection_pipeline_template()
+            return PipelineResponse(
+                success=True,
+                message="Detection pipeline template generated",
+                job_id="template",
+                status="completed",
+                progress=1.0
+            )
+
         # Create background job for pipeline
         job_id = create_background_job(
             task_func=_run_detection_pipeline_task,
@@ -72,7 +95,7 @@ async def run_detection_pipeline(request: DetectionPipelineRequest) -> PipelineR
                 "config": request.config.model_dump()
             }
         )
-        
+
         return PipelineResponse(
             success=True,
             message="Detection pipeline job created",
@@ -80,7 +103,7 @@ async def run_detection_pipeline(request: DetectionPipelineRequest) -> PipelineR
             status="pending",
             progress=0.0
         )
-        
+
     except Exception as e:
         logger.error(f"Failed to create detection pipeline job: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -89,16 +112,16 @@ async def run_detection_pipeline(request: DetectionPipelineRequest) -> PipelineR
 @router.get("/status/{job_id}", response_model=JobDetailResponse)
 async def get_pipeline_status(job_id: str) -> JobDetailResponse:
     """Get pipeline job status."""
-    
+
     job = job_manager.get_job(job_id)
     if not job:
         raise JobNotFoundError(job_id)
-    
+
     # Calculate duration if job is completed
     duration = None
     if job.completed_at and job.started_at:
         duration = (job.completed_at - job.started_at).total_seconds()
-    
+
     return JobDetailResponse(
         success=True,
         message=f"Pipeline job {job_id} status retrieved",
@@ -122,9 +145,9 @@ async def list_pipeline_jobs(
     offset: int = 0
 ) -> JobListResponse:
     """List pipeline jobs."""
-    
+
     jobs = job_manager.get_jobs()
-    
+
     # Filter by status if specified
     if status:
         try:
@@ -132,11 +155,11 @@ async def list_pipeline_jobs(
             jobs = [job for job in jobs if job.status == status_enum]
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-    
+
     # Apply pagination
     total_count = len(jobs)
     jobs = jobs[offset:offset + limit]
-    
+
     # Convert to dict format
     job_dicts = []
     for job in jobs:
@@ -147,7 +170,7 @@ async def list_pipeline_jobs(
             "progress": job.progress,
             "metadata": job.metadata
         })
-    
+
     return JobListResponse(
         success=True,
         message=f"Retrieved {len(job_dicts)} pipeline jobs",
@@ -160,18 +183,18 @@ async def list_pipeline_jobs(
 @router.post("/cancel", response_model=JobDetailResponse)
 async def cancel_pipeline_job(request: JobCancelRequest) -> JobDetailResponse:
     """Cancel a pipeline job."""
-    
+
     success = job_manager.cancel_job(request.job_id)
     if not success:
         raise HTTPException(
             status_code=400,
             detail=f"Could not cancel job {request.job_id}. Job may not exist or may not be cancellable."
         )
-    
+
     job = job_manager.get_job(request.job_id)
     if not job:
         raise JobNotFoundError(request.job_id)
-    
+
     return JobDetailResponse(
         success=True,
         message=f"Pipeline job {request.job_id} cancelled successfully",
@@ -189,44 +212,29 @@ async def cancel_pipeline_job(request: JobCancelRequest) -> JobDetailResponse:
 
 # Background task functions
 def _run_classification_pipeline_task(config: Any, debug: bool, verbose: bool) -> Dict[str, Any]:
-    """Background task for classification pipeline."""
-    # TODO: Implement actual pipeline logic using WildTrain CLI
-    logger.info("Starting classification pipeline task")
+    """Background task for classification pipeline using actual CLI integration."""
+    logger.info("Starting classification pipeline task with CLI integration")
     
-    # Simulate pipeline execution
-    import time
-    time.sleep(3)  # Simulate work
-    
-    return {
-        "results_dir": "/path/to/pipeline/results",
-        "training_results": {
-            "model_path": "/path/to/trained/model.ckpt",
-            "metrics": {"accuracy": 0.95}
-        },
-        "evaluation_results": {
-            "metrics": {"accuracy": 0.93},
-            "results_path": "/path/to/evaluation/results"
-        }
-    }
+    try:
+        # Use the pipeline service to run actual CLI pipeline
+        results = PipelineService.run_classification_pipeline(config)
+        logger.info("Classification pipeline completed successfully")
+        return results
+    except Exception as e:
+        logger.error(f"Classification pipeline failed: {e}")
+        raise
 
 
 def _run_detection_pipeline_task(config: Any, debug: bool, verbose: bool) -> Dict[str, Any]:
-    """Background task for detection pipeline."""
-    # TODO: Implement actual pipeline logic using WildTrain CLI
-    logger.info("Starting detection pipeline task")
+    """Background task for detection pipeline using actual CLI integration."""
+    logger.info("Starting detection pipeline task with CLI integration")
     
-    # Simulate pipeline execution
-    import time
-    time.sleep(3)  # Simulate work
-    
-    return {
-        "results_dir": "/path/to/pipeline/results",
-        "training_results": {
-            "model_path": "/path/to/trained/detector.pt",
-            "metrics": {"mAP": 0.85}
-        },
-        "evaluation_results": {
-            "metrics": {"mAP": 0.83},
-            "results_path": "/path/to/evaluation/results"
-        }
-    }
+    try:
+        # Use the pipeline service to run actual CLI pipeline
+        results = PipelineService.run_detection_pipeline(config)
+        logger.info("Detection pipeline completed successfully")
+        return results
+    except Exception as e:
+        logger.error(f"Detection pipeline failed: {e}")
+        raise
+

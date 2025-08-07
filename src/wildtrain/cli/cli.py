@@ -237,10 +237,12 @@ def get_dataset_stats(
         console.print(f"  📏 Std: {stats['std']}")
 
         if output_file:
-            with open(output_file, "w") as f:
+            with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(stats, f, indent=2)
             
             console.print(f"  💾 Statistics saved to: {output_file}")
+        
+        return stats
 
 
 @app.command()
