@@ -139,9 +139,23 @@ def train_detector(
     log_file = ROOT / "logs" / "train_detector" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    cfg = OmegaConf.load(config)
-    console.print(OmegaConf.to_yaml(cfg))
-    UltralyticsDetectionTrainer(DictConfig(cfg)).run()
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_detection_config(config)
+        console.print(f"[bold green]✓[/bold green] Configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        UltralyticsDetectionTrainer(DictConfig(cfg)).run()
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Training failed: {str(e)}")
+        raise typer.Exit(1)
 
 @app.command()
 def get_dataset_stats(
@@ -214,11 +228,26 @@ def run_detection_pipeline(
     log_file = ROOT / "logs" / "run_detection_pipeline" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    
-    pipeline = DetectionPipeline(str(config))
-    results = pipeline.run()
-    console.print("\n[bold blue]Detection pipeline completed. Evaluation results:[/bold blue]")
-    console.print(results)
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_pipeline_config(config, pipeline_type="detection")
+        console.print(f"[bold green]✓[/bold green] Detection pipeline configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        pipeline = DetectionPipeline(str(config))
+        results = pipeline.run()
+        console.print("\n[bold blue]Detection pipeline completed. Evaluation results:[/bold blue]")
+        console.print(results)
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Pipeline failed: {str(e)}")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -231,11 +260,26 @@ def run_classification_pipeline(
     log_file = ROOT / "logs" / "run_classification_pipeline" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-
-    pipeline = ClassificationPipeline(str(config))
-    results = pipeline.run()
-    console.print("\n[bold blue]Classification pipeline completed. Evaluation results:[/bold blue]")
-    console.print(results)
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_pipeline_config(config, pipeline_type="classification")
+        console.print(f"[bold green]✓[/bold green] Classification pipeline configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        pipeline = ClassificationPipeline(str(config))
+        results = pipeline.run()
+        console.print("\n[bold blue]Classification pipeline completed. Evaluation results:[/bold blue]")
+        console.print(results)
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Pipeline failed: {str(e)}")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -272,45 +316,56 @@ def visualize_detector_predictions(
     
     console.print(f"[bold green]Loading visualization config from:[/bold green] {config}")
     
-    # Load configuration
-    cfg = OmegaConf.load(config)
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_visualization_config(config)
+        console.print(f"[bold green]✓[/bold green] Visualization configuration validated successfully")
         
-    console.print(OmegaConf.to_yaml(cfg))
-    
-    # Extract configuration values
-    dataset_name = cfg.fiftyone.dataset_name
-    prediction_field = cfg.fiftyone.prediction_field
-    
-    localizer_cfg = cfg.model.localizer
-    classifier_cfg = cfg.model.classifier
-    processing_cfg = cfg.processing
-    
-    console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
-    
-    # Create localizer with config
-    localizer = UltralyticsLocalizer.from_config(localizer_cfg)
-    
-    # Create classifier if checkpoint provided
-    classifier = None
-    if classifier_cfg.checkpoint is not None:
-        console.print(f"[bold blue]Loading classifier from:[/bold blue] {classifier_cfg.checkpoint}")
-        classifier = GenericClassifier.load_from_checkpoint(str(classifier_cfg.checkpoint))
-    
-    # Create detector
-    detector = Detector(localizer=localizer, classifier=classifier)
-    
-    log_file = ROOT / "logs" / "visualize_detector_predictions" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
-    setup_logging(log_file=log_file)
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        # Extract configuration values
+        dataset_name = cfg.fiftyone.dataset_name
+        prediction_field = cfg.fiftyone.prediction_field
+        
+        localizer_cfg = cfg.model.localizer
+        classifier_cfg = cfg.model.classifier
+        processing_cfg = cfg.processing
+        
+        console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
+        
+        # Create localizer with config
+        localizer = UltralyticsLocalizer.from_config(localizer_cfg)
+        
+        # Create classifier if checkpoint provided
+        classifier = None
+        if classifier_cfg.checkpoint is not None:
+            console.print(f"[bold blue]Loading classifier from:[/bold blue] {classifier_cfg.checkpoint}")
+            classifier = GenericClassifier.load_from_checkpoint(str(classifier_cfg.checkpoint))
+        
+        # Create detector
+        detector = Detector(localizer=localizer, classifier=classifier)
+        
+        log_file = ROOT / "logs" / "visualize_detector_predictions" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        setup_logging(log_file=log_file)
 
-    add_predictions_from_detector(
-        dataset_name=dataset_name,
-        detector=detector,
-        imgsz=localizer_cfg.imgsz,
-        prediction_field=prediction_field,
-        batch_size=processing_cfg.batch_size,
-        debug=processing_cfg.debug,
-    )
-    console.print(f"[bold blue]Detector predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+        add_predictions_from_detector(
+            dataset_name=dataset_name,
+            detector=detector,
+            imgsz=localizer_cfg.imgsz,
+            prediction_field=prediction_field,
+            batch_size=processing_cfg.batch_size,
+            debug=processing_cfg.debug,
+        )
+        console.print(f"[bold blue]Detector predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Visualization failed: {str(e)}")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -324,13 +379,29 @@ def evaluate_detector(
     log_file = ROOT / "logs" / "evaluate_detector" / f"evaluate_detector_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    if model_type == "yolo":
-        evaluator = UltralyticsEvaluator(config=str(config))
-    else:
-        raise ValueError(f"Invalid detector type: {model_type}")
-    results = evaluator.evaluate(debug=False)
-    console.print(f"\n[bold blue]{type} Evaluation Results:[/bold blue]")
-    console.print(results)
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_detection_config(config)
+        console.print(f"[bold green]✓[/bold green] Detection evaluation configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        if model_type == "yolo":
+            evaluator = UltralyticsEvaluator(config=str(config))
+        else:
+            raise ValueError(f"Invalid detector type: {model_type}")
+        results = evaluator.evaluate(debug=False)
+        console.print(f"\n[bold blue]{model_type} Evaluation Results:[/bold blue]")
+        console.print(results)
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Evaluation failed: {str(e)}")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -343,9 +414,25 @@ def evaluate_classifier(
     log_file = ROOT / "logs" / "evaluate_classifier" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    evaluator = ClassificationEvaluator(str(config))
-    results = evaluator.evaluate(debug=False)
-    console.print("\n[bold blue]Classifier Evaluation Results:[/bold blue]")
-    console.print(results)
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_classification_config(config)
+        console.print(f"[bold green]✓[/bold green] Classification evaluation configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        evaluator = ClassificationEvaluator(str(config))
+        results = evaluator.evaluate(debug=False)
+        console.print("\n[bold blue]Classifier Evaluation Results:[/bold blue]")
+        console.print(results)
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Evaluation failed: {str(e)}")
+        raise typer.Exit(1)
 
 

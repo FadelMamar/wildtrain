@@ -4,15 +4,36 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Literal, Union
 from pydantic import BaseModel, Field, field_validator
 from pydantic.types import DirectoryPath, FilePath
+import yaml
 
 
 class BaseConfig(BaseModel):
     """Base configuration class with common fields."""
     
-    model_config = {
-        "arbitrary_types_allowed": True,
-        "validate_assignment": True
-    }
+    class Config:
+        arbitrary_types_allowed = True
+        validate_assignment = True
+    
+    @classmethod
+    def from_yaml(cls, yaml_path: Path) -> "BaseConfig":
+        """Create config from YAML file."""
+        if not yaml_path.exists():
+            raise ValueError(f"YAML file does not exist: {yaml_path}")
+        
+        with open(yaml_path, 'r', encoding='utf-8') as f:
+            data = yaml.safe_load(f)
+        
+        if data is None:
+            data = {}
+        
+        return cls(**data)
+    
+    def to_yaml(self, yaml_path: Path) -> None:
+        """Save config to YAML file."""
+        yaml_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(yaml_path, 'w', encoding='utf-8') as f:
+            yaml.dump(self.model_dump(), f, default_flow_style=False, indent=2)
 
 
 class LoggingConfig(BaseConfig):
@@ -214,22 +235,11 @@ class MMDetConfig(BaseConfig):
 class DetectionConfig(BaseConfig):
     """Complete detection configuration."""
     model_type: Literal["yolo", "mmdet"] = Field(description="Detection model type")
-    model_config: Union[YoloConfig, MMDetConfig] = Field(description="Model configuration")
+    detection_model_config: Union[YoloConfig, MMDetConfig] = Field(description="Model configuration")
     dataset: DatasetConfig = Field(description="Dataset configuration")
     train: TrainingConfig = Field(description="Training configuration")
     checkpoint: CheckpointConfig = Field(description="Checkpoint configuration")
     mlflow: MLflowConfig = Field(description="MLflow configuration")
-    
-    @field_validator('model_config')
-    @classmethod
-    def validate_model_type_match(cls, v, values):
-        if 'model_type' in values:
-            model_type = values['model_type']
-            if model_type == "yolo" and not isinstance(v, YoloConfig):
-                raise ValueError("model_config must be YoloConfig for yolo model_type")
-            elif model_type == "mmdet" and not isinstance(v, MMDetConfig):
-                raise ValueError("model_config must be MMDetConfig for mmdet model_type")
-        return v
 
 
 class FiftyOneConfig(BaseConfig):
@@ -272,7 +282,7 @@ class TrainPipelineConfig(BaseConfig):
     @classmethod
     def validate_config_file(cls, v):
         if not v.exists():
-            raise ValueError(f"Config file does not exist: {v}")
+            raise ValueError(f"Training config file does not exist: {v}")
         return v
 
 
@@ -285,24 +295,158 @@ class EvalPipelineConfig(BaseConfig):
     @classmethod
     def validate_config_file(cls, v):
         if not v.exists():
-            raise ValueError(f"Config file does not exist: {v}")
+            raise ValueError(f"Evaluation config file does not exist: {v}")
         return v
 
 
 class PipelineConfig(BaseConfig):
     """Base pipeline configuration."""
-    disable_train: bool = Field(default=False, description="Disable training")
+    disable_train: bool = Field(default=False, description="Disable training pipeline")
     train: TrainPipelineConfig = Field(description="Training configuration")
-    disable_eval: bool = Field(default=False, description="Disable evaluation")
+    disable_eval: bool = Field(default=False, description="Disable evaluation pipeline")
     eval: EvalPipelineConfig = Field(description="Evaluation configuration")
-    results_dir: Path = Field(description="Results directory")
+    results_dir: Path = Field(description="Results directory for pipeline outputs")
+    
+    @field_validator('results_dir')
+    @classmethod
+    def validate_results_dir(cls, v):
+        # Ensure results directory exists or can be created
+        v.mkdir(parents=True, exist_ok=True)
+        return v
+    
+    @field_validator('train', 'eval')
+    @classmethod
+    def validate_pipeline_configs(cls, v, values):
+        # Validate that at least one pipeline is enabled
+        if 'disable_train' in values and 'disable_eval' in values:
+            if values['disable_train'] and values['disable_eval']:
+                raise ValueError("At least one pipeline (train or eval) must be enabled")
+        return v
+    
+    def is_train_enabled(self) -> bool:
+        """Check if training pipeline is enabled."""
+        return not self.disable_train
+    
+    def is_eval_enabled(self) -> bool:
+        """Check if evaluation pipeline is enabled."""
+        return not self.disable_eval
+    
+    def get_enabled_pipelines(self) -> List[str]:
+        """Get list of enabled pipeline names."""
+        pipelines = []
+        if self.is_train_enabled():
+            pipelines.append("train")
+        if self.is_eval_enabled():
+            pipelines.append("eval")
+        return pipelines
+    
+    def validate_pipeline_files_exist(self) -> None:
+        """Validate that all referenced config files exist."""
+        if self.is_train_enabled() and not self.train.config.exists():
+            raise ValueError(f"Training config file does not exist: {self.train.config}")
+        if self.is_eval_enabled() and not self.eval.config.exists():
+            raise ValueError(f"Evaluation config file does not exist: {self.eval.config}")
 
 
 class ClassificationPipelineConfig(PipelineConfig):
-    """Classification pipeline configuration."""
-    pass
+    """Classification pipeline configuration.
+    
+    This configuration manages the classification training and evaluation pipeline.
+    It supports both training and evaluation phases with separate configurations.
+    
+    Example:
+        config = ClassificationPipelineConfig(
+            disable_train=False,
+            train=TrainPipelineConfig(
+                config=Path("configs/classification/classification_train.yaml"),
+                debug=False
+            ),
+            disable_eval=True,
+            eval=EvalPipelineConfig(
+                config=Path("configs/classification/classification_eval.yaml"),
+                debug=False
+            ),
+            results_dir=Path("results/classification")
+        )
+    """
+    
+    @field_validator('results_dir')
+    @classmethod
+    def validate_classification_results_dir(cls, v):
+        # Ensure classification-specific results directory
+        v = v / "classification" if v.name != "classification" else v
+        v.mkdir(parents=True, exist_ok=True)
+        return v
+    
+    def get_classification_results_path(self) -> Path:
+        """Get the classification-specific results path."""
+        return self.results_dir / "classification" if self.results_dir.name != "classification" else self.results_dir
+    
+    @classmethod
+    def create_default(cls, results_dir: Path = Path("results/classification")) -> "ClassificationPipelineConfig":
+        """Create a default classification pipeline configuration."""
+        return cls(
+            disable_train=False,
+            train=TrainPipelineConfig(
+                config=Path("configs/classification/classification_train.yaml"),
+                debug=False
+            ),
+            disable_eval=True,
+            eval=EvalPipelineConfig(
+                config=Path("configs/classification/classification_eval.yaml"),
+                debug=False
+            ),
+            results_dir=results_dir
+        )
 
 
 class DetectionPipelineConfig(PipelineConfig):
-    """Detection pipeline configuration."""
-    pass
+    """Detection pipeline configuration.
+    
+    This configuration manages the detection training and evaluation pipeline.
+    It supports both training and evaluation phases with separate configurations.
+    
+    Example:
+        config = DetectionPipelineConfig(
+            disable_train=False,
+            train=TrainPipelineConfig(
+                config=Path("configs/detection/yolo_configs/yolo.yaml"),
+                debug=False
+            ),
+            disable_eval=True,
+            eval=EvalPipelineConfig(
+                config=Path("configs/detection/yolo_configs/yolo_eval.yaml"),
+                debug=False
+            ),
+            results_dir=Path("results/yolo")
+        )
+    """
+    
+    @field_validator('results_dir')
+    @classmethod
+    def validate_detection_results_dir(cls, v):
+        # Ensure detection-specific results directory
+        v = v / "detection" if v.name != "detection" else v
+        v.mkdir(parents=True, exist_ok=True)
+        return v
+    
+    def get_detection_results_path(self) -> Path:
+        """Get the detection-specific results path."""
+        return self.results_dir / "detection" if self.results_dir.name != "detection" else self.results_dir
+    
+    @classmethod
+    def create_default(cls, results_dir: Path = Path("results/yolo")) -> "DetectionPipelineConfig":
+        """Create a default detection pipeline configuration."""
+        return cls(
+            disable_train=False,
+            train=TrainPipelineConfig(
+                config=Path("configs/detection/yolo_configs/yolo.yaml"),
+                debug=False
+            ),
+            disable_eval=True,
+            eval=EvalPipelineConfig(
+                config=Path("configs/detection/yolo_configs/yolo_eval.yaml"),
+                debug=False
+            ),
+            results_dir=results_dir
+        )
