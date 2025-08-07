@@ -10,22 +10,21 @@ import logging
 from pathlib import Path
 from typing import Optional
 from omegaconf import OmegaConf, DictConfig
-import subprocess
-import platform
 from datetime import datetime
 
 
-from .trainers.classification_trainer import ClassifierTrainer
-from .trainers.detection_trainer import UltralyticsDetectionTrainer
-from .utils.logging import ROOT
-from .pipeline.detection_pipeline import DetectionPipeline
-from .pipeline.classification_pipeline import ClassificationPipeline
-from .visualization import add_predictions_from_classifier, add_predictions_from_detector
-from .evaluators.ultralytics import UltralyticsEvaluator
-from .evaluators.classification import ClassificationEvaluator
-from .models.detector import Detector
-from .models.localizer import UltralyticsLocalizer
-from .models.classifier import GenericClassifier
+from ..trainers.classification_trainer import ClassifierTrainer
+from ..trainers.detection_trainer import UltralyticsDetectionTrainer
+from ..utils.logging import ROOT
+from ..pipeline.detection_pipeline import DetectionPipeline
+from ..pipeline.classification_pipeline import ClassificationPipeline
+from ..visualization import add_predictions_from_classifier, add_predictions_from_detector
+from ..evaluators.ultralytics import UltralyticsEvaluator
+from ..evaluators.classification import ClassificationEvaluator
+from ..models.detector import Detector
+from ..models.localizer import UltralyticsLocalizer
+from ..models.classifier import GenericClassifier
+from .config_loader import ConfigLoader, ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
 
 # Create Typer app
 app = typer.Typer(
@@ -77,6 +76,34 @@ def main(
 
 
 @app.command()
+def validate_config(
+    config: Path = typer.Argument(..., help="Path to configuration file"),
+    config_type: str = typer.Option(
+        "classification", 
+        "--type", 
+        "-t", 
+        help="Configuration type (classification, detection, visualization, pipeline)"
+    ),
+) -> None:
+    """Validate a configuration file using Pydantic models."""
+    console.print(f"[bold green]Validating {config_type} configuration:[/bold green] {config}")
+    
+    try:
+        is_valid = ConfigLoader.validate_config_file(config, config_type)
+        if is_valid:
+            console.print(f"[bold green]✓[/bold green] Configuration is valid!")
+        else:
+            console.print(f"[bold red]✗[/bold red] Configuration validation failed!")
+            raise typer.Exit(1)
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Unexpected error: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command()
 def train_classifier(
     config: Path = typer.Argument(..., help="Path to training configuration file"),
 ) -> None:
@@ -85,9 +112,23 @@ def train_classifier(
     log_file = ROOT / "logs" / "train_classifier" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
 
-    cfg = OmegaConf.load(config)
-    console.print(OmegaConf.to_yaml(cfg))
-    ClassifierTrainer(DictConfig(cfg)).run()
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_classification_config(config)
+        console.print(f"[bold green]✓[/bold green] Configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        ClassifierTrainer(DictConfig(cfg)).run()
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Training failed: {str(e)}")
+        raise typer.Exit(1)
 
 @app.command()
 def train_detector(
@@ -308,5 +349,3 @@ def evaluate_classifier(
     console.print(results)
 
 
-if __name__ == "__main__":
-    app()
