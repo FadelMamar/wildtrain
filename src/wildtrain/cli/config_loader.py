@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 import yaml
+from enum import Enum
 
 from .models import (
     ClassificationConfig,
@@ -25,6 +26,7 @@ console = Console()
 
 T = TypeVar('T', bound=BaseModel)
 
+ROOT = Path(__file__).parents[3]
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
@@ -39,6 +41,16 @@ class ConfigFileNotFoundError(Exception):
 class ConfigParseError(Exception):
     """Raised when configuration file cannot be parsed."""
     pass
+
+class ConfigType(Enum):
+    """Configuration types."""
+    CLASSIFICATION = "classification"
+    DETECTION = "detection"
+    CLASSIFICATION_EVAL = "classification_eval"
+    DETECTION_EVAL = "detection_eval"
+    CLASSIFICATION_VISUALIZATION = "classification_visualization"
+    DETECTION_VISUALIZATION = "detection_visualization"
+    PIPELINE = "pipeline"
 
 
 class ConfigLoader:
@@ -180,19 +192,19 @@ class ConfigLoader:
     def validate_config_file(config_path: Path, config_type: str) -> bool:
         """Validate a configuration file using the appropriate Pydantic model."""
         try:
-            if config_type == "classification":
+            if config_type == ConfigType.CLASSIFICATION:
                 ConfigLoader.load_classification_config(config_path)
-            elif config_type == "detection":
+            elif config_type == ConfigType.DETECTION:
                 ConfigLoader.load_detection_config(config_path)
-            elif config_type == "classification_eval":
+            elif config_type == ConfigType.CLASSIFICATION_EVAL:
                 ConfigLoader.load_classification_eval_config(config_path)
-            elif config_type == "detection_eval":
+            elif config_type == ConfigType.DETECTION_EVAL:
                 ConfigLoader.load_detection_eval_config(config_path)
-            elif config_type == "classification_visualization":
+            elif config_type == ConfigType.CLASSIFICATION_VISUALIZATION:
                 ConfigLoader.load_classification_visualization_config(config_path)
-            elif config_type == "detection_visualization":
+            elif config_type == ConfigType.DETECTION_VISUALIZATION:
                 ConfigLoader.load_detection_visualization_config(config_path)
-            elif config_type == "pipeline":
+            elif config_type == ConfigType.PIPELINE:
                 # Pipeline configs need pipeline_type parameter
                 raise ValueError("Pipeline configs require pipeline_type parameter. Use validate_pipeline_config_file instead.")
             else:

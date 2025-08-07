@@ -583,6 +583,6 @@ def show_config_template(
         raise typer.Exit(1)
 
 # Add API subcommand
-from ..api import cli_app
+#from ..api.main import cli_app
 
-app.add_typer(cli_app, name="api", help="API server commands")
+#app.add_typer(cli_app, name="api", help="API server commands")
