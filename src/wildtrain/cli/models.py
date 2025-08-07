@@ -450,3 +450,312 @@ class DetectionPipelineConfig(PipelineConfig):
             ),
             results_dir=results_dir
         )
+
+
+class ClassificationEvalConfig(BaseConfig):
+    """Classification evaluation configuration.
+    
+    This configuration is specifically for evaluation workflows and has a simpler
+    structure compared to training configurations.
+    
+    Example:
+        config = ClassificationEvalConfig(
+            classifier="path/to/checkpoint.ckpt",
+            split="val",
+            device="cpu",
+            batch_size=4,
+            dataset=ClassificationEvalDatasetConfig(
+                root_data_directory="path/to/data",
+                single_class=SingleClassConfig(
+                    enable=True,
+                    background_class_name="background",
+                    single_class_name="wildlife",
+                    keep_classes=None,
+                    discard_classes=["vegetation", "termite mound", "rocks", "other", "label"]
+                )
+            )
+        )
+    """
+    classifier: Path = Field(description="Path to the classifier checkpoint (.ckpt) file")
+    split: Literal["train", "val", "test"] = Field(default="val", description="Dataset split to evaluate on")
+    device: str = Field(default="cpu", description="Device to run evaluation on (cpu, cuda)")
+    batch_size: int = Field(default=4, description="Batch size for evaluation")
+    dataset: "ClassificationEvalDatasetConfig" = Field(description="Dataset configuration for evaluation")
+    
+    @field_validator('classifier')
+    @classmethod
+    def validate_checkpoint_exists(cls, v):
+        if not v.exists():
+            raise ValueError(f"Classifier checkpoint does not exist: {v}")
+        return v
+    
+    @field_validator('device')
+    @classmethod
+    def validate_device(cls, v):
+        valid_devices = ["cpu", "cuda", "cuda:0", "cuda:1"]
+        if v not in valid_devices:
+            raise ValueError(f"Device must be one of {valid_devices}, got: {v}")
+        return v
+    
+    @field_validator('batch_size')
+    @classmethod
+    def validate_batch_size(cls, v):
+        if v <= 0:
+            raise ValueError(f"Batch size must be positive, got: {v}")
+        return v
+
+
+class ClassificationEvalDatasetConfig(BaseConfig):
+    """Dataset configuration for classification evaluation."""
+    root_data_directory: Path = Field(description="Root directory containing the dataset")
+    single_class: Optional["SingleClassConfig"] = Field(default=None, description="Single class configuration")
+    
+    @field_validator('root_data_directory')
+    @classmethod
+    def validate_data_directory_exists(cls, v):
+        if not v.exists():
+            raise ValueError(f"Dataset directory does not exist: {v}")
+        return v
+
+
+class SingleClassConfig(BaseConfig):
+    """Single class configuration for evaluation."""
+    enable: bool = Field(description="Whether to enable single class mode")
+    background_class_name: str = Field(description="Name of the background class")
+    single_class_name: str = Field(description="Name of the single class")
+    keep_classes: Optional[List[str]] = Field(default=None, description="Classes to keep (if None, all classes kept)")
+    discard_classes: Optional[List[str]] = Field(default=None, description="Classes to discard")
+    
+    @field_validator('background_class_name', 'single_class_name')
+    @classmethod
+    def validate_class_names(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Class name cannot be empty")
+        return v.strip()
+
+
+class DetectionEvalConfig(BaseConfig):
+    """Detection evaluation configuration.
+    
+    This configuration is specifically for evaluation workflows and has a different
+    structure compared to training configurations.
+    
+    Example:
+        config = DetectionEvalConfig(
+            weights=DetectionWeightsConfig(
+                localizer="path/to/localizer.pt",
+                classifier=None
+            ),
+            data="path/to/data.yaml",
+            device="cpu",
+            metrics=DetectionMetricsConfig(
+                average="macro",
+                class_agnostic=False
+            ),
+            eval=DetectionEvalParamsConfig(
+                imgsz=640,
+                split="val",
+                iou=0.6,
+                single_cls=True,
+                half=False,
+                batch_size=8,
+                num_workers=0,
+                rect=False,
+                stride=32,
+                task="detect",
+                classes=None,
+                cache=False,
+                multi_modal=False,
+                conf=0.1,
+                max_det=300,
+                verbose=False,
+                augment=False
+            )
+        )
+    """
+    weights: "DetectionWeightsConfig" = Field(description="Model weights configuration")
+    data: Path = Field(description="Path to the data config YAML (YOLO format)")
+    device: str = Field(default="cpu", description="Device to run evaluation on")
+    metrics: "DetectionMetricsConfig" = Field(description="Evaluation metrics configuration")
+    eval: "DetectionEvalParamsConfig" = Field(description="Evaluation parameters")
+    
+    @field_validator('data')
+    @classmethod
+    def validate_data_config_exists(cls, v):
+        if not v.exists():
+            raise ValueError(f"Data config file does not exist: {v}")
+        return v
+    
+    @field_validator('device')
+    @classmethod
+    def validate_device(cls, v):
+        valid_devices = ["cpu", "cuda", "cuda:0", "cuda:1"]
+        if v not in valid_devices:
+            raise ValueError(f"Device must be one of {valid_devices}, got: {v}")
+        return v
+
+
+class DetectionWeightsConfig(BaseConfig):
+    """Weights configuration for detection evaluation."""
+    localizer: Path = Field(description="Path to the localizer weights file")
+    classifier: Optional[Path] = Field(default=None, description="Path to the classifier weights file (optional)")
+    
+    @field_validator('localizer')
+    @classmethod
+    def validate_localizer_exists(cls, v):
+        if not v.exists():
+            raise ValueError(f"Localizer weights file does not exist: {v}")
+        return v
+    
+    @field_validator('classifier')
+    @classmethod
+    def validate_classifier_exists(cls, v):
+        if v is not None and not v.exists():
+            raise ValueError(f"Classifier weights file does not exist: {v}")
+        return v
+
+
+class DetectionMetricsConfig(BaseConfig):
+    """Metrics configuration for detection evaluation."""
+    average: Literal["macro", "micro", "weighted"] = Field(default="macro", description="Averaging method for metrics")
+    class_agnostic: bool = Field(default=False, description="Whether to use class-agnostic evaluation")
+
+
+class DetectionEvalParamsConfig(BaseConfig):
+    """Evaluation parameters for detection."""
+    imgsz: int = Field(default=640, description="Image size for evaluation")
+    split: Literal["train", "val", "test"] = Field(default="val", description="Split to evaluate on")
+    iou: float = Field(default=0.6, description="IoU threshold for evaluation")
+    single_cls: bool = Field(default=True, description="Treat dataset as single-class")
+    half: bool = Field(default=False, description="Use half precision")
+    batch_size: int = Field(default=8, description="Batch size for DataLoader")
+    num_workers: int = Field(default=0, description="Number of DataLoader workers")
+    rect: bool = Field(default=False, description="Use rectangular batches")
+    stride: int = Field(default=32, description="Model stride")
+    task: Literal["detect", "classify", "segment"] = Field(default="detect", description="Task type")
+    classes: Optional[List[int]] = Field(default=None, description="Optionally restrict to specific class indices")
+    cache: bool = Field(default=False, description="Use cache for images/labels")
+    multi_modal: bool = Field(default=False, description="Not using multi-modal data")
+    conf: float = Field(default=0.1, description="Confidence threshold for evaluation")
+    max_det: int = Field(default=300, description="Maximum detections per image")
+    verbose: bool = Field(default=False, description="Verbosity level")
+    augment: bool = Field(default=False, description="Use Test Time Augmentation")
+    
+    @field_validator('imgsz')
+    @classmethod
+    def validate_imgsz(cls, v):
+        if v <= 0:
+            raise ValueError(f"Image size must be positive, got: {v}")
+        return v
+    
+    @field_validator('iou')
+    @classmethod
+    def validate_iou(cls, v):
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"IoU must be between 0.0 and 1.0, got: {v}")
+        return v
+    
+    @field_validator('batch_size')
+    @classmethod
+    def validate_batch_size(cls, v):
+        if v <= 0:
+            raise ValueError(f"Batch size must be positive, got: {v}")
+        return v
+    
+    @field_validator('num_workers')
+    @classmethod
+    def validate_num_workers(cls, v):
+        if v < 0:
+            raise ValueError(f"Number of workers must be non-negative, got: {v}")
+        return v
+    
+    @field_validator('stride')
+    @classmethod
+    def validate_stride(cls, v):
+        if v <= 0:
+            raise ValueError(f"Stride must be positive, got: {v}")
+        return v
+    
+    @field_validator('conf')
+    @classmethod
+    def validate_conf(cls, v):
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"Confidence must be between 0.0 and 1.0, got: {v}")
+        return v
+    
+    @field_validator('max_det')
+    @classmethod
+    def validate_max_det(cls, v):
+        if v <= 0:
+            raise ValueError(f"Max detections must be positive, got: {v}")
+        return v
+
+
+class ClassificationVisualizationConfig(BaseConfig):
+    """Classification visualization configuration.
+    
+    This configuration is specifically for classifier visualization workflows.
+    
+    Example:
+        config = ClassificationVisualizationConfig(
+            dataset_name="my_dataset",
+            checkpoint_path="path/to/checkpoint.ckpt",
+            prediction_field="classification_predictions",
+            batch_size=32,
+            device="cpu",
+            debug=False
+        )
+    """
+    dataset_name: str = Field(description="Name of the FiftyOne dataset to use or create")
+    checkpoint_path: Path = Field(description="Path to the classifier checkpoint (.ckpt) file")
+    prediction_field: str = Field(default="classification_predictions", description="Field name to store predictions in FiftyOne samples")
+    batch_size: int = Field(default=32, description="Batch size for prediction inference")
+    device: str = Field(default="cpu", description="Device to run inference on (e.g., 'cpu' or 'cuda')")
+    debug: bool = Field(default=False, description="If set, only process a small number of samples for debugging")
+    
+    @field_validator('checkpoint_path')
+    @classmethod
+    def validate_checkpoint_exists(cls, v):
+        if not v.exists():
+            raise ValueError(f"Classifier checkpoint does not exist: {v}")
+        return v
+    
+    @field_validator('device')
+    @classmethod
+    def validate_device(cls, v):
+        valid_devices = ["cpu", "cuda", "cuda:0", "cuda:1"]
+        if v not in valid_devices:
+            raise ValueError(f"Device must be one of {valid_devices}, got: {v}")
+        return v
+    
+    @field_validator('batch_size')
+    @classmethod
+    def validate_batch_size(cls, v):
+        if v <= 0:
+            raise ValueError(f"Batch size must be positive, got: {v}")
+        return v
+    
+    @field_validator('dataset_name')
+    @classmethod
+    def validate_dataset_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Dataset name cannot be empty")
+        return v.strip()
+    
+    @field_validator('prediction_field')
+    @classmethod
+    def validate_prediction_field(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Prediction field name cannot be empty")
+        return v.strip()
+
+
+# Update forward references
+ClassificationEvalConfig.model_rebuild()
+ClassificationEvalDatasetConfig.model_rebuild()
+SingleClassConfig.model_rebuild()
+DetectionEvalConfig.model_rebuild()
+DetectionWeightsConfig.model_rebuild()
+DetectionMetricsConfig.model_rebuild()
+DetectionEvalParamsConfig.model_rebuild()
+ClassificationVisualizationConfig.model_rebuild()

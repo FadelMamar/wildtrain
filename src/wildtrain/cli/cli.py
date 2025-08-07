@@ -6,6 +6,7 @@ from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.panel import Panel
 from rich.text import Text
+import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -25,6 +26,7 @@ from ..models.detector import Detector
 from ..models.localizer import UltralyticsLocalizer
 from ..models.classifier import GenericClassifier
 from .config_loader import ConfigLoader, ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
+from ..data.classification_datamodule import ClassificationDataModule, compute_dataset_stats
 
 # Create Typer app
 app = typer.Typer(
@@ -82,7 +84,7 @@ def validate_config(
         "classification", 
         "--type", 
         "-t", 
-        help="Configuration type (classification, detection, visualization, pipeline)"
+        help="Configuration type (classification, detection, classification_eval, detection_eval, classification_visualization, detection_visualization, pipeline)"
     ),
 ) -> None:
     """Validate a configuration file using Pydantic models."""
@@ -105,9 +107,21 @@ def validate_config(
 
 @app.command()
 def train_classifier(
-    config: Path = typer.Argument(..., help="Path to training configuration file"),
+    config: Path = typer.Option(..., help="Path to training configuration file"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of training")
 ) -> None:
     """Train a classification model."""
+    if template:
+        console.print(f"[bold green]Showing default classification configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("classification")
+            console.print(f"\n[bold blue]Default classification configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
+    
     console.print(f"[bold green]Training classifier with config:[/bold green] {config}")
     log_file = ROOT / "logs" / "train_classifier" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
@@ -132,9 +146,21 @@ def train_classifier(
 
 @app.command()
 def train_detector(
-    config: Path = typer.Argument(..., help="Path to training configuration file"),
+    config: Path = typer.Option(..., help="Path to training configuration file"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of training")
 ) -> None:
     """Train a detection model."""
+    if template:
+        console.print(f"[bold green]Showing default detection configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("detection")
+            console.print(f"\n[bold blue]Default detection configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
+    
     console.print(f"[bold green]Training detector with config:[/bold green] {config}")
     log_file = ROOT / "logs" / "train_detector" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
     setup_logging(log_file=log_file)
@@ -166,8 +192,7 @@ def get_dataset_stats(
     ),
 ) -> None:
     """Get dataset statistics and information (mean, std)."""
-    from wildtrain.data.classification_datamodule import ClassificationDataModule, compute_dataset_stats
-    import json
+    
 
     console.print(f"[bold green]Analyzing dataset at:[/bold green] {data_dir}")
 
@@ -220,9 +245,21 @@ def get_dataset_stats(
 
 @app.command()
 def run_detection_pipeline(
-    config: Path = typer.Argument(..., help="Path to unified detection pipeline YAML config"),
+    config: Path = typer.Option(..., help="Path to unified detection pipeline YAML config"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full detection pipeline (train + eval) for object detection."""
+    if template:
+        console.print(f"[bold green]Showing default detection pipeline configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("detection_pipeline")
+            console.print(f"\n[bold blue]Default detection pipeline configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
+    
     console.print(f"[bold green]Running detection pipeline with config:[/bold green] {config}")
 
     log_file = ROOT / "logs" / "run_detection_pipeline" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
@@ -252,9 +289,21 @@ def run_detection_pipeline(
 
 @app.command()
 def run_classification_pipeline(
-    config: Path = typer.Argument(..., help="Path to unified classification pipeline YAML config"),
+    config: Path = typer.Option(..., help="Path to unified classification pipeline YAML config"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full classification pipeline (train + eval) for image classification."""
+    if template:
+        console.print(f"[bold green]Showing default classification pipeline configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("classification_pipeline")
+            console.print(f"\n[bold blue]Default classification pipeline configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
+    
     console.print(f"[bold green]Running classification pipeline with config:[/bold green] {config}")
 
     log_file = ROOT / "logs" / "run_classification_pipeline" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
@@ -284,42 +333,86 @@ def run_classification_pipeline(
 
 @app.command()
 def visualize_classifier_predictions(
-    dataset_name: str = typer.Argument(..., help="Name of the FiftyOne dataset to use or create"),
-    checkpoint_path: Path = typer.Option(...,"--weights", help="Path to the classifier checkpoint (.ckpt) file"),
-    prediction_field: str = typer.Option("classification_predictions", "--prediction-field", help="Field name to store predictions in FiftyOne samples"),
-    batch_size: int = typer.Option(32, help="Batch size for prediction inference"),
-    device: str = typer.Option("cpu", "--device", help="Device to run inference on (e.g., 'cpu' or 'cuda')"),
-    debug: bool = typer.Option(False, "--debug", help="If set, only process a small number of samples for debugging")
+    config: Path = typer.Option(..., help="Path to classification visualization configuration YAML file"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of visualization")
 ) -> None:
-    """Upload classifier predictions to a FiftyOne dataset for visualization."""
-    console.print(f"[bold green]Uploading predictions to FiftyOne dataset:[/bold green] {dataset_name}")
+    """Upload classifier predictions to a FiftyOne dataset for visualization using YAML configuration."""
+    if template:
+        console.print(f"[bold green]Showing default classification visualization configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("classification_visualization")
+            console.print(f"\n[bold blue]Default classification visualization configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
     
-    log_file = ROOT / "logs" / "visualize_classifier_predictions" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
-    setup_logging(log_file=log_file)
+    console.print(f"[bold green]Loading classification visualization config from:[/bold green] {config}")
+    
+    try:
+        # Load and validate configuration using Pydantic
+        validated_config = ConfigLoader.load_classification_visualization_config(config)
+        console.print(f"[bold green]✓[/bold green] Classification visualization configuration validated successfully")
+        
+        # Convert validated config back to DictConfig for backward compatibility
+        cfg = OmegaConf.create(validated_config.model_dump())
+        console.print(OmegaConf.to_yaml(cfg))
+        
+        # Extract configuration values
+        dataset_name = cfg.dataset_name
+        checkpoint_path = cfg.checkpoint_path
+        prediction_field = cfg.prediction_field
+        batch_size = cfg.batch_size
+        device = cfg.device
+        debug = cfg.debug
+        
+        console.print(f"[bold green]Uploading classifier predictions to FiftyOne dataset:[/bold green] {dataset_name}")
+        
+        log_file = ROOT / "logs" / "visualize_classifier_predictions" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
+        setup_logging(log_file=log_file)
 
-    add_predictions_from_classifier(
-        dataset_name=dataset_name,
-        checkpoint_path=str(checkpoint_path),
-        prediction_field=prediction_field,
-        batch_size=batch_size,
-        device=device,
-        debug=debug,
-    )
-    console.print(f"[bold blue]Predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+        add_predictions_from_classifier(
+            dataset_name=dataset_name,
+            checkpoint_path=str(checkpoint_path),
+            prediction_field=prediction_field,
+            batch_size=batch_size,
+            device=device,
+            debug=debug,
+        )
+        console.print(f"[bold blue]Classifier predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
+        
+    except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
+        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Visualization failed: {str(e)}")
+        raise typer.Exit(1)
 
 
 @app.command()
 def visualize_detector_predictions(
-    config: Path = typer.Argument(..., help="Path to visualization configuration YAML file"),
+    config: Path = typer.Option(..., help="Path to visualization configuration YAML file"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of visualization")
 ) -> None:
     """Upload detector predictions to a FiftyOne dataset for visualization using YAML configuration."""
+    if template:
+        console.print(f"[bold green]Showing default detection visualization configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("detection_visualization")
+            console.print(f"\n[bold blue]Default detection visualization configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
     
     console.print(f"[bold green]Loading visualization config from:[/bold green] {config}")
     
     try:
         # Load and validate configuration using Pydantic
-        validated_config = ConfigLoader.load_visualization_config(config)
-        console.print(f"[bold green]✓[/bold green] Visualization configuration validated successfully")
+        validated_config = ConfigLoader.load_detection_visualization_config(config)
+        console.print(f"[bold green]✓[/bold green] Detection visualization configuration validated successfully")
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
@@ -370,10 +463,22 @@ def visualize_detector_predictions(
 
 @app.command()
 def evaluate_detector(
-    config: Path = typer.Argument(..., help="Path to YOLO evaluation YAML config file"),
+    config: Path = typer.Option(..., help="Path to YOLO evaluation YAML config file"),
     model_type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
+    template: bool = typer.Option(False, "--template", help="Show default configuration template instead of evaluation")
 ) -> None:
     """Evaluate a YOLO model using a YAML config file."""
+    if template:
+        console.print(f"[bold green]Showing default detection evaluation configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("detection_eval")
+            console.print(f"\n[bold blue]Default detection evaluation configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
+    
     console.print(f"[bold green]Running {model_type} evaluation with config:[/bold green] {config}")
 
     log_file = ROOT / "logs" / "evaluate_detector" / f"evaluate_detector_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
@@ -381,7 +486,7 @@ def evaluate_detector(
 
     try:
         # Load and validate configuration using Pydantic
-        validated_config = ConfigLoader.load_detection_config(config)
+        validated_config = ConfigLoader.load_detection_eval_config(config)
         console.print(f"[bold green]✓[/bold green] Detection evaluation configuration validated successfully")
         
         # Convert validated config back to DictConfig for backward compatibility
@@ -406,9 +511,21 @@ def evaluate_detector(
 
 @app.command()
 def evaluate_classifier(
-    config: Path = typer.Argument(..., help="Path to classification evaluation YAML config file"),
+    config: Path = typer.Option(..., help="Path to classification evaluation YAML config file"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of evaluation")
 ) -> None:
     """Evaluate a classifier using a YAML config file."""
+    if template:
+        console.print(f"[bold green]Showing default classification evaluation configuration template...[/bold green]")
+        try:
+            template_yaml = ConfigLoader.generate_default_config("classification_eval")
+            console.print(f"\n[bold blue]Default classification evaluation configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template_yaml}```")
+            return
+        except Exception as e:
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            raise typer.Exit(1)
+    
     console.print(f"[bold green]Running classifier evaluation with config:[/bold green] {config}")
 
     log_file = ROOT / "logs" / "evaluate_classifier" / f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
@@ -416,7 +533,7 @@ def evaluate_classifier(
 
     try:
         # Load and validate configuration using Pydantic
-        validated_config = ConfigLoader.load_classification_config(config)
+        validated_config = ConfigLoader.load_classification_eval_config(config)
         console.print(f"[bold green]✓[/bold green] Classification evaluation configuration validated successfully")
         
         # Convert validated config back to DictConfig for backward compatibility
@@ -433,6 +550,34 @@ def evaluate_classifier(
         raise typer.Exit(1)
     except Exception as e:
         console.print(f"[bold red]✗[/bold red] Evaluation failed: {str(e)}")
+        raise typer.Exit(1)
+
+
+@app.command()
+def show_config_template(
+    config_type: str = typer.Argument(..., help="Configuration type to show template for"),
+    save_to: Optional[Path] = typer.Option(None, "--save", "-s", help="Save template to file")
+) -> None:
+    """Show a default YAML configuration template for the specified config type."""
+    console.print(f"[bold green]Generating {config_type} configuration template...[/bold green]")
+    
+    try:
+        template = ConfigLoader.generate_default_config(config_type)
+        
+        if save_to:
+            save_to.parent.mkdir(parents=True, exist_ok=True)
+            with open(save_to, 'w', encoding='utf-8') as f:
+                f.write(template)
+            console.print(f"[bold green]✓[/bold green] Template saved to: {save_to}")
+        else:
+            console.print(f"\n[bold blue]Default {config_type} configuration template:[/bold blue]")
+            console.print(f"\n```yaml\n{template}```")
+            
+    except ValueError as e:
+        console.print(f"[bold red]✗[/bold red] {str(e)}")
+        raise typer.Exit(1)
+    except Exception as e:
+        console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
         raise typer.Exit(1)
 
 
