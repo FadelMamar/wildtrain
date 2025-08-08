@@ -19,12 +19,14 @@ class TrainingService:
     """Service for handling training operations."""
 
     @staticmethod
-    def train_classifier(config: ClassificationConfig) -> None:
+    def train_classifier(config: Dict[str, Any]) -> None:
         """Train a classification model using the CLI."""
         try:
+            validated_config = ClassificationConfig(**config)
+            
             # Create a temporary config file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                config_dict = config.model_dump()
+                config_dict = validated_config.model_dump()
                 yaml_content = OmegaConf.to_yaml(OmegaConf.create(config_dict))
                 f.write(yaml_content)
                 temp_config_path = f.name
@@ -32,7 +34,7 @@ class TrainingService:
             logger.info(f"Created temporary config file: {temp_config_path}")
 
             # Run the CLI command
-            train_classifier(config=Path(temp_config_path))
+            train_classifier(config=Path(temp_config_path),template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -45,20 +47,26 @@ class TrainingService:
             raise
 
     @staticmethod
-    def train_detector(config: DetectionConfig) -> None:
+    def train_detector(config: Dict[str, Any]) -> None:
         """Train a detection model using the CLI."""
         try:
+            
+            validated_config = DetectionConfig(**config)
+            
             # Create a temporary config file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                config_dict = config.model_dump()
-                yaml_content = OmegaConf.to_yaml(OmegaConf.create(config_dict))
+                if isinstance(validated_config, dict):
+                    yaml_content = OmegaConf.to_yaml(OmegaConf.create(validated_config))
+                else:
+                    config_dict = validated_config.model_dump()
+                    yaml_content = OmegaConf.to_yaml(OmegaConf.create(config_dict))
                 f.write(yaml_content)
                 temp_config_path = f.name
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
             # Run the CLI command
-            train_detector(config=Path(temp_config_path))
+            train_detector(config=Path(temp_config_path),template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)

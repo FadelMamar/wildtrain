@@ -34,12 +34,10 @@ async def train_classifier(request: ClassificationTrainingRequest) -> TrainingRe
         job_id = create_background_job(
             task_func=_train_classifier_task,
             config=request.config,
-            debug=request.debug,
-            verbose=request.verbose,
             metadata={
                 "task_type": "classification_training",
                 "model_type": "classifier",
-                "config": request.config.model_dump()
+                "config": request.config
             }
         )
 
@@ -65,12 +63,10 @@ async def train_detector(request: DetectionTrainingRequest) -> TrainingResponse:
         job_id = create_background_job(
             task_func=_train_detector_task,
             config=request.config,
-            debug=request.debug,
-            verbose=request.verbose,
             metadata={
                 "task_type": "detection_training",
                 "model_type": "detector",
-                "config": request.config.model_dump()
+                "config": request.config
             }
         )
 

@@ -79,7 +79,7 @@ model:
 
 train:
   batch_size: ${dataset.batch_size}
-  epochs: 20
+  epochs: 1
   lr: 0.0001
   label_smoothing: 0.0
   weight_decay: 0.0001

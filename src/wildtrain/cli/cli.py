@@ -29,6 +29,7 @@ from .config_loader import ConfigLoader
 from ..data.classification_datamodule import ClassificationDataModule, compute_dataset_stats
 from ..shared.validation import validate_config_file, ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
 from ..shared.config_types import ConfigType
+import traceback
 
 # Create Typer app
 app = typer.Typer(
@@ -182,7 +183,7 @@ def train_detector(
         console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]✗[/bold red] Training failed: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Training failed: {traceback.format_exc()}")
         raise typer.Exit(1)
 
 @app.command()

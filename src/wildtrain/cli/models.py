@@ -3,7 +3,6 @@
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Literal, Union
 from pydantic import BaseModel, Field, field_validator
-from pydantic.types import DirectoryPath, FilePath
 import yaml
 
 
@@ -15,9 +14,9 @@ class BaseConfig(BaseModel):
         validate_assignment = True
     
     @classmethod
-    def from_yaml(cls, yaml_path: Path) -> "BaseConfig":
+    def from_yaml(cls, yaml_path: str) -> "BaseConfig":
         """Create config from YAML file."""
-        if not yaml_path.exists():
+        if not Path(yaml_path).exists():
             raise ValueError(f"YAML file does not exist: {yaml_path}")
         
         with open(yaml_path, 'r', encoding='utf-8') as f:
@@ -28,7 +27,7 @@ class BaseConfig(BaseModel):
         
         return cls(**data)
     
-    def to_yaml(self, yaml_path: Path) -> None:
+    def to_yaml(self, yaml_path: str) -> None:
         """Save config to YAML file."""
         yaml_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -39,7 +38,7 @@ class BaseConfig(BaseModel):
 class LoggingConfig(BaseConfig):
     """Logging configuration."""
     mlflow: bool = True
-    log_dir: Path = Field(default=Path("./logs"), description="Logging directory")
+    log_dir: str = Field(default=str("./logs"), description="Logging directory")
     experiment_name: str = Field(default="wildtrain", description="MLflow experiment name")
     run_name: str = Field(default="default", description="MLflow run name")
 
@@ -104,7 +103,7 @@ class SingleClassConfig(BaseConfig):
 
 class DatasetConfig(BaseConfig):
     """Dataset configuration."""
-    root_data_directory: Path = Field(description="Root data directory path")
+    root_data_directory: str = Field(description="Root data directory path")
     dataset_type: Literal["roi", "crop"] = Field(description="Dataset type")
     input_size: int = Field(gt=0, description="Input image size")
     batch_size: int = Field(gt=0, description="Batch size")
@@ -125,7 +124,7 @@ class DatasetConfig(BaseConfig):
     @field_validator('root_data_directory')
     @classmethod
     def validate_data_directory(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Data directory does not exist: {v}")
         return v
     
@@ -175,7 +174,7 @@ class CheckpointConfig(BaseConfig):
     save_top_k: int = Field(default=1, ge=0, description="Number of best models to save")
     mode: Literal["min", "max"] = Field(description="Monitor mode")
     save_last: bool = Field(default=True, description="Save last checkpoint")
-    dirpath: Path = Field(description="Checkpoint directory")
+    dirpath: str = Field(description="Checkpoint directory")
     patience: int = Field(default=10, gt=0, description="Early stopping patience")
     save_weights_only: bool = Field(default=True, description="Save only weights")
     filename: str = Field(description="Checkpoint filename pattern")
@@ -208,7 +207,7 @@ class ClassificationConfig(BaseConfig):
 
 class YoloConfig(BaseConfig):
     """YOLO model configuration."""
-    weights: Optional[Path] = Field(default=None, description="Model weights path")
+    weights: Optional[str] = Field(default=None, description="Model weights path")
     imgsz: int = Field(gt=0, description="Input image size")
     device: str = Field(default="cpu", description="Device to use")
     conf_thres: float = Field(default=0.2, ge=0.0, le=1.0, description="Confidence threshold")
@@ -227,30 +226,127 @@ class YoloConfig(BaseConfig):
 
 class MMDetConfig(BaseConfig):
     """MMDetection model configuration."""
-    config_file: Path = Field(description="MMDetection config file path")
-    checkpoint: Optional[Path] = Field(default=None, description="Model checkpoint path")
+    config_file: str = Field(description="MMDetection config file path")
+    checkpoint: Optional[str] = Field(default=None, description="Model checkpoint path")
     device: str = Field(default="cpu", description="Device to use")
     
     @field_validator('config_file')
     @classmethod
     def validate_config_file(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Config file does not exist: {v}")
         return v
 
 
+# Add new configuration classes before DetectionConfig
+
+class YoloDatasetConfig(BaseConfig):
+    """YOLO dataset configuration."""
+    data_cfg: Optional[str] = Field(default=None, description="str to data configuration file")
+    load_as_single_class: bool = Field(default=True, description="Load dataset as single class")
+
+class YoloCurriculumConfig(BaseConfig):
+    """YOLO curriculum learning configuration."""
+    data_cfg: Optional[str] = Field(default=None, description="Curriculum data configuration")
+    ratios: List[float] = Field(default_factory=list, description="Curriculum ratios")
+    epochs: List[int] = Field(default_factory=list, description="Curriculum epochs")
+    freeze: List[int] = Field(default_factory=list, description="Curriculum freeze layers")
+    lr0s: List[float] = Field(default_factory=list, description="Curriculum learning rates")
+    save_dir: Optional[str] = Field(default=None, description="Curriculum save directory")
+
+class YoloPretrainingConfig(BaseConfig):
+    """YOLO pretraining configuration."""
+    data_cfg: Optional[str] = Field(default=None, description="Pretraining data configuration")
+    epochs: int = Field(default=10, description="Pretraining epochs")
+    lr0: float = Field(default=0.0001, description="Pretraining learning rate")
+    lrf: float = Field(default=0.1, description="Pretraining learning rate factor")
+    freeze: int = Field(default=0, description="Pretraining freeze layers")
+    save_dir: Optional[str] = Field(default=None, description="Pretraining save directory")
+
+class YoloModelConfig(BaseConfig):
+    """YOLO model configuration."""
+    pretrained: bool = Field(default=True, description="Use pretrained model")
+    weights: Optional[str] = Field(default=None, description="Model weights path")
+    architecture_file: Optional[str] = Field(default=None, description="Model architecture file")
+
+class YoloCustomConfig(BaseConfig):
+    """YOLO custom configuration."""
+    image_encoder_backbone: str = Field(default="timm/vit_base_patch14_dinov2.lvd142m", description="Image encoder backbone")
+    image_encoder_backbone_source: str = Field(default="timm", description="Image encoder backbone source")
+    count_regressor_layers: int = Field(default=13, description="Count regressor layers")
+    area_regressor_layers: int = Field(default=10, description="Area regressor layers")
+    roi_classifier_layers: Dict[str, int] = Field(default_factory=dict, description="ROI classifier layers")
+    fp_tp_loss_weight: float = Field(default=0.5, description="FP/TP loss weight")
+    count_loss_weight: float = Field(default=0.5, description="Count loss weight")
+    area_loss_weight: float = Field(default=0.25, description="Area loss weight")
+    box_size: int = Field(default=224, description="Box size")
+
+class YoloTrainConfig(BaseConfig):
+    """YOLO training configuration."""
+    batch: int = Field(description="Training batch size")
+    epochs: int = Field(description="Number of training epochs")
+    optimizer: str = Field(default="AdamW", description="Optimizer")
+    lr0: float = Field(description="Initial learning rate")
+    lrf: float = Field(description="Learning rate factor")
+    momentum: float = Field(default=0.937, description="Momentum")
+    weight_decay: float = Field(default=0.0005, description="Weight decay")
+    warmup_epochs: int = Field(default=1, description="Warmup epochs")
+    cos_lr: bool = Field(default=True, description="Cosine learning rate")
+    patience: int = Field(default=10, description="Patience")
+    iou: float = Field(default=0.65, description="IoU threshold")
+    imgsz: int = Field(description="Image size")
+    
+    # Loss weights
+    box: float = Field(default=3.5, description="Box loss weight")
+    cls: float = Field(default=1.0, description="Class loss weight")
+    dfl: float = Field(default=1.5, description="DFL loss weight")
+    
+    device: str = Field(default="cpu", description="Device")
+    workers: int = Field(default=0, description="Number of workers")
+    
+    # Augmentations
+    degrees: float = Field(default=45.0, description="Rotation degrees")
+    mixup: float = Field(default=0.0, description="Mixup probability")
+    cutmix: float = Field(default=0.5, description="Cutmix probability")
+    shear: float = Field(default=10.0, description="Shear")
+    copy_paste: float = Field(default=0.0, description="Copy paste probability")
+    erasing: float = Field(default=0.0, description="Erasing probability")
+    scale: float = Field(default=0.2, description="Scale")
+    fliplr: float = Field(default=0.5, description="Horizontal flip probability")
+    flipud: float = Field(default=0.5, description="Vertical flip probability")
+    hsv_h: float = Field(default=0.0, description="HSV hue")
+    hsv_s: float = Field(default=0.1, description="HSV saturation")
+    hsv_v: float = Field(default=0.1, description="HSV value")
+    translate: float = Field(default=0.2, description="Translation")
+    mosaic: float = Field(default=0.0, description="Mosaic probability")
+    multi_scale: bool = Field(default=False, description="Multi-scale")
+    perspective: float = Field(default=0.0, description="Perspective")
+    
+    deterministic: bool = Field(default=False, description="Deterministic")
+    seed: int = Field(default=41, description="Random seed")
+    freeze: int = Field(default=9, description="Freeze layers")
+    cache: bool = Field(default=False, description="Cache")
+
+class YoloMLflowConfig(BaseConfig):
+    """YOLO MLflow configuration."""
+    tracking_uri: str = Field(default="http://127.0.0.1:5000", description="MLflow tracking URI")
+
 class DetectionConfig(BaseConfig):
-    """Complete detection configuration."""
-    model_type: Literal["yolo", "mmdet"] = Field(description="Detection model type")
-    detection_model_config: Union[YoloConfig, MMDetConfig] = Field(description="Model configuration")
-    dataset: DatasetConfig = Field(description="Dataset configuration")
-    train: TrainingConfig = Field(description="Training configuration")
-    checkpoint: CheckpointConfig = Field(description="Checkpoint configuration")
-    mlflow: MLflowConfig = Field(description="MLflow configuration")
+    """Complete detection configuration matching the YAML structure."""
+    dataset: YoloDatasetConfig = Field(description="Dataset configuration")
+    curriculum: YoloCurriculumConfig = Field(description="Curriculum learning configuration")
+    pretraining: YoloPretrainingConfig = Field(description="Pretraining configuration")
+    model: YoloModelConfig = Field(description="Model configuration")
+    name: str = Field(description="Run name")
+    project: str = Field(description="Project name")
+    mlflow: YoloMLflowConfig = Field(description="MLflow configuration")
+    use_custom_yolo: bool = Field(default=False, description="Use custom YOLO")
+    custom_yolo_kwargs: YoloCustomConfig = Field(description="Custom YOLO configuration")
+    train: YoloTrainConfig = Field(description="Training configuration")
 
 class ClassifierConfig(BaseConfig):
     """Classifier configuration for visualization."""
-    checkpoint: Optional[Path] = Field(default=None, description="Classifier checkpoint path")
+    checkpoint: Optional[str] = Field(default=None, description="Classifier checkpoint path")
 
 class DetectionVisualizationConfig(BaseConfig):
     """Visualization configuration."""
@@ -265,26 +361,26 @@ class DetectionVisualizationConfig(BaseConfig):
 
 class TrainPipelineConfig(BaseConfig):
     """Training pipeline configuration."""
-    config: Path = Field(description="Training config file path")
+    config: str = Field(description="Training config file path")
     debug: bool = Field(default=False, description="Debug mode")
     
     @field_validator('config')
     @classmethod
     def validate_config_file(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Training config file does not exist: {v}")
         return v
 
 
 class EvalPipelineConfig(BaseConfig):
     """Evaluation pipeline configuration."""
-    config: Path = Field(description="Evaluation config file path")
+    config: str = Field(description="Evaluation config file path")
     debug: bool = Field(default=False, description="Debug mode")
     
     @field_validator('config')
     @classmethod
     def validate_config_file(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Evaluation config file does not exist: {v}")
         return v
 
@@ -295,13 +391,13 @@ class PipelineConfig(BaseConfig):
     train: TrainPipelineConfig = Field(description="Training configuration")
     disable_eval: bool = Field(default=False, description="Disable evaluation pipeline")
     eval: EvalPipelineConfig = Field(description="Evaluation configuration")
-    results_dir: Path = Field(description="Results directory for pipeline outputs")
+    results_dir: str = Field(description="Results directory for pipeline outputs")
     
     @field_validator('results_dir')
     @classmethod
     def validate_results_dir(cls, v):
         # Ensure results directory exists or can be created
-        v.mkdir(parents=True, exist_ok=True)
+        Path(v).mkdir(parents=True, exist_ok=True)
         return v
     
     @field_validator('train', 'eval')
@@ -332,9 +428,9 @@ class PipelineConfig(BaseConfig):
     
     def validate_pipeline_files_exist(self) -> None:
         """Validate that all referenced config files exist."""
-        if self.is_train_enabled() and not self.train.config.exists():
+        if self.is_train_enabled() and not Path(self.train.config).exists():
             raise ValueError(f"Training config file does not exist: {self.train.config}")
-        if self.is_eval_enabled() and not self.eval.config.exists():
+        if self.is_eval_enabled() and not Path(self.eval.config).exists():
             raise ValueError(f"Evaluation config file does not exist: {self.eval.config}")
 
 
@@ -348,15 +444,15 @@ class ClassificationPipelineConfig(PipelineConfig):
         config = ClassificationPipelineConfig(
             disable_train=False,
             train=TrainPipelineConfig(
-                config=Path("configs/classification/classification_train.yaml"),
+                config=str("configs/classification/classification_train.yaml"),
                 debug=False
             ),
             disable_eval=True,
             eval=EvalPipelineConfig(
-                config=Path("configs/classification/classification_eval.yaml"),
+                config=str("configs/classification/classification_eval.yaml"),
                 debug=False
             ),
-            results_dir=Path("results/classification")
+            results_dir=str("results/classification")
         )
     """
     
@@ -364,26 +460,26 @@ class ClassificationPipelineConfig(PipelineConfig):
     @classmethod
     def validate_classification_results_dir(cls, v):
         # Ensure classification-specific results directory
-        v = v / "classification" if v.name != "classification" else v
-        v.mkdir(parents=True, exist_ok=True)
+        v = Path(v) / "classification" if v.name != "classification" else v
+        Path(v).mkdir(parents=True, exist_ok=True)
         return v
     
-    def get_classification_results_path(self) -> Path:
+    def get_classification_results_path(self) -> str:
         """Get the classification-specific results path."""
-        return self.results_dir / "classification" if self.results_dir.name != "classification" else self.results_dir
+        return Path(self.results_dir) / "classification" if Path(self.results_dir).name != "classification" else self.results_dir
     
     @classmethod
-    def create_default(cls, results_dir: Path = Path("results/classification")) -> "ClassificationPipelineConfig":
+    def create_default(cls, results_dir: str = str("results/classification")) -> "ClassificationPipelineConfig":
         """Create a default classification pipeline configuration."""
         return cls(
             disable_train=False,
             train=TrainPipelineConfig(
-                config=Path("configs/classification/classification_train.yaml"),
+                config=str("configs/classification/classification_train.yaml"),
                 debug=False
             ),
             disable_eval=True,
             eval=EvalPipelineConfig(
-                config=Path("configs/classification/classification_eval.yaml"),
+                config=str("configs/classification/classification_eval.yaml"),
                 debug=False
             ),
             results_dir=results_dir
@@ -400,15 +496,15 @@ class DetectionPipelineConfig(PipelineConfig):
         config = DetectionPipelineConfig(
             disable_train=False,
             train=TrainPipelineConfig(
-                config=Path("configs/detection/yolo_configs/yolo.yaml"),
+                config=str("configs/detection/yolo_configs/yolo.yaml"),
                 debug=False
             ),
             disable_eval=True,
             eval=EvalPipelineConfig(
-                config=Path("configs/detection/yolo_configs/yolo_eval.yaml"),
+                config=str("configs/detection/yolo_configs/yolo_eval.yaml"),
                 debug=False
             ),
-            results_dir=Path("results/yolo")
+            results_dir=str("results/yolo")
         )
     """
     
@@ -416,26 +512,26 @@ class DetectionPipelineConfig(PipelineConfig):
     @classmethod
     def validate_detection_results_dir(cls, v):
         # Ensure detection-specific results directory
-        v = v / "detection" if v.name != "detection" else v
-        v.mkdir(parents=True, exist_ok=True)
+        v = Path(v) / "detection" if Path(v).name != "detection" else v
+        Path(v).mkdir(parents=True, exist_ok=True)
         return v
     
-    def get_detection_results_path(self) -> Path:
+    def get_detection_results_path(self) -> str:
         """Get the detection-specific results path."""
         return self.results_dir / "detection" if self.results_dir.name != "detection" else self.results_dir
     
     @classmethod
-    def create_default(cls, results_dir: Path = Path("results/yolo")) -> "DetectionPipelineConfig":
+    def create_default(cls, results_dir: str = str("results/yolo")) -> "DetectionPipelineConfig":
         """Create a default detection pipeline configuration."""
         return cls(
             disable_train=False,
             train=TrainPipelineConfig(
-                config=Path("configs/detection/yolo_configs/yolo.yaml"),
+                config=str("configs/detection/yolo_configs/yolo.yaml"),
                 debug=False
             ),
             disable_eval=True,
             eval=EvalPipelineConfig(
-                config=Path("configs/detection/yolo_configs/yolo_eval.yaml"),
+                config=str("configs/detection/yolo_configs/yolo_eval.yaml"),
                 debug=False
             ),
             results_dir=results_dir
@@ -466,7 +562,7 @@ class ClassificationEvalConfig(BaseConfig):
             )
         )
     """
-    classifier: Path = Field(description="Path to the classifier checkpoint (.ckpt) file")
+    classifier: str = Field(description="str to the classifier checkpoint (.ckpt) file")
     split: Literal["train", "val", "test"] = Field(default="val", description="Dataset split to evaluate on")
     device: str = Field(default="cpu", description="Device to run evaluation on (cpu, cuda)")
     batch_size: int = Field(default=4, description="Batch size for evaluation")
@@ -476,7 +572,7 @@ class ClassificationEvalConfig(BaseConfig):
     @field_validator('classifier')
     @classmethod
     def validate_checkpoint_exists(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Classifier checkpoint does not exist: {v}")
         return v
     
@@ -498,13 +594,13 @@ class ClassificationEvalConfig(BaseConfig):
 
 class ClassificationEvalDatasetConfig(BaseConfig):
     """Dataset configuration for classification evaluation."""
-    root_data_directory: Path = Field(description="Root directory containing the dataset")
+    root_data_directory: str = Field(description="Root directory containing the dataset")
     single_class: Optional["SingleClassConfig"] = Field(default=None, description="Single class configuration")
     
     @field_validator('root_data_directory')
     @classmethod
     def validate_data_directory_exists(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Dataset directory does not exist: {v}")
         return v
 
@@ -549,7 +645,7 @@ class DetectionEvalConfig(BaseConfig):
         )
     """
     weights: "DetectionWeightsConfig" = Field(description="Model weights configuration")
-    data: Path = Field(description="Path to the data config YAML (YOLO format)")
+    data: str = Field(description="str to the data config YAML (YOLO format)")
     device: str = Field(default="cpu", description="Device to run evaluation on")
     metrics: "DetectionMetricsConfig" = Field(description="Evaluation metrics configuration")
     eval: "DetectionEvalParamsConfig" = Field(description="Evaluation parameters")    
@@ -557,7 +653,7 @@ class DetectionEvalConfig(BaseConfig):
     @field_validator('data')
     @classmethod
     def validate_data_config_exists(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Data config file does not exist: {v}")
         return v
     
@@ -572,20 +668,20 @@ class DetectionEvalConfig(BaseConfig):
 
 class DetectionWeightsConfig(BaseConfig):
     """Weights configuration for detection evaluation."""
-    localizer: Path = Field(description="Path to the localizer weights file")
-    classifier: Optional[Path] = Field(default=None, description="Path to the classifier weights file (optional)")
+    localizer: str = Field(description="str to the localizer weights file")
+    classifier: Optional[str] = Field(default=None, description="str to the classifier weights file (optional)")
     
     @field_validator('localizer')
     @classmethod
     def validate_localizer_exists(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Localizer weights file does not exist: {v}")
         return v
     
     @field_validator('classifier')
     @classmethod
     def validate_classifier_exists(cls, v):
-        if v is not None and not v.exists():
+        if v is not None and not Path(v).exists():
             raise ValueError(f"Classifier weights file does not exist: {v}")
         return v
 
@@ -682,7 +778,7 @@ class ClassificationVisualizationConfig(BaseConfig):
         )
     """
     dataset_name: str = Field(description="Name of the FiftyOne dataset to use or create")
-    checkpoint_path: Path = Field(description="Path to the classifier checkpoint (.ckpt) file")
+    checkpoint_path: str = Field(description="str to the classifier checkpoint (.ckpt) file")
     prediction_field: str = Field(default="classification_predictions", description="Field name to store predictions in FiftyOne samples")
     batch_size: int = Field(default=32, description="Batch size for prediction inference")
     device: str = Field(default="cpu", description="Device to run inference on (e.g., 'cpu' or 'cuda')")
@@ -691,7 +787,7 @@ class ClassificationVisualizationConfig(BaseConfig):
     @field_validator('checkpoint_path')
     @classmethod
     def validate_checkpoint_exists(cls, v):
-        if not v.exists():
+        if not Path(v).exists():
             raise ValueError(f"Classifier checkpoint does not exist: {v}")
         return v
     

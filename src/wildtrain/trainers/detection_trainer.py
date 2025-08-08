@@ -165,7 +165,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             data_cfg = os.path.join(self.save_dir, f"{self.config.name}_merged.yaml")
             merge_data_cfg(self.config.dataset.data_cfg, output_path=data_cfg,single_class=self.config.dataset.load_as_single_class,single_class_name=self.single_class_name)
         else:
-            assert isinstance(self.config.dataset.data_cfg, str), "Curriculum data config must be a list of paths or a single path"
+            assert isinstance(self.config.dataset.data_cfg, (str,Path)), f"data_cfg must be str or path, got {type(self.config.dataset.data_cfg)}"
             data_cfg = self.config.dataset.data_cfg  
 
         remove_label_cache(data_cfg)      

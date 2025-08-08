@@ -3,18 +3,15 @@ Shared fixtures and utilities for API integration tests.
 """
 
 import pytest
-import tempfile
-import shutil
+import traceback
 from pathlib import Path
-from typing import Dict, Any
 from fastapi.testclient import TestClient
-from omegaconf import OmegaConf
 
 from wildtrain.api.main import fastapi_app as app
 from wildtrain.cli.config_loader import ConfigLoader, ROOT
 
 
-def safe_load_config(config_path: Path, loader_method, fallback_config: Dict = None):
+def safe_load_config(config_path: Path, loader_method)->dict:
     """Safely load config with fallback to template or empty config."""
     try:
         validated_config = loader_method(config_path)
@@ -27,16 +24,16 @@ def safe_load_config(config_path: Path, loader_method, fallback_config: Dict = N
                 return {k: convert_paths(v) for k, v in obj.items()}
             elif isinstance(obj, list):
                 return [convert_paths(item) for item in obj]
-            elif hasattr(obj, '__class__') and 'WindowsPath' in str(type(obj)):
+            elif isinstance(obj, Path):
                 return str(obj)
             else:
                 return obj
         
         config_dict = convert_paths(config_dict)
+
         return config_dict
     except Exception as e:
-        print(f"Warning: Could not load config from {config_path}: {e}")
-        return fallback_config or {}
+        raise Exception(f"Warning: Could not load config from {config_path}: {traceback.format_exc()}")
 
 
 @pytest.fixture
@@ -51,8 +48,7 @@ def classification_config():
     config_path = ROOT / "configs" / "classification" / "classification_train.yaml"
     return safe_load_config(
         config_path,
-        ConfigLoader.load_classification_config,
-        
+        ConfigLoader.load_classification_config, 
     )
 
 
@@ -63,7 +59,6 @@ def detection_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_detection_config,
-        
     )
 
 
@@ -74,7 +69,6 @@ def classification_eval_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_classification_eval_config,
-        
     )
 
 
