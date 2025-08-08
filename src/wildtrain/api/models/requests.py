@@ -1,7 +1,7 @@
 """Request models for the WildTrain API."""
 
 from pydantic import BaseModel, Field
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 from pathlib import Path
 
 from ...cli.models import (
@@ -19,12 +19,12 @@ from .common import BaseRequest
 
 class ClassificationTrainingRequest(BaseRequest):
     """Request model for classifier training."""
-    config: ClassificationConfig = Field(description="Training configuration")
+    config: Dict[str, Any] = Field(description="Training configuration")
 
 
 class DetectionTrainingRequest(BaseRequest):
     """Request model for detector training."""
-    config: DetectionConfig = Field(description="Training configuration")
+    config: Dict[str, Any] = Field(description="Training configuration")
 
 
 class ClassificationEvalRequest(BaseRequest):
