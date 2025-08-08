@@ -22,7 +22,7 @@ from typing import Optional
 
 # Import WildTrain modules
 from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
-from wildtrain.data.curriculum.manager import CurriculumConfig
+from wildtrain.cli.models import CurriculumConfig
 from wildtrain.data.filters import ClassificationRebalanceFilter
 
 

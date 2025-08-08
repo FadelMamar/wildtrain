@@ -109,7 +109,7 @@ def validate_config(
 
 @app.command()
 def train_classifier(
-    config: Path = typer.Option("", help="Path to training configuration file"),
+    config: Path = typer.Option("","--config", "-c", help="Path to training configuration file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of training")
 ) -> None:
     """Train a classification model."""
@@ -148,7 +148,7 @@ def train_classifier(
 
 @app.command()
 def train_detector(
-    config: Path = typer.Option(..., help="Path to training configuration file"),
+    config: Path = typer.Option("","--config", "-c", help="Path to training configuration file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of training")
 ) -> None:
     """Train a detection model."""
@@ -249,7 +249,7 @@ def get_dataset_stats(
 
 @app.command()
 def run_detection_pipeline(
-    config: Path = typer.Option("", help="Path to unified detection pipeline YAML config"),
+    config: Path = typer.Option("","--config", "-c", help="Path to unified detection pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full detection pipeline (train + eval) for object detection."""
@@ -276,7 +276,7 @@ def run_detection_pipeline(
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        console.print("cfg:",cfg)
         
         pipeline = DetectionPipeline(str(config))
         results = pipeline.run()
@@ -293,7 +293,7 @@ def run_detection_pipeline(
 
 @app.command()
 def run_classification_pipeline(
-    config: Path = typer.Option("", help="Path to unified classification pipeline YAML config"),
+    config: Path = typer.Option("","--config", "-c", help="Path to unified classification pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full classification pipeline (train + eval) for image classification."""

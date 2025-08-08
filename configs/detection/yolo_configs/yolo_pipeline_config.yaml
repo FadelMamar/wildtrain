@@ -4,15 +4,15 @@
 disable_train: false
 train:
   config: D:\workspace\repos\wildtrain\configs\detection\yolo_configs\yolo.yaml
-  debug: false
+  debug: true
 
 # ----------------------
 # Eval
 # ----------------------
-disable_eval: true
+disable_eval: false
 eval:
   config: D:\workspace\repos\wildtrain\configs\detection\yolo_configs\yolo_eval.yaml
-  debug: false
+  debug: true
 
 # ----------------------
 # Output

@@ -1,12 +1,15 @@
 """
-Curriculum Learning Mixin for Data Modules.
+Curriculum learning mixins for data modules.
 
-This module provides a mixin that can be added to any Lightning DataModule
-to enable difficulty-based curriculum learning functionality.
+This module provides mixin classes that add curriculum learning capabilities
+to existing data modules.
 """
 
-from typing import Optional, Dict, Any, Union
-from .manager import CurriculumConfig, CurriculumManager
+from typing import Optional, Dict, Any
+import lightning as L
+
+from wildtrain.data.curriculum.manager import CurriculumManager
+from wildtrain.cli.models import CurriculumConfig
 
 
 class CurriculumDataModuleMixin:

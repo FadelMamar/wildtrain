@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from wildtrain.trainers.classification_trainer import ClassifierTrainer
 from wildtrain.data import ClassificationDataModule
-from wildtrain.data.curriculum import CurriculumConfig, CurriculumCallback
+from wildtrain.cli.models import CurriculumConfig
 
 
 def test_curriculum_config():

@@ -8,27 +8,11 @@ import math
 import random
 import numpy as np
 from typing import Dict, List, Tuple, Optional, Any
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
 import lightning as L
 
-
-@dataclass
-class CurriculumConfig:
-    """Configuration for curriculum learning."""
-    
-    # General settings
-    enabled: bool = False
-    type: str = "difficulty"  # "difficulty" only
-    
-    # Difficulty-based curriculum
-    difficulty_strategy: str = "linear"  # "linear", "exponential", "step", "random"
-    start_difficulty: float = 0.0
-    end_difficulty: float = 1.0
-    warmup_epochs: int = 0
-    
-    # Logging
-    log_frequency: int = 10
+# Import the Pydantic model for type hints
+from wildtrain.cli.models import CurriculumConfig
 
 
 class DifficultyStrategy(ABC):

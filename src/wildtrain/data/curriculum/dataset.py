@@ -1,31 +1,27 @@
 """
-Simplified Curriculum-Aware Dataset.
+Curriculum-based dataset implementations.
 
-This module provides a clean dataset implementation that supports
-both difficulty-based and multi-scale curriculum learning.
+This module provides dataset classes that support curriculum learning by filtering
+samples based on difficulty levels.
 """
 
-import torch
-from torch.utils.data import Dataset
-from typing import List, Dict, Optional, Tuple, Any, Union
 import numpy as np
+from pathlib import Path
+from typing import Dict, List, Tuple, Optional, Any, Union
 from PIL import Image
+import torch
+import logging
 import supervision as sv
 import albumentations as A
 import cv2
-
 from tqdm import tqdm
-from pathlib import Path
 import json
-import os
 from concurrent.futures import ThreadPoolExecutor
 
-from .manager import CurriculumConfig
-from ..utils import load_all_detection_datasets
+from wildtrain.cli.models import CurriculumConfig
+from wildtrain.data.utils import load_all_detection_datasets
 
-from wildtrain.utils.logging import get_logger
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def group_coco_annotations_by_image_id(
@@ -432,10 +428,10 @@ class PatchDataset(torch.utils.data.Dataset):
             return indices
             
         with tqdm(total=len(self.dataset.image_paths),desc="Computing crop indices",unit="images") as pbar:
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                for result in executor.map(func, iterator()):
-                    crop_indices.extend(result)
-                    pbar.update(1)        
+            #with ThreadPoolExecutor(max_workers=3) as executor:
+            for result in map(func, iterator()):
+                crop_indices.extend(result)
+                pbar.update(1)        
         return crop_indices
     
     def _compute_detection_indices(self, 
@@ -483,10 +479,27 @@ class PatchDataset(torch.utils.data.Dataset):
                 else:
                     y1_crop = max(0, y2_crop - self.crop_size)
             
+            # Additional validation: ensure crop doesn't exceed image boundaries
+            if img_width < self.crop_size:
+                # If image is too narrow, use the entire width
+                x1_crop = 0
+                x2_crop = img_width
+            
+            if img_height < self.crop_size:
+                # If image is too short, use the entire height
+                y1_crop = 0
+                y2_crop = img_height
+            
             # Final validation
             if x2_crop <= x1_crop or y2_crop <= y1_crop:
                 # Skip this detection if crop is invalid
                 continue
+            
+            # Additional safety check: ensure coordinates are within image bounds
+            x1_crop = max(0, min(x1_crop, img_width - 1))
+            y1_crop = max(0, min(y1_crop, img_height - 1))
+            x2_crop = max(x1_crop + 1, min(x2_crop, img_width))
+            y2_crop = max(y1_crop + 1, min(y2_crop, img_height))
                         
             indices.append({
                 'dataset_idx': dataset_idx,
@@ -560,6 +573,9 @@ class PatchDataset(torch.utils.data.Dataset):
         h, w = img_np.shape[:2]
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         
+        # Debug: log the coordinates and image dimensions
+        logger.debug(f"Image dimensions: {w}x{h}, Crop coordinates: {x1}, {y1}, {x2}, {y2}")
+        
 
         
         # Ensure coordinates are within bounds
@@ -567,6 +583,10 @@ class PatchDataset(torch.utils.data.Dataset):
         y1 = max(0, min(y1, h))
         x2 = max(x1, min(x2, w))
         y2 = max(y1, min(y2, h))
+        
+        # Handle edge case where image is exactly crop size
+        if w == self.crop_size and h == self.crop_size:
+            x1, y1, x2, y2 = 0, 0, w, h
         
         # Check if crop is valid
         if x2 <= x1 or y2 <= y1:

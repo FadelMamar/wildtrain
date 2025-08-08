@@ -15,13 +15,15 @@ dataset:
     start_difficulty: 0.0
     end_difficulty: 1.0
     warmup_epochs: 0
-    log_frequency: 10
+    log_frequency: 1
   
   stats:
     mean: [0.554, 0.469, 0.348]
     std: [0.203, 0.173, 0.144]
   
   input_size: 224
+
+  batch_size: 64
 
   transforms:
     train:
@@ -76,7 +78,7 @@ model:
   std: ${dataset.stats.std}
 
 train:
-  batch_size: 64
+  batch_size: ${dataset.batch_size}
   epochs: 20
   lr: 0.0001
   label_smoothing: 0.0

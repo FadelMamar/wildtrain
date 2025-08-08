@@ -139,7 +139,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         if self.config.pretraining.data_cfg:
             self.pretrain(debug=debug)
 
-        if self.config.curriculum.data_cfg > 0:
+        if self.config.curriculum.data_cfg is not None and self.config.curriculum.data_cfg > 0:
             self.curriculum_learning(debug=debug)
         
         else:

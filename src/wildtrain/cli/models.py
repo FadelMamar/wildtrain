@@ -77,12 +77,12 @@ class CurriculumConfig(BaseConfig):
     start_difficulty: float = Field(default=0.0, ge=0.0, le=1.0, description="Starting difficulty")
     end_difficulty: float = Field(default=1.0, ge=0.0, le=1.0, description="Ending difficulty")
     warmup_epochs: int = Field(default=0, ge=0, description="Warmup epochs")
-    log_frequency: int = Field(default=10, ge=1, description="Log frequency")
+    log_frequency: int = Field(default=1, ge=1, description="Log frequency")
     
     @field_validator('end_difficulty')
     @classmethod
-    def validate_end_difficulty(cls, v, values):
-        if 'start_difficulty' in values and v <= values['start_difficulty']:
+    def validate_end_difficulty(cls, v, info):
+        if hasattr(info.data, 'start_difficulty') and v <= info.data.start_difficulty:
             raise ValueError("end_difficulty must be greater than start_difficulty")
         return v
 
@@ -131,8 +131,8 @@ class DatasetConfig(BaseConfig):
     
     @field_validator('crop_size', 'max_tn_crops', 'p_draw_annotations', 'compute_difficulties', 'preserve_aspect_ratio')
     @classmethod
-    def validate_crop_fields(cls, v, values):
-        if 'dataset_type' in values and values['dataset_type'] == 'crop':
+    def validate_crop_fields(cls, v, info):
+        if hasattr(info.data, 'dataset_type') and info.data.dataset_type == 'crop':
             if v is None:
                 raise ValueError(f"Field is required for crop dataset type")
         return v
@@ -185,6 +185,7 @@ class CheckpointConfig(BaseConfig):
 class MLflowConfig(BaseConfig):
     """MLflow configuration."""
     experiment_name: str = Field(description="MLflow experiment name")
+    run_name: str = Field(description="MLflow run name")
 
 
 class ClassificationConfig(BaseConfig):
@@ -197,9 +198,9 @@ class ClassificationConfig(BaseConfig):
     
     @field_validator('model')
     @classmethod
-    def validate_model_dataset_compatibility(cls, v, values):
-        if hasattr(values, 'data') and 'dataset' in values.data:
-            dataset = values.data['dataset']
+    def validate_model_dataset_compatibility(cls, v, info):
+        if hasattr(info.data, 'dataset'):
+            dataset = info.data.dataset
             if v.input_size != dataset.input_size:
                 raise ValueError(f"Model input_size ({v.input_size}) must match dataset input_size ({dataset.input_size})")
         return v
@@ -305,10 +306,10 @@ class PipelineConfig(BaseConfig):
     
     @field_validator('train', 'eval')
     @classmethod
-    def validate_pipeline_configs(cls, v, values):
+    def validate_pipeline_configs(cls, v, info):
         # Validate that at least one pipeline is enabled
-        if 'disable_train' in values and 'disable_eval' in values:
-            if values['disable_train'] and values['disable_eval']:
+        if hasattr(info.data, 'disable_train') and hasattr(info.data, 'disable_eval'):
+            if info.data.disable_train and info.data.disable_eval:
                 raise ValueError("At least one pipeline (train or eval) must be enabled")
         return v
     

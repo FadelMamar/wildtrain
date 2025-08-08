@@ -140,10 +140,8 @@ class UltralyticsEvaluator(BaseEvaluator):
 
             offset = 0
             if self.config.eval.single_cls:
-                # because ultralytics uses 0 for positive class
-                # while we use 1 for positive class
-                # we need to offset ultralytics class ids by 1 
-                # if we are using single class
+                # because ultralytics:   0 -> negative class
+                # while we use 1 -> positive class
                 offset = 1 
 
             # convert ultralytics detections to supervision detections

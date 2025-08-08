@@ -12,9 +12,10 @@ Usage:
     # Configure curriculum
     config = CurriculumConfig(
         enabled=True,
-        type="both",
+        type="difficulty",
         difficulty_strategy="linear",
-        multiscale_enabled=True
+        start_difficulty=0.0,
+        end_difficulty=1.0
     )
     
     # Add to data module
@@ -25,7 +26,8 @@ Usage:
             # ... rest of initialization
 """
 
-from .manager import CurriculumConfig, CurriculumManager
+from wildtrain.cli.models import CurriculumConfig
+from .manager import CurriculumManager
 from .mixins import CurriculumDataModuleMixin
 from .callback import CurriculumCallback
 from .dataset import (
