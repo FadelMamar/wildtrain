@@ -60,7 +60,6 @@ class TemplateResponse(BaseResponse):
     """Response model for configuration templates."""
     template: str = Field(description="Configuration template")
     config_type: str = Field(description="Configuration type")
-    schema: Optional[Dict[str, Any]] = Field(default=None, description="JSON schema")
 
 
 class FileUploadResponse(BaseResponse):
