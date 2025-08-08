@@ -9,7 +9,7 @@ import logging
 
 from omegaconf import OmegaConf
 from wildtrain.cli.config_loader import ConfigLoader
-from wildtrain.cli.models import ClassificationVisualizationConfig, VisualizationConfig
+from wildtrain.cli.models import ClassificationVisualizationConfig, DetectionVisualizationConfig
 from wildtrain.cli import visualize_classifier_predictions, visualize_detector_predictions
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,10 @@ class VisualizationService:
                 f.write(yaml_content)
                 temp_config_path = f.name
 
-            logger.info(f"Created temporary config file: {temp_config_path}")
+            logger.debug(f"Created temporary config file: {temp_config_path}")
 
             # Run the CLI command
-            visualize_classifier_predictions(config=Path(temp_config_path))
+            visualize_classifier_predictions(config=Path(temp_config_path),template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -41,11 +41,10 @@ class VisualizationService:
             return 
 
         except Exception as e:
-            logger.error(f"Classifier visualization failed: {e}")
-            raise
+            raise Exception(f"Classifier visualization failed: {e}")
 
     @staticmethod
-    def visualize_detector_predictions(config: VisualizationConfig) -> None:
+    def visualize_detector_predictions(config: DetectionVisualizationConfig) -> None:
         """Visualize detector predictions using FiftyOne."""
         try:
             # Create a temporary config file
@@ -58,7 +57,7 @@ class VisualizationService:
             logger.info(f"Created temporary config file: {temp_config_path}")
 
             # Run the CLI command
-            visualize_detector_predictions(config=Path(temp_config_path))
+            visualize_detector_predictions(config=Path(temp_config_path),template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -67,8 +66,7 @@ class VisualizationService:
             return 
 
         except Exception as e:
-            logger.error(f"Detector visualization failed: {e}")
-            raise
+            raise Exception(f"Detector visualization failed: {e}")
 
     @staticmethod
     def generate_classification_visualization_template() -> str:
@@ -77,8 +75,7 @@ class VisualizationService:
             template = ConfigLoader.generate_default_config("classification_visualization")
             return template
         except Exception as e:
-            logger.error(f"Failed to generate classification visualization template: {e}")
-            raise
+            raise Exception(f"Failed to generate classification visualization template: {e}")
 
     @staticmethod
     def generate_detection_visualization_template() -> str:
@@ -87,8 +84,7 @@ class VisualizationService:
             template = ConfigLoader.generate_default_config("detection_visualization")
             return template
         except Exception as e:
-            logger.error(f"Failed to generate detection visualization template: {e}")
-            raise
+            raise Exception(f"Failed to generate detection visualization template: {e}")
 
     @staticmethod
     def get_fiftyone_datasets() -> Dict[str, Any]:
@@ -101,11 +97,7 @@ class VisualizationService:
                 "total_count": len(datasets)
             }
         except Exception as e:
-            logger.error(f"Failed to get FiftyOne datasets: {e}")
-            return {
-                "datasets": [],
-                "total_count": 0
-            }
+            raise Exception(f"Failed to get FiftyOne datasets: {e}")
 
     @staticmethod
     def get_dataset_info(dataset_name: str) -> Dict[str, Any]:
@@ -119,9 +111,9 @@ class VisualizationService:
             return {
                 "name": dataset_name,
                 "sample_count": len(dataset),
-                "tags": list(dataset.get_tags()),
-                "fields": list(dataset.get_field_schema().keys())
+                "tags": list(dataset.tags),
+                "fields": list(dataset.get_field_schema().keys()),
+                "info": dict(dataset.info)
             }
         except Exception as e:
-            logger.error(f"Failed to get dataset info for {dataset_name}: {e}")
-            raise
+            raise Exception(f"Failed to get dataset info for {dataset_name}: {e}")

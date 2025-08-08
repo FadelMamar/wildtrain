@@ -11,6 +11,7 @@ from wildtrain.evaluators.classification import ClassificationEvaluator
 from wildtrain.evaluators.ultralytics import UltralyticsEvaluator
 from wildtrain.cli.config_loader import ConfigLoader
 from wildtrain.cli.models import ClassificationEvalConfig, DetectionEvalConfig
+from wildtrain.cli import evaluate_classifier, evaluate_detector
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ class EvaluationService:
     """Service for handling evaluation operations."""
 
     @staticmethod
-    def evaluate_classifier(config: ClassificationEvalConfig, debug: bool = False) -> Dict[str, Any]:
+    def evaluate_classifier(config: ClassificationEvalConfig) -> Dict[str, Any]:
         """Evaluate a classification model using the CLI evaluator."""
         try:
             # Create a temporary config file
@@ -31,9 +32,7 @@ class EvaluationService:
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
-            # Use the CLI evaluator
-            evaluator = ClassificationEvaluator(temp_config_path)
-            results = evaluator.evaluate(debug=debug)
+            results = evaluate_classifier(config=temp_config_path)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -46,7 +45,7 @@ class EvaluationService:
             raise
 
     @staticmethod
-    def evaluate_detector(config: DetectionEvalConfig, debug: bool = False) -> Dict[str, Any]:
+    def evaluate_detector(config: DetectionEvalConfig) -> Dict[str, Any]:
         """Evaluate a detection model using the CLI evaluator."""
         try:
             # Create a temporary config file
@@ -59,8 +58,7 @@ class EvaluationService:
             logger.info(f"Created temporary config file: {temp_config_path}")
 
             # Use the CLI evaluator
-            evaluator = UltralyticsEvaluator(temp_config_path)
-            results = evaluator.evaluate(debug=debug)
+            results = evaluate_detector(config=temp_config_path)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)

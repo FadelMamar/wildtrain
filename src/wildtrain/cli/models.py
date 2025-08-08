@@ -88,13 +88,19 @@ class CurriculumConfig(BaseConfig):
 
 
 class SingleClassConfig(BaseConfig):
-    """Single class configuration for ROI datasets."""
-    enable: bool = Field(default=False, description="Enable single class mode")
-    background_class_name: str = Field(default="background", description="Background class name")
-    single_class_name: str = Field(default="wildlife", description="Single class name")
-    keep_classes: Optional[List[str]] = Field(default=None, description="Classes to keep")
+    """Single class configuration for evaluation."""
+    enable: bool = Field(description="Whether to enable single class mode")
+    background_class_name: str = Field(description="Name of the background class")
+    single_class_name: str = Field(description="Name of the single class")
+    keep_classes: Optional[List[str]] = Field(default=None, description="Classes to keep (if None, all classes kept)")
     discard_classes: Optional[List[str]] = Field(default=None, description="Classes to discard")
-
+    
+    @field_validator('background_class_name', 'single_class_name')
+    @classmethod
+    def validate_class_names(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Class name cannot be empty")
+        return v.strip()
 
 class DatasetConfig(BaseConfig):
     """Dataset configuration."""
@@ -192,8 +198,8 @@ class ClassificationConfig(BaseConfig):
     @field_validator('model')
     @classmethod
     def validate_model_dataset_compatibility(cls, v, values):
-        if 'dataset' in values:
-            dataset = values['dataset']
+        if hasattr(values, 'data') and 'dataset' in values.data:
+            dataset = values.data['dataset']
             if v.input_size != dataset.input_size:
                 raise ValueError(f"Model input_size ({v.input_size}) must match dataset input_size ({dataset.input_size})")
         return v
@@ -241,36 +247,19 @@ class DetectionConfig(BaseConfig):
     checkpoint: CheckpointConfig = Field(description="Checkpoint configuration")
     mlflow: MLflowConfig = Field(description="MLflow configuration")
 
-
-class FiftyOneConfig(BaseConfig):
-    """FiftyOne configuration."""
-    dataset_name: str = Field(description="FiftyOne dataset name")
-    prediction_field: str = Field(description="Prediction field name")
-
-
 class ClassifierConfig(BaseConfig):
     """Classifier configuration for visualization."""
     checkpoint: Optional[Path] = Field(default=None, description="Classifier checkpoint path")
 
-
-class VisualizationModelConfig(BaseConfig):
-    """Model configuration for visualization."""
+class DetectionVisualizationConfig(BaseConfig):
+    """Visualization configuration."""
+    dataset_name: str = Field(description="FiftyOne dataset name")
+    prediction_field: str = Field(description="Prediction field name")
     localizer: YoloConfig = Field(description="Localizer configuration")
     classifier: Optional[ClassifierConfig] = Field(default=None, description="Classifier configuration")
-
-
-class ProcessingConfig(BaseConfig):
-    """Processing configuration."""
     batch_size: int = Field(gt=0, description="Processing batch size")
     debug: bool = Field(default=False, description="Debug mode")
     num_workers: int = Field(default=0, ge=0, description="Number of workers")
-
-
-class VisualizationConfig(BaseConfig):
-    """Visualization configuration."""
-    fiftyone: FiftyOneConfig = Field(description="FiftyOne configuration")
-    model: VisualizationModelConfig = Field(description="Model configuration")
-    processing: ProcessingConfig = Field(description="Processing configuration")
 
 
 class TrainPipelineConfig(BaseConfig):
@@ -516,22 +505,6 @@ class ClassificationEvalDatasetConfig(BaseConfig):
         if not v.exists():
             raise ValueError(f"Dataset directory does not exist: {v}")
         return v
-
-
-class SingleClassConfig(BaseConfig):
-    """Single class configuration for evaluation."""
-    enable: bool = Field(description="Whether to enable single class mode")
-    background_class_name: str = Field(description="Name of the background class")
-    single_class_name: str = Field(description="Name of the single class")
-    keep_classes: Optional[List[str]] = Field(default=None, description="Classes to keep (if None, all classes kept)")
-    discard_classes: Optional[List[str]] = Field(default=None, description="Classes to discard")
-    
-    @field_validator('background_class_name', 'single_class_name')
-    @classmethod
-    def validate_class_names(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Class name cannot be empty")
-        return v.strip()
 
 
 class DetectionEvalConfig(BaseConfig):

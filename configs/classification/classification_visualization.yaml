@@ -1,8 +1,8 @@
 # Example configuration for classifier visualization
 
-dataset_name: "my_classification_dataset"
-checkpoint_path: "checkpoints/classification/best-model.ckpt"
+dataset_name: "savmap-train"
+checkpoint_path: checkpoints/classification/best_classifier.pt
 prediction_field: "classification_predictions"
 batch_size: 32
 device: "cpu"
-debug: false
+debug: true

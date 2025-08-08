@@ -9,7 +9,7 @@ from rich.text import Text
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any
 from omegaconf import OmegaConf, DictConfig
 from datetime import datetime
 
@@ -25,8 +25,10 @@ from ..evaluators.classification import ClassificationEvaluator
 from ..models.detector import Detector
 from ..models.localizer import UltralyticsLocalizer
 from ..models.classifier import GenericClassifier
-from .config_loader import ConfigLoader, ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
+from .config_loader import ConfigLoader
 from ..data.classification_datamodule import ClassificationDataModule, compute_dataset_stats
+from ..shared.validation import validate_config_file, ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
+from ..shared.config_types import ConfigType
 
 # Create Typer app
 app = typer.Typer(
@@ -91,7 +93,7 @@ def validate_config(
     console.print(f"[bold green]Validating {config_type} configuration:[/bold green] {config}")
     
     try:
-        is_valid = ConfigLoader.validate_config_file(config, config_type)
+        is_valid = validate_config_file(config, ConfigType(config_type))
         if is_valid:
             console.print(f"[bold green]✓[/bold green] Configuration is valid!")
         else:
@@ -114,7 +116,7 @@ def train_classifier(
     if template:
         console.print(f"[bold green]Showing default classification configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("classification")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION)
             console.print(f"\n[bold blue]Default classification configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -153,7 +155,7 @@ def train_detector(
     if template:
         console.print(f"[bold green]Showing default detection configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("detection")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.DETECTION)
             console.print(f"\n[bold blue]Default detection configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -254,7 +256,7 @@ def run_detection_pipeline(
     if template:
         console.print(f"[bold green]Showing default detection pipeline configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("detection_pipeline")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.DETECTION_PIPELINE)
             console.print(f"\n[bold blue]Default detection pipeline configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -298,7 +300,7 @@ def run_classification_pipeline(
     if template:
         console.print(f"[bold green]Showing default classification pipeline configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("classification_pipeline")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION_PIPELINE)
             console.print(f"\n[bold blue]Default classification pipeline configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -335,14 +337,14 @@ def run_classification_pipeline(
 
 @app.command()
 def visualize_classifier_predictions(
-    config: Path = typer.Option("", help="Path to classification visualization configuration YAML file"),
+    config: Path = typer.Option("", "--config", "-c",help="Path to classification visualization configuration YAML file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of visualization")
 ) -> None:
     """Upload classifier predictions to a FiftyOne dataset for visualization using YAML configuration."""
     if template:
         console.print(f"[bold green]Showing default classification visualization configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("classification_visualization")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION_VISUALIZATION)
             console.print(f"\n[bold blue]Default classification visualization configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -359,7 +361,7 @@ def visualize_classifier_predictions(
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        console.print("cfg:",cfg)
         
         # Extract configuration values
         dataset_name = cfg.dataset_name
@@ -394,14 +396,14 @@ def visualize_classifier_predictions(
 
 @app.command()
 def visualize_detector_predictions(
-    config: Path = typer.Option("", help="Path to visualization configuration YAML file"),
+    config: Path = typer.Option("", "--config", "-c",help="Path to visualization configuration YAML file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of visualization")
 ) -> None:
     """Upload detector predictions to a FiftyOne dataset for visualization using YAML configuration."""
     if template:
         console.print(f"[bold green]Showing default detection visualization configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("detection_visualization")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.DETECTION_VISUALIZATION)
             console.print(f"\n[bold blue]Default detection visualization configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -418,15 +420,14 @@ def visualize_detector_predictions(
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        console.print("cfg:",cfg)
         
         # Extract configuration values
-        dataset_name = cfg.fiftyone.dataset_name
-        prediction_field = cfg.fiftyone.prediction_field
+        dataset_name = cfg.dataset_name
+        prediction_field = cfg.prediction_field
         
-        localizer_cfg = cfg.model.localizer
-        classifier_cfg = cfg.model.classifier
-        processing_cfg = cfg.processing
+        localizer_cfg = cfg.localizer
+        classifier_cfg = cfg.classifier
         
         console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
         
@@ -450,8 +451,8 @@ def visualize_detector_predictions(
             detector=detector,
             imgsz=localizer_cfg.imgsz,
             prediction_field=prediction_field,
-            batch_size=processing_cfg.batch_size,
-            debug=processing_cfg.debug,
+            batch_size=cfg.batch_size,
+            debug=cfg.debug,
         )
         console.print(f"[bold blue]Detector predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
         
@@ -468,12 +469,12 @@ def evaluate_detector(
     config: Path = typer.Option("", help="Path to YOLO evaluation YAML config file"),
     model_type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
     template: bool = typer.Option(False, "--template", help="Show default configuration template instead of evaluation")
-) -> None:
+) -> Dict[str, Any]:
     """Evaluate a YOLO model using a YAML config file."""
     if template:
         console.print(f"[bold green]Showing default detection evaluation configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("detection_eval")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.DETECTION_EVAL)
             console.print(f"\n[bold blue]Default detection evaluation configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -509,18 +510,20 @@ def evaluate_detector(
     except Exception as e:
         console.print(f"[bold red]✗[/bold red] Evaluation failed: {str(e)}")
         raise typer.Exit(1)
+    
+    return results
 
 
 @app.command()
 def evaluate_classifier(
     config: Path = typer.Option("", help="Path to classification evaluation YAML config file"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of evaluation")
-) -> None:
+) -> Dict[str, Any]:
     """Evaluate a classifier using a YAML config file."""
     if template:
         console.print(f"[bold green]Showing default classification evaluation configuration template...[/bold green]")
         try:
-            template_yaml = ConfigLoader.generate_default_config("classification_eval")
+            template_yaml = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION_EVAL)
             console.print(f"\n[bold blue]Default classification evaluation configuration template:[/bold blue]")
             console.print(f"\n```yaml\n{template_yaml}```")
             return
@@ -553,6 +556,8 @@ def evaluate_classifier(
     except Exception as e:
         console.print(f"[bold red]✗[/bold red] Evaluation failed: {str(e)}")
         raise typer.Exit(1)
+    
+    return results
 
 
 @app.command()
@@ -564,7 +569,7 @@ def show_config_template(
     console.print(f"[bold green]Generating {config_type} configuration template...[/bold green]")
     
     try:
-        template = ConfigLoader.generate_default_config(config_type)
+        template = ConfigLoader.generate_default_config(ConfigType(config_type))
         
         if save_to:
             save_to.parent.mkdir(parents=True, exist_ok=True)

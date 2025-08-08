@@ -26,18 +26,6 @@ async def evaluate_classifier(request: ClassificationEvalRequest) -> EvaluationR
     """Evaluate a classification model."""
 
     try:
-        if request.template_only:
-            # Return template instead of evaluation
-            # template = EvaluationService.generate_classification_eval_template()
-            return EvaluationResponse(
-                success=True,
-                message="Classification evaluation template generated",
-                metrics=dict(),
-                results_path=None,
-                confusion_matrix=None,
-                class_metrics=None
-            )
-
         # Create background job for evaluation
         job_id = create_background_job(
             task_func=_evaluate_classifier_task,
@@ -71,18 +59,6 @@ async def evaluate_detector(request: DetectionEvalRequest) -> EvaluationResponse
     """Evaluate a detection model."""
 
     try:
-        if request.template_only:
-            # Return template instead of evaluation
-            # template = EvaluationService.generate_detection_eval_template()
-            return EvaluationResponse(
-                success=True,
-                message="Detection evaluation template generated",
-                metrics=dict(),
-                results_path=None,
-                confusion_matrix=None,
-                class_metrics=None
-            )
-
         # Create background job for evaluation
         job_id = create_background_job(
             task_func=_evaluate_detector_task,
@@ -184,13 +160,13 @@ async def list_evaluation_jobs(
 
 
 # Background task functions
-def _evaluate_classifier_task(config: Any, debug: bool, verbose: bool) -> Dict[str, Any]:
+def _evaluate_classifier_task(config: Any) -> Dict[str, Any]:
     """Background task for classifier evaluation using actual CLI integration."""
     logger.info("Starting classifier evaluation task with CLI integration")
     
     try:
         # Use the evaluation service to run actual CLI evaluation
-        results = EvaluationService.evaluate_classifier(config, debug=debug)
+        results = EvaluationService.evaluate_classifier(config)
         logger.info("Classifier evaluation completed successfully")
         return results
     except Exception as e:
@@ -198,13 +174,13 @@ def _evaluate_classifier_task(config: Any, debug: bool, verbose: bool) -> Dict[s
         raise
 
 
-def _evaluate_detector_task(config: Any, debug: bool, verbose: bool) -> Dict[str, Any]:
+def _evaluate_detector_task(config: Any) -> Dict[str, Any]:
     """Background task for detector evaluation using actual CLI integration."""
     logger.info("Starting detector evaluation task with CLI integration")
     
     try:
         # Use the evaluation service to run actual CLI evaluation
-        results = EvaluationService.evaluate_detector(config, debug=debug)
+        results = EvaluationService.evaluate_detector(config)
         logger.info("Detector evaluation completed successfully")
         return results
     except Exception as e:

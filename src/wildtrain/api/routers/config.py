@@ -12,11 +12,11 @@ from ..models.responses import (
 from ..utils.file_handling import save_config_file
 from ..dependencies import get_logger
 from ...shared.config_types import ConfigType
+from ...shared.validation import validate_config_file
 
 logger = get_logger("config")
 
 router = APIRouter()
-
 
 @router.post("/validate", response_model=ConfigValidationResponse)
 async def validate_config(request: ConfigValidationRequest) -> ConfigValidationResponse:
@@ -24,8 +24,7 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
     
     try:
         logger.info(f"Validating configuration file: {request.config_path}")
-        from ...shared.validation import validate_config_file
-        print(request)
+        
         validate_config_file(Path(request.config_path), request.config_type)
         is_valid = True
         errors = []
@@ -52,37 +51,37 @@ async def get_config_types() -> Dict[str, Any]:
     
     config_types = [
         {
-            "name": ConfigType.CLASSIFICATION,
+            "name": ConfigType.CLASSIFICATION.value,
             "description": "Classification training configuration",
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.DETECTION,
+            "name": ConfigType.DETECTION.value,
             "description": "Detection training configuration",
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.CLASSIFICATION_EVAL,
+            "name": ConfigType.CLASSIFICATION_EVAL.value,
             "description": "Classification evaluation configuration",
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.DETECTION_EVAL,
+            "name": ConfigType.DETECTION_EVAL.value,
             "description": "Detection evaluation configuration",
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.CLASSIFICATION_VISUALIZATION,
+            "name": ConfigType.CLASSIFICATION_VISUALIZATION.value,
             "description": "Classification visualization configuration",
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.DETECTION_VISUALIZATION,
+            "name": ConfigType.DETECTION_VISUALIZATION.value,
             "description": "Detection visualization configuration",
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.PIPELINE,
+            "name": ConfigType.PIPELINE.value,
             "description": "Pipeline configuration",
             "file_extension": ".yaml"
         }

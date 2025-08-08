@@ -30,16 +30,6 @@ async def run_classification_pipeline(request: ClassificationPipelineRequest) ->
     """Run classification pipeline."""
 
     try:
-        if request.template_only:
-            # Return template instead of pipeline
-            template = PipelineService.generate_classification_pipeline_template()
-            return PipelineResponse(
-                success=True,
-                message="Classification pipeline template generated",
-                job_id="template",
-                status="completed",
-                progress=1.0
-            )
 
         # Create background job for pipeline
         job_id = create_background_job(
@@ -72,17 +62,7 @@ async def run_detection_pipeline(request: DetectionPipelineRequest) -> PipelineR
     """Run detection pipeline."""
 
     try:
-        if request.template_only:
-            # Return template instead of pipeline
-            template = PipelineService.generate_detection_pipeline_template()
-            return PipelineResponse(
-                success=True,
-                message="Detection pipeline template generated",
-                job_id="template",
-                status="completed",
-                progress=1.0
-            )
-
+        
         # Create background job for pipeline
         job_id = create_background_job(
             task_func=_run_detection_pipeline_task,

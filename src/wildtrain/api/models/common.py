@@ -24,7 +24,7 @@ class BaseRequest(BaseModel):
 class BaseResponse(BaseModel):
     """Base response model."""
     success: bool = Field(description="Operation success status")
-    message: str = Field(description="Response message")
+    message: str = Field(default="",description="Response message")
     timestamp: datetime = Field(default_factory=datetime.now, description="Response timestamp")
 
 

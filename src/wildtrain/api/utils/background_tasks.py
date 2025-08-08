@@ -164,7 +164,10 @@ async def run_background_task(
         else:
             # Run sync function in thread pool
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, task_func, *args, **kwargs)
+            # Create a wrapper function to handle keyword arguments
+            def run_sync_task():
+                return task_func(*args, **kwargs)
+            result = await loop.run_in_executor(None, run_sync_task)
         
         # Update job with success
         job_manager.update_job_status(

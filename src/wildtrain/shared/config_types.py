@@ -11,4 +11,6 @@ class ConfigType(Enum):
     DETECTION_EVAL = "detection_eval"
     CLASSIFICATION_VISUALIZATION = "classification_visualization"
     DETECTION_VISUALIZATION = "detection_visualization"
-    PIPELINE = "pipeline"
+    DETECTION_PIPELINE = "detection_pipeline"
+    CLASSIFICATION_PIPELINE = "classification_pipeline"
+

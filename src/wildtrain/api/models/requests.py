@@ -12,7 +12,7 @@ from ...cli.models import (
     ClassificationPipelineConfig,
     DetectionPipelineConfig,
     ClassificationVisualizationConfig,
-    VisualizationConfig
+    DetectionVisualizationConfig
 )
 from .common import BaseRequest
 
@@ -20,25 +20,21 @@ from .common import BaseRequest
 class ClassificationTrainingRequest(BaseRequest):
     """Request model for classifier training."""
     config: ClassificationConfig = Field(description="Training configuration")
-    template_only: bool = Field(default=False, description="Return template only")
 
 
 class DetectionTrainingRequest(BaseRequest):
     """Request model for detector training."""
     config: DetectionConfig = Field(description="Training configuration")
-    template_only: bool = Field(default=False, description="Return template only")
 
 
 class ClassificationEvalRequest(BaseRequest):
     """Request model for classifier evaluation."""
     config: ClassificationEvalConfig = Field(description="Evaluation configuration")
-    template_only: bool = Field(default=False, description="Return template only")
 
 
 class DetectionEvalRequest(BaseRequest):
     """Request model for detector evaluation."""
     config: DetectionEvalConfig = Field(description="Evaluation configuration")
-    template_only: bool = Field(default=False, description="Return template only")
 
 
 class ClassificationPipelineRequest(BaseRequest):
@@ -58,7 +54,7 @@ class ClassificationVisualizationRequest(BaseRequest):
 
 class DetectionVisualizationRequest(BaseRequest):
     """Request model for detector visualization."""
-    config: VisualizationConfig = Field(description="Visualization configuration")
+    config: DetectionVisualizationConfig = Field(description="Visualization configuration")
 
 
 class DatasetStatsRequest(BaseRequest):

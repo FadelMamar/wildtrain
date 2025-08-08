@@ -46,40 +46,13 @@ def client():
 
 
 @pytest.fixture
-def temp_config_file():
-    """Create a temporary config file for testing."""
-    temp_dir = tempfile.mkdtemp(prefix="wildtrain_config_test_")
-    config_file = Path(temp_dir) / "test_config.yaml"
-    
-    config_content = """
-                    data:
-                    batch_size: 4
-                    num_workers: 0
-                    root_data_directory: "D:/workspace/data/demo-dataset"
-                    model:
-                    backbone: "resnet18"
-                    num_classes: 3
-                    training:
-                    debug: true
-                    max_epochs: 2
-                    """
-    
-    with open(config_file, 'w') as f:
-        f.write(config_content)
-    
-    yield str(config_file)
-    
-    shutil.rmtree(temp_dir, ignore_errors=True)
-
-
-@pytest.fixture
 def classification_config():
     """Load real classification config for testing."""
     config_path = ROOT / "configs" / "classification" / "classification_train.yaml"
     return safe_load_config(
         config_path,
         ConfigLoader.load_classification_config,
-        {"template_only": True}
+        
     )
 
 
@@ -90,7 +63,7 @@ def detection_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_detection_config,
-        {"template_only": True}
+        
     )
 
 
@@ -101,7 +74,7 @@ def classification_eval_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_classification_eval_config,
-        {"template_only": True}
+        
     )
 
 
@@ -112,7 +85,7 @@ def detection_eval_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_detection_eval_config,
-        {"template_only": True}
+        
     )
 
 
@@ -123,7 +96,7 @@ def classification_visualization_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_classification_visualization_config,
-        {"template_only": True}
+        
     )
 
 
@@ -134,7 +107,7 @@ def detection_visualization_config():
     return safe_load_config(
         config_path,
         ConfigLoader.load_detection_visualization_config,
-        {"template_only": True}
+        
     )
 
 
@@ -145,7 +118,7 @@ def classification_pipeline_config():
     return safe_load_config(
         config_path,
         lambda p: ConfigLoader.load_pipeline_config(p, "classification"),
-        {"template_only": True}
+        
     )
 
 
@@ -156,5 +129,5 @@ def detection_pipeline_config():
     return safe_load_config(
         config_path,
         lambda p: ConfigLoader.load_pipeline_config(p, "detection"),
-        {"template_only": True}
+        
     )

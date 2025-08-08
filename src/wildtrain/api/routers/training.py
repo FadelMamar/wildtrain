@@ -30,17 +30,6 @@ async def train_classifier(request: ClassificationTrainingRequest) -> TrainingRe
     """Train a classification model."""
 
     try:
-        if request.template_only:
-            # Return template instead of training
-            template = TrainingService.generate_classification_train_template()
-            return TrainingResponse(
-                success=True,
-                message="Classification training template generated",
-                job_id="template",
-                status="completed",
-                progress=1.0
-            )
-
         # Create background job for training
         job_id = create_background_job(
             task_func=_train_classifier_task,
@@ -72,17 +61,6 @@ async def train_detector(request: DetectionTrainingRequest) -> TrainingResponse:
     """Train a detection model."""
 
     try:
-        if request.template_only:
-            # Return template instead of training
-            template = TrainingService.generate_detection_train_template()
-            return TrainingResponse(
-                success=True,
-                message="Detection training template generated",
-                job_id="template",
-                status="completed",
-                progress=1.0
-            )
-
         # Create background job for training
         job_id = create_background_job(
             task_func=_train_detector_task,

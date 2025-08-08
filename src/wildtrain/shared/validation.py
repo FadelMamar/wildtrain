@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Type, TypeVar
 from omegaconf import OmegaConf
 from pydantic import BaseModel, ValidationError
-
+from .config_types import ConfigType
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
@@ -24,7 +24,7 @@ class ConfigParseError(Exception):
 T = TypeVar('T', bound=BaseModel)
 
 
-def validate_config_file(config_path: Path, config_type: str) -> bool:
+def validate_config_file(config_path: Path, config_type: ConfigType) -> bool:
     """
     Validate a configuration file using the shared ConfigLoader.
     

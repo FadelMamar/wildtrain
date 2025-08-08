@@ -25,23 +25,10 @@ async def visualize_classifier_predictions(request: ClassificationVisualizationR
     """Visualize classifier predictions."""
 
     try:
-        if request.template_only:
-            # Return template instead of visualization
-            template = VisualizationService.generate_classification_visualization_template()
-            return VisualizationResponse(
-                success=True,
-                message="Classification visualization template generated",
-                job_id="template",
-                status="completed",
-                progress=1.0
-            )
-
         # Create background job for visualization
         job_id = create_background_job(
             task_func=_visualize_classifier_task,
             config=request.config,
-            debug=request.debug,
-            verbose=request.verbose,
             metadata={
                 "task_type": "classification_visualization",
                 "model_type": "classifier",
@@ -67,23 +54,10 @@ async def visualize_detector_predictions(request: DetectionVisualizationRequest)
     """Visualize detector predictions."""
 
     try:
-        if request.template_only:
-            # Return template instead of visualization
-            template = VisualizationService.generate_detection_visualization_template()
-            return VisualizationResponse(
-                success=True,
-                message="Detection visualization template generated",
-                job_id="template",
-                status="completed",
-                progress=1.0
-            )
-
         # Create background job for visualization
         job_id = create_background_job(
             task_func=_visualize_detector_task,
             config=request.config,
-            debug=request.debug,
-            verbose=request.verbose,
             metadata={
                 "task_type": "detection_visualization",
                 "model_type": "detector",

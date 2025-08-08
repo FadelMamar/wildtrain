@@ -14,7 +14,7 @@ from enum import Enum
 from .models import (
     ClassificationConfig,
     DetectionConfig,
-    VisualizationConfig,
+    DetectionVisualizationConfig,
     ClassificationPipelineConfig,
     DetectionPipelineConfig,
     ClassificationEvalConfig,
@@ -128,11 +128,11 @@ class ConfigLoader:
         )
     
     @staticmethod
-    def load_detection_visualization_config(config_path: Path) -> VisualizationConfig:
+    def load_detection_visualization_config(config_path: Path) -> DetectionVisualizationConfig:
         """Load and validate detection visualization configuration."""
         return ConfigLoader.load_and_validate(
             config_path, 
-            VisualizationConfig, 
+            DetectionVisualizationConfig, 
             "Detection visualization configuration"
         )
     
@@ -167,24 +167,25 @@ class ConfigLoader:
             raise ValueError(f"Unknown pipeline type: {pipeline_type}")
     
     @staticmethod
-    def validate_config_file(config_path: Path, config_type: str) -> bool:
+    def validate_config_file(config_path: Path, config_type: ConfigType) -> bool:
         """Validate a configuration file using the appropriate Pydantic model."""
         try:
-            if config_type == ConfigType.CLASSIFICATION.value:
+            if config_type == ConfigType.CLASSIFICATION:
                 ConfigLoader.load_classification_config(config_path)
-            elif config_type == ConfigType.DETECTION.value:
+            elif config_type == ConfigType.DETECTION:
                 ConfigLoader.load_detection_config(config_path)
-            elif config_type == ConfigType.CLASSIFICATION_EVAL.value:
+            elif config_type == ConfigType.CLASSIFICATION_EVAL:
                 ConfigLoader.load_classification_eval_config(config_path)
-            elif config_type == ConfigType.DETECTION_EVAL.value:
+            elif config_type == ConfigType.DETECTION_EVAL:
                 ConfigLoader.load_detection_eval_config(config_path)
-            elif config_type == ConfigType.CLASSIFICATION_VISUALIZATION.value:
+            elif config_type == ConfigType.CLASSIFICATION_VISUALIZATION:
                 ConfigLoader.load_classification_visualization_config(config_path)
-            elif config_type == ConfigType.DETECTION_VISUALIZATION.value:
+            elif config_type == ConfigType.DETECTION_VISUALIZATION:
                 ConfigLoader.load_detection_visualization_config(config_path)
-            elif config_type == ConfigType.PIPELINE.value:
-                # Pipeline configs need pipeline_type parameter
-                raise ValueError("Pipeline configs require pipeline_type parameter. Use validate_pipeline_config_file instead.")
+            elif config_type == ConfigType.CLASSIFICATION_PIPELINE:
+                ConfigLoader.load_pipeline_config(config_path, "classification")
+            elif config_type == ConfigType.DETECTION_PIPELINE:
+                ConfigLoader.load_pipeline_config(config_path, "detection")
             else:
                 raise ValueError(f"Unknown config type: {config_type}")
             return True
@@ -210,19 +211,19 @@ class ConfigLoader:
         console.print(f"[bold green]✓[/bold green] Schema saved to: {output_path}")
     
     @staticmethod
-    def generate_default_config(config_type: str) -> str:
+    def generate_default_config(config_type: ConfigType) -> str:
         """Generate a default YAML configuration template for the given config type."""
         
         # Map config types to their corresponding Pydantic model classes
         config_class_map = {
-            "classification": ClassificationConfig,
-            "detection": DetectionConfig,
-            "classification_eval": ClassificationEvalConfig,
-            "detection_eval": DetectionEvalConfig,
-            "classification_visualization": ClassificationVisualizationConfig,
-            "detection_visualization": VisualizationConfig,
-            "classification_pipeline": ClassificationPipelineConfig,
-            "detection_pipeline": DetectionPipelineConfig,
+            ConfigType.CLASSIFICATION: ClassificationConfig,
+            ConfigType.DETECTION: DetectionConfig,
+            ConfigType.CLASSIFICATION_EVAL: ClassificationEvalConfig,
+            ConfigType.DETECTION_EVAL: DetectionEvalConfig,
+            ConfigType.CLASSIFICATION_VISUALIZATION: ClassificationVisualizationConfig,
+            ConfigType.DETECTION_VISUALIZATION: DetectionVisualizationConfig,
+            ConfigType.CLASSIFICATION_PIPELINE: ClassificationPipelineConfig,
+            ConfigType.DETECTION_PIPELINE: DetectionPipelineConfig,
         }
         
         if config_type not in config_class_map:
