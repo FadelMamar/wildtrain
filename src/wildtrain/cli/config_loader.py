@@ -213,6 +213,8 @@ class ConfigLoader:
     @staticmethod
     def generate_default_config(config_type: ConfigType) -> str:
         """Generate a default YAML configuration template for the given config type."""
+
+        assert isinstance(config_type, ConfigType), f"config_type must be a ConfigType enum, got: {config_type}"
         
         # Map config types to their corresponding Pydantic model classes
         config_class_map = {

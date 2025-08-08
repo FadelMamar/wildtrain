@@ -16,4 +16,4 @@ REM Run the visualize_predictions CLI command
 
 set CONFIG_PATH=configs/detection/visualization.yaml
 call uv run wildtrain visualize-detector-predictions ^
-    %CONFIG_PATH%
+    -c %CONFIG_PATH%

@@ -470,6 +470,7 @@ class ClassificationEvalConfig(BaseConfig):
     device: str = Field(default="cpu", description="Device to run evaluation on (cpu, cuda)")
     batch_size: int = Field(default=4, description="Batch size for evaluation")
     dataset: "ClassificationEvalDatasetConfig" = Field(description="Dataset configuration for evaluation")
+
     
     @field_validator('classifier')
     @classmethod
@@ -550,7 +551,7 @@ class DetectionEvalConfig(BaseConfig):
     data: Path = Field(description="Path to the data config YAML (YOLO format)")
     device: str = Field(default="cpu", description="Device to run evaluation on")
     metrics: "DetectionMetricsConfig" = Field(description="Evaluation metrics configuration")
-    eval: "DetectionEvalParamsConfig" = Field(description="Evaluation parameters")
+    eval: "DetectionEvalParamsConfig" = Field(description="Evaluation parameters")    
     
     @field_validator('data')
     @classmethod

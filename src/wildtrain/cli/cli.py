@@ -135,7 +135,7 @@ def train_classifier(
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        console.print("cfg:",cfg)
         
         ClassifierTrainer(DictConfig(cfg)).run()
         
@@ -174,7 +174,7 @@ def train_detector(
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        console.print("cfg:",cfg)
         
         UltralyticsDetectionTrainer(DictConfig(cfg)).run()
         
@@ -320,7 +320,7 @@ def run_classification_pipeline(
         
         # Convert validated config back to DictConfig for backward compatibility
         cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        console.print("cfg:",cfg)
         
         pipeline = ClassificationPipeline(str(config))
         results = pipeline.run()
@@ -466,9 +466,10 @@ def visualize_detector_predictions(
 
 @app.command()
 def evaluate_detector(
-    config: Path = typer.Option("", help="Path to YOLO evaluation YAML config file"),
+    config: Path = typer.Option("","--config", "-c", help="Path to YOLO evaluation YAML config file"),
     model_type: str = typer.Option("yolo", "--type", "-t", help="Type of detector to evaluate (yolo, yolo_v8, yolo_v11)"),
-    template: bool = typer.Option(False, "--template", help="Show default configuration template instead of evaluation")
+    template: bool = typer.Option(False, "--template", help="Show default configuration template instead of evaluation"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug mode")
 ) -> Dict[str, Any]:
     """Evaluate a YOLO model using a YAML config file."""
     if template:
@@ -493,14 +494,15 @@ def evaluate_detector(
         console.print(f"[bold green]✓[/bold green] Detection evaluation configuration validated successfully")
         
         # Convert validated config back to DictConfig for backward compatibility
-        cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        # Use model_dump with exclude_none=False to preserve all fields including defaults
+        cfg = OmegaConf.create(validated_config.model_dump(exclude_none=False))
+        console.print("cfg:",cfg)
         
         if model_type == "yolo":
-            evaluator = UltralyticsEvaluator(config=str(config))
+            evaluator = UltralyticsEvaluator(config=cfg)
         else:
             raise ValueError(f"Invalid detector type: {model_type}")
-        results = evaluator.evaluate(debug=False)
+        results = evaluator.evaluate(debug=debug)
         console.print(f"\n[bold blue]{model_type} Evaluation Results:[/bold blue]")
         console.print(results)
         
@@ -516,8 +518,9 @@ def evaluate_detector(
 
 @app.command()
 def evaluate_classifier(
-    config: Path = typer.Option("", help="Path to classification evaluation YAML config file"),
-    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of evaluation")
+    config: Path = typer.Option("","--config", "-c", help="Path to classification evaluation YAML config file"),
+    template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of evaluation"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug mode")
 ) -> Dict[str, Any]:
     """Evaluate a classifier using a YAML config file."""
     if template:
@@ -542,11 +545,12 @@ def evaluate_classifier(
         console.print(f"[bold green]✓[/bold green] Classification evaluation configuration validated successfully")
         
         # Convert validated config back to DictConfig for backward compatibility
-        cfg = OmegaConf.create(validated_config.model_dump())
-        console.print(OmegaConf.to_yaml(cfg))
+        # Use model_dump with exclude_none=False to preserve all fields including defaults
+        cfg = OmegaConf.create(validated_config.model_dump(exclude_none=False))
+        console.print("cfg:",cfg)
         
-        evaluator = ClassificationEvaluator(str(config))
-        results = evaluator.evaluate(debug=False)
+        evaluator = ClassificationEvaluator(config=cfg)
+        results = evaluator.evaluate(debug=debug)
         console.print("\n[bold blue]Classifier Evaluation Results:[/bold blue]")
         console.print(results)
         

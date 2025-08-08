@@ -30,12 +30,14 @@ class DetectionTrainingRequest(BaseRequest):
 class ClassificationEvalRequest(BaseRequest):
     """Request model for classifier evaluation."""
     config: ClassificationEvalConfig = Field(description="Evaluation configuration")
+    debug: bool = Field(default=False, description="Debug mode")
 
 
 class DetectionEvalRequest(BaseRequest):
     """Request model for detector evaluation."""
     config: DetectionEvalConfig = Field(description="Evaluation configuration")
-
+    debug: bool = Field(default=False, description="Debug mode")
+    model_type: str = Field(default="yolo", description="Model type")
 
 class ClassificationPipelineRequest(BaseRequest):
     """Request model for classification pipeline."""

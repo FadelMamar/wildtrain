@@ -28,7 +28,19 @@ class UltralyticsEvaluator(BaseEvaluator):
         self.dataloader = self._create_dataloader()    
 
     def _load_model(self) -> Any:
-        localizer = UltralyticsLocalizer.from_config(self.config)
+        # Create a flattened config for the localizer that includes eval parameters
+        localizer_config = OmegaConf.create({
+            'weights': str(self.config.weights.localizer),
+            'imgsz': self.config.eval.imgsz,
+            'device': self.config.device,
+            'conf_thres': self.config.eval.conf,
+            'iou_thres': self.config.eval.iou,
+            'overlap_metric': 'IOU',
+            'task': self.config.eval.task,
+            'max_det': self.config.eval.max_det,
+        })
+        
+        localizer = UltralyticsLocalizer.from_config(localizer_config)
         
         classifier = None
         if self.config.weights.classifier:
@@ -50,7 +62,8 @@ class UltralyticsEvaluator(BaseEvaluator):
             PyTorch DataLoader for the evaluation split.
         """
         data_config = DictConfig(OmegaConf.load(self.config.data))
-        eval_config = dict(self.config.eval)
+        # Convert DictConfig to dict properly to preserve all fields
+        eval_config = OmegaConf.to_container(self.config.eval, resolve=True)
 
         names = data_config.get("names")
         root_path = data_config.get("path")
