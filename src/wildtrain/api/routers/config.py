@@ -8,12 +8,10 @@ from pathlib import Path
 from ..models.requests import ConfigValidationRequest, FileUploadRequest
 from ..models.responses import (
     ConfigValidationResponse,
-    TemplateResponse,
-    FileUploadResponse
 )
 from ..utils.file_handling import save_config_file
 from ..dependencies import get_logger
-from ...cli.config_loader import ConfigType
+from ...shared.config_types import ConfigType
 
 logger = get_logger("config")
 
@@ -26,18 +24,13 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
     
     try:
         logger.info(f"Validating configuration file: {request.config_path}")
-        from ...cli import validate_config
-        try:
-            validate_config(request.config_path, request.config_type)
-            is_valid = True
-            errors = []
-            warnings = []
-        except Exception as e:
-            logger.error(f"Failed to validate configuration: {e}")
-            is_valid = False
-            errors = [str(e)]
-            warnings = []
-        
+        from ...shared.validation import validate_config_file
+        print(request)
+        validate_config_file(Path(request.config_path), request.config_type)
+        is_valid = True
+        errors = []
+        warnings = []
+               
         return ConfigValidationResponse(
             success=True,
             message="Configuration validation completed",
