@@ -13,4 +13,7 @@ class ConfigType(Enum):
     DETECTION_VISUALIZATION = "detection_visualization"
     DETECTION_PIPELINE = "detection_pipeline"
     CLASSIFICATION_PIPELINE = "classification_pipeline"
+    DETECTOR_REGISTRATION = "detector_registration"
+    CLASSIFIER_REGISTRATION = "classifier_registration"
+    MODEL_REGISTRATION = "model_registration"
 

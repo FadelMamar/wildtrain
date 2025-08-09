@@ -2,13 +2,9 @@ import mlflow
 import traceback
 from pathlib import Path
 from typing import Optional, Union
-from ..utils.logging import ROOT
-from ..utils.logging import get_logger
+from ..utils.logging import get_logger,ROOT
 
 logger = get_logger(__name__)
-
-# TODO add code to register model
-
 
 def load_registered_model(
     alias,
