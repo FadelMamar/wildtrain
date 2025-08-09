@@ -44,7 +44,6 @@ class GenericClassifier(nn.Module):
         self.backbone_source = backbone_source
         self.pretrained = pretrained
 
-        self.preprocessing = self._set_preprocessing()
         self.feature_extractor = self._get_backbone()
         self.fc = torch.nn.Sequential(
             torch.nn.LazyLinear(128),
@@ -52,13 +51,15 @@ class GenericClassifier(nn.Module):
             torch.nn.Dropout(p=dropout),
             torch.nn.LazyLinear(self.num_classes.item()),
         )
+        # Initialize preprocessing
+        self.preprocessing = self._set_preprocessing()
         return None
 
     def _set_preprocessing(
         self,
     ):
         preprocessing = torch.nn.Sequential(
-            T.Resize(self.input_size.item(), interpolation=T.InterpolationMode.BICUBIC),
+            T.Resize([self.input_size.item(), self.input_size.item()], interpolation=T.InterpolationMode.BICUBIC),
             T.ToDtype(torch.float32),
             T.Normalize(mean=self.mean, std=self.std),
         )
@@ -83,10 +84,15 @@ class GenericClassifier(nn.Module):
             model = timm.create_model(
                 self.backbone, pretrained=self.pretrained, num_classes=0
             )
-            try:
+            data_cfg = timm.data.resolve_data_config(model.pretrained_cfg)
+            transform = timm.data.create_transform(**data_cfg)
+            trfs = [T.ToDtype(torch.float32)] + [t for t in transform.transforms if isinstance(t, nn.Module)]
+
+            if hasattr(model, "set_input_size"):
                 model.set_input_size((self.input_size.item(),self.input_size.item()))
-            except Exception:
-                pass
+                trfs = [t for t in trfs if not isinstance(t, T.Resize)]
+                trfs = [T.Resize([self.input_size.item(), self.input_size.item()], interpolation=T.InterpolationMode.BICUBIC),] + trfs
+
         else:
             raise ValueError(f"Unsupported backbone source: {self.backbone_source}")
 
@@ -95,8 +101,8 @@ class GenericClassifier(nn.Module):
                 param.requires_grad = False
             #model.eval()
             logger.info(f"Backbone {self.backbone} frozen")
-
-        return model
+        
+        return nn.Sequential(*trfs,model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.preprocessing(x)
@@ -158,11 +164,13 @@ class GenericClassifier(nn.Module):
 
     def state_dict(self, *args, **kwargs):
         state = super().state_dict(*args, **kwargs)
+        # Create a new dict with the additional items
+        new_state = dict(state)
         # Save label_to_class_map as a string (or use pickle for more complex objects)
-        state["label_to_class_map"] = self.label_to_class_map
-        state["backbone"] = self.backbone
-        state["backbone_source"] = self.backbone_source
-        return state
+        new_state["label_to_class_map"] = self.label_to_class_map
+        new_state["backbone"] = self.backbone
+        new_state["backbone_source"] = self.backbone_source
+        return new_state
 
     def load_state_dict(self, state_dict, **kwargs):
         # Restore label_to_class_map
