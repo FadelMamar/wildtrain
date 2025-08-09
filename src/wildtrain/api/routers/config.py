@@ -1,15 +1,13 @@
 """Configuration endpoints for the WildTrain API."""
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from typing import Dict, Any, List
-import logging
+from fastapi import APIRouter, HTTPException
+from typing import Dict, Any
 from pathlib import Path
 
-from ..models.requests import ConfigValidationRequest, FileUploadRequest
+from ..models.requests import ConfigValidationRequest
 from ..models.responses import (
     ConfigValidationResponse,
 )
-from ..utils.file_handling import save_config_file
 from ..dependencies import get_logger
 from ...shared.config_types import ConfigType
 from ...shared.validation import validate_config_file
@@ -25,7 +23,7 @@ async def validate_config(request: ConfigValidationRequest) -> ConfigValidationR
     try:
         logger.info(f"Validating configuration file: {request.config_path}")
         
-        validate_config_file(Path(request.config_path), request.config_type)
+        validate_config_file(Path(request.config_path), ConfigType(request.config_type))
         is_valid = True
         errors = []
         warnings = []
@@ -81,8 +79,13 @@ async def get_config_types() -> Dict[str, Any]:
             "file_extension": ".yaml"
         },
         {
-            "name": ConfigType.PIPELINE.value,
-            "description": "Pipeline configuration",
+            "name": ConfigType.CLASSIFICATION_PIPELINE.value,
+            "description": "Classification pipeline configuration",
+            "file_extension": ".yaml"
+        },
+        {
+            "name": ConfigType.DETECTION_PIPELINE.value,
+            "description": "Detection pipeline configuration",
             "file_extension": ".yaml"
         }
     ]

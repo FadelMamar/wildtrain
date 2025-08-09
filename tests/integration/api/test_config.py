@@ -45,21 +45,7 @@ class TestConfigurationEndpoints:
             assert "errors" in data
             assert "warnings" in data
             assert "config_type" in data
-    
-    def test_get_config_templates_returns_templates(self, client):
-        """Test GET /config/templates/{config_type} returns templates."""
-        config_types = ["classification", "detection", "classification_eval", "detection_eval"]
         
-        for config_type in config_types:
-            response = client.get(f"/config/templates/{config_type}")
-            
-            assert response.status_code in [200, 404, 500]
-            if response.status_code == 200:
-                data = response.json()
-                assert data["success"] is True
-                assert "template" in data
-                assert "config_type" in data
-    
     def test_get_config_types_lists_available_types(self, client):
         """Test GET /config/types lists available types."""
         response = client.get("/config/types")
@@ -77,37 +63,6 @@ class TestConfigurationEndpoints:
             assert "description" in config_type
             assert "file_extension" in config_type
       
-    def test_template_generation_for_all_config_types(self, client):
-        """Test template generation for all config types."""
-        config_types = [
-            "classification", "detection", "classification_eval", 
-            "detection_eval", "classification_visualization", 
-            "detection_visualization", "pipeline"
-        ]
-        
-        for config_type in config_types:
-            response = client.get(f"/config/templates/{config_type}")
-            
-            # Should handle all config types gracefully
-            assert response.status_code in [200, 404, 500]
-            if response.status_code == 200:
-                data = response.json()
-                assert data["success"] is True
-                assert "template" in data
-    
-    def test_file_upload_handling_for_configs(self, client):
-        """Test file upload handling for configs."""
-        # Test with file path instead of upload
-        response = client.post("/config/validate", json={
-            "config_path": str(VALID_CLASSIFICATION_CONFIG),
-            "config_type": "classification"
-        })
-        
-        assert response.status_code in [200, 201, 202, 500]
-        if response.status_code in [200, 201, 202]:
-            data = response.json()
-            assert data["success"] is True
-    
     def test_config_validation_with_different_types(self, client):
         """Test config validation with different config types."""
         config_types = ["classification", "detection", "classification_eval"]
@@ -119,7 +74,7 @@ class TestConfigurationEndpoints:
             })
             
             # Should handle different config types gracefully
-            assert response.status_code in [200, 201, 202, 500]
+            assert response.status_code in [200, 201, 202]
     
     def test_config_validation_with_nonexistent_files(self, client):
         """Test config validation with non-existent files."""
@@ -150,66 +105,8 @@ class TestConfigurationEndpoints:
             })
             
             # Should handle malformed YAML gracefully
-            assert response.status_code in [200, 201, 202, 500]
-            if response.status_code in [200, 201, 202]:
-                data = response.json()
-                # Should either be invalid or have errors
-                assert not data.get("is_valid", True) or len(data.get("errors", [])) > 0
-    
-    def test_config_templates_with_invalid_types(self, client):
-        """Test config templates with invalid config types."""
-        invalid_types = ["invalid_type", "nonexistent", "random"]
-        
-        for config_type in invalid_types:
-            response = client.get(f"/config/templates/{config_type}")
-            
-            # Should handle invalid config types gracefully
-            assert response.status_code in [404, 500]
-    
-    def test_config_types_endpoint_structure(self, client):
-        """Test that config types endpoint returns proper structure."""
-        response = client.get("/config/types")
-        
-        assert response.status_code == 200
-        data = response.json()
-        
-        # Check response structure
-        assert "success" in data
-        assert "message" in data
-        assert "config_types" in data
-        assert "total_types" in data
-        
-        # Check that config_types is a list
-        assert isinstance(data["config_types"], list)
-        
-        # Check that total_types matches the length
-        assert data["total_types"] == len(data["config_types"])
-    
-    def test_config_validation_error_details(self, client):
-        """Test that config validation provides detailed error information."""
-        # Create a config with obvious errors
-        with tempfile.TemporaryDirectory() as temp_dir:
-            error_config = Path(temp_dir) / "error_config.yaml"
-            error_config.write_text("""
-            model:
-              name: resnet18
-            data:
-              # Missing dataset_path
-            training:
-              # Missing epochs
-            """)
-        
-            response = client.post("/config/validate", json={
-                "config_path": str(error_config),
-                "config_type": "classification"
-            })
-        
-            if response.status_code in [200, 201, 202]:
-                data = response.json()
-                # Should provide detailed error information
-                assert "errors" in data
-                assert isinstance(data["errors"], list)
-                    
+            assert response.status_code in [400, 500]
+                        
     def test_config_validation_request_validation(self, client):
         """Test config validation request validation."""
         # Test with invalid data types

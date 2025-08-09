@@ -55,11 +55,8 @@ class TrainingService:
             
             # Create a temporary config file
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                if isinstance(validated_config, dict):
-                    yaml_content = OmegaConf.to_yaml(OmegaConf.create(validated_config))
-                else:
-                    config_dict = validated_config.model_dump()
-                    yaml_content = OmegaConf.to_yaml(OmegaConf.create(config_dict))
+                config_dict = validated_config.model_dump()
+                yaml_content = OmegaConf.to_yaml(OmegaConf.create(config_dict))
                 f.write(yaml_content)
                 temp_config_path = f.name
 
