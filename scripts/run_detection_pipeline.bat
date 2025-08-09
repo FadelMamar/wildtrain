@@ -6,6 +6,6 @@ call cd /d %~dp0 && cd ..
 REM Set example config path
 set CONFIG_PATH=configs\detection\yolo_configs\yolo_pipeline_config.yaml
 
-REM Run the run_classification_pipeline CLI command
+REM Run the run_detection_pipeline CLI command
 call uv run wildtrain run-detection-pipeline ^
     -c %CONFIG_PATH% 

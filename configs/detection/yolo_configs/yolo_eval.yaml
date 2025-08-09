@@ -8,7 +8,7 @@ weights:
 # Path to the data config YAML (YOLO format)
 data: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
 
-device: "cpu"
+device: "cuda"  # Device to run the evaluation on (cuda/cpu)
 
 metrics:
   average: macro # weighted, macro, micro

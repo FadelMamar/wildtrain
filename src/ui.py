@@ -150,15 +150,15 @@ def home_page():
     st.markdown("---")
     
     # Show available config files
-    config_files = get_config_files()
+    #config_files = get_config_files()
     
-    st.subheader("📁 Available Configuration Files")
+    #st.subheader("📁 Available Configuration Files")
     
-    for category, files in config_files.items():
-        if files:
-            with st.expander(f"{category.title()} Configurations ({len(files)} files)"):
-                for file_path in files:
-                    st.code(file_path, language="text")
+    #for category, files in config_files.items():
+        #if files:
+            #with st.expander(f"{category.title()} Configurations ({len(files)} files)"):
+                #for file_path in files:
+                    #st.code(file_path, language="text")
 
 
 def training_page():

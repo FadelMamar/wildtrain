@@ -2,15 +2,23 @@
 
 classifier: checkpoints\classification\best_classifier.pt # Path to the best checkpoint
 split: val  # 'val' or 'test'
-device: cpu  # or 'cuda' if available
-batch_size: 4
+device: cuda  # or 'cuda' if available
+batch_size: 64
+
+input_size: 224
 
 dataset:
-  root_data_directory: "D:/workspace/data/demo-dataset"
+  root_data_directory: D:\PhD\workspace\data
   single_class:
     enable : true
     background_class_name: "background"
     single_class_name: "wildlife"
     keep_classes: null
-    discard_classes: ["vegetation", "termite mound", "rocks", "other", "label"]
+    discard_classes: ["vegetation", "termite mound", "rocks", "other", "label","detection"]
+  
+  transforms:
+   val:
+      - name: Resize
+        params:
+          size: ${dataset.input_size}
 

@@ -64,7 +64,7 @@ train:
   cls: 1.0
   dfl: 1.5
 
-  device: cpu
+  device: cuda
   workers: 0
 
   # augmentations

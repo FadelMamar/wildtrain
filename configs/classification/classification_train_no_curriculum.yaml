@@ -1,7 +1,7 @@
 # Example configuration for WildTrain classification training
 task: classification
 
-run_name: "dinov2-small"
+run_name: "dinov2-small-3hiddenlayers"
 
 dataset:
   root_data_directory: D:\workspace\data\demo-dataset
@@ -15,28 +15,37 @@ dataset:
     discard_classes: ["vegetation", "termite mound", "rocks", "other", "label","detection"]
 
   stats:
-    mean: [0.554, 0.469, 0.348]
-    std: [0.203, 0.173, 0.144]
+    mean:  [0.460, 0.440, 0.358]
+    std:   [0.174, 0.153, 0.148]
   
-  input_size: 128
+  input_size: 224
 
   transforms:
     train:
-      - name: Resize
-        params:
-          size: ${dataset.input_size}
       - name: RandomHorizontalFlip
         params:
           p: 0.5
       - name: ColorJitter
         params:
-          brightness: 0.1
+          brightness: 0.2
           contrast: 0.0
           saturation: 0.0
-      - name: RandomRotation
+      - name: RandomZoomOut
+        params:
+          fill: [117, 112, 80]
+          side_range : [1.0,4.0]
+          p: 0.5
+      - name: RandomAffine
         params:
           degrees: 45
-    
+          translate: [0.1, 0.3]
+          scale: [0.9, 1.2]
+          shear: 5
+          fill: [117, 112, 80]
+      - name: Resize
+        params:
+          size: ${dataset.input_size}
+
     val:
       - name: Resize
         params:
@@ -53,13 +62,12 @@ model:
   std: ${dataset.stats.std}
 
 train:
-  batch_size: 64
+  batch_size: 32
   epochs: 20
-  lr: 0.0001
-  threshold: 0.5
+  lr: 0.001
   label_smoothing: 0.0
   weight_decay: 0.0001
-  lrf: 0.1
+  lrf: 0.01
   precision: bf16-mixed
   accelerator: auto
 
