@@ -20,6 +20,9 @@ from .models import (
     ClassificationEvalConfig,
     DetectionEvalConfig,
     ClassificationVisualizationConfig,
+    DetectorRegistrationConfig,
+    ClassifierRegistrationConfig,
+    ModelRegistrationConfig,
 )
 from ..shared.config_types import ConfigType
 from ..shared.validation import ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
@@ -146,6 +149,33 @@ class ConfigLoader:
         )
     
     @staticmethod
+    def load_detector_registration_config(config_path: Path) -> DetectorRegistrationConfig:
+        """Load and validate detector registration configuration."""
+        return ConfigLoader.load_and_validate(
+            config_path,
+            DetectorRegistrationConfig,
+            "Detector registration configuration"
+        )
+    
+    @staticmethod
+    def load_classifier_registration_config(config_path: Path) -> ClassifierRegistrationConfig:
+        """Load and validate classifier registration configuration."""
+        return ConfigLoader.load_and_validate(
+            config_path,
+            ClassifierRegistrationConfig,
+            "Classifier registration configuration"
+        )
+    
+    @staticmethod
+    def load_model_registration_config(config_path: Path) -> ModelRegistrationConfig:
+        """Load and validate model registration configuration."""
+        return ConfigLoader.load_and_validate(
+            config_path,
+            ModelRegistrationConfig,
+            "Model registration configuration"
+        )
+    
+    @staticmethod
     def load_pipeline_config(
         config_path: Path, 
         pipeline_type: str = "classification"
@@ -186,6 +216,12 @@ class ConfigLoader:
                 ConfigLoader.load_pipeline_config(config_path, "classification")
             elif config_type == ConfigType.DETECTION_PIPELINE:
                 ConfigLoader.load_pipeline_config(config_path, "detection")
+            elif config_type == ConfigType.DETECTOR_REGISTRATION:
+                ConfigLoader.load_detector_registration_config(config_path)
+            elif config_type == ConfigType.CLASSIFIER_REGISTRATION:
+                ConfigLoader.load_classifier_registration_config(config_path)
+            elif config_type == ConfigType.MODEL_REGISTRATION:
+                ConfigLoader.load_model_registration_config(config_path)
             else:
                 raise ValueError(f"Unknown config type: {config_type}")
             return True
@@ -226,6 +262,9 @@ class ConfigLoader:
             ConfigType.DETECTION_VISUALIZATION: DetectionVisualizationConfig,
             ConfigType.CLASSIFICATION_PIPELINE: ClassificationPipelineConfig,
             ConfigType.DETECTION_PIPELINE: DetectionPipelineConfig,
+            ConfigType.DETECTOR_REGISTRATION: DetectorRegistrationConfig,
+            ConfigType.CLASSIFIER_REGISTRATION: ClassifierRegistrationConfig,
+            ConfigType.MODEL_REGISTRATION: ModelRegistrationConfig,
         }
         
         if config_type not in config_class_map:

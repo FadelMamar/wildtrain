@@ -238,8 +238,6 @@ class MMDetConfig(BaseConfig):
         return v
 
 
-# Add new configuration classes before DetectionConfig
-
 class YoloDatasetConfig(BaseConfig):
     """YOLO dataset configuration."""
     data_cfg: Optional[str] = Field(default=None, description="str to data configuration file")
@@ -821,6 +819,141 @@ class ClassificationVisualizationConfig(BaseConfig):
         return v.strip()
 
 
+class DetectorRegistrationConfig(BaseConfig):
+    """Configuration for registering a detection model to MLflow Model Registry.
+    
+    This configuration is specifically for registering YOLO detection models.
+    
+    Example:
+        config = DetectorRegistrationConfig(
+            weights_path="path/to/model.pt",
+            name="my-detector",
+            export_format="pt",
+            image_size=800,
+            batch_size=8,
+            device="cpu",
+            dynamic=False,
+            task="detect",
+            mlflow_tracking_uri="http://localhost:5000"
+        )
+    """
+    weights_path: str = Field(description="Path to the model weights file")
+    name: str = Field(default="detector", description="Model name for registration")
+    export_format: str = Field(default="pt", description="Export format (torchscript, openvino, etc.)")
+    image_size: int = Field(default=800, gt=0, description="Input image size")
+    batch_size: int = Field(default=8, gt=0, description="Batch size for inference")
+    device: str = Field(default="cpu", description="Device to use for export")
+    dynamic: bool = Field(default=False, description="Whether to use dynamic batching")
+    task: str = Field(default="detect", description="YOLO task type (detect, classify, segment)")
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking server URI")
+    
+    @field_validator('weights_path')
+    @classmethod
+    def validate_weights_path(cls, v):
+        if not Path(v).exists():
+            raise ValueError(f"Model weights file does not exist: {v}")
+        return v
+    
+    @field_validator('task')
+    @classmethod
+    def validate_task(cls, v):
+        valid_tasks = ["detect", "classify", "segment"]
+        if v not in valid_tasks:
+            raise ValueError(f"Task must be one of {valid_tasks}, got: {v}")
+        return v
+    
+    @field_validator('device')
+    @classmethod
+    def validate_device(cls, v):
+        valid_devices = ["cpu", "cuda", "auto"]
+        if v not in valid_devices:
+            raise ValueError(f"Device must be one of {valid_devices}, got: {v}")
+        return v
+    
+    @field_validator('export_format')
+    @classmethod
+    def validate_export_format(cls, v):
+        valid_formats = ["torchscript", "openvino", "onnx", "pt"]
+        if v not in valid_formats:
+            raise ValueError(f"Export format must be one of {valid_formats}, got: {v}")
+        return v
+    
+    @field_validator('image_size', 'batch_size')
+    @classmethod
+    def validate_positive_int(cls, v):
+        if v <= 0:
+            raise ValueError(f"Value must be positive, got: {v}")
+        return v
+
+
+class ClassifierRegistrationConfig(BaseConfig):
+    """Configuration for registering a classification model to MLflow Model Registry.
+    
+    This configuration is specifically for registering classification models.
+    
+    Example:
+        config = ClassifierRegistrationConfig(
+            weights_path="path/to/checkpoint.ckpt",
+            name="my-classifier",
+            batch_size=8,
+            mlflow_tracking_uri="http://localhost:5000"
+        )
+    """
+    weights_path: str = Field(description="Path to the model checkpoint file")
+    name: str = Field(default="classifier", description="Model name for registration")
+    batch_size: int = Field(default=8, gt=0, description="Batch size for inference")
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking server URI")
+    
+    @field_validator('weights_path')
+    @classmethod
+    def validate_weights_path(cls, v):
+        if not Path(v).exists():
+            raise ValueError(f"Model checkpoint file does not exist: {v}")
+        return v
+    
+    @field_validator('batch_size')
+    @classmethod
+    def validate_batch_size(cls, v):
+        if v <= 0:
+            raise ValueError(f"Batch size must be positive, got: {v}")
+        return v
+
+
+class ModelRegistrationConfig(BaseConfig):
+    """Base configuration for model registration.
+    
+    This is a union configuration that can handle both detector and classifier registration.
+    """
+    model_type: Literal["detector", "classifier"] = Field(description="Type of model to register")
+    detector: Optional[DetectorRegistrationConfig] = Field(default=None, description="Detector registration configuration")
+    classifier: Optional[ClassifierRegistrationConfig] = Field(default=None, description="Classifier registration configuration")
+    
+    @field_validator('detector', 'classifier')
+    @classmethod
+    def validate_model_config(cls, v, info):
+        model_type = info.data.get('model_type')
+        if model_type == "detector" and v is None:
+            if 'detector' in info.field_name:
+                raise ValueError("Detector configuration is required for detector model type")
+        elif model_type == "classifier" and v is None:
+            if 'classifier' in info.field_name:
+                raise ValueError("Classifier configuration is required for classifier model type")
+        return v
+    
+    def get_config(self) -> Union[DetectorRegistrationConfig, ClassifierRegistrationConfig]:
+        """Get the appropriate configuration based on model type."""
+        if self.model_type == "detector":
+            if self.detector is None:
+                raise ValueError("Detector configuration is required for detector model type")
+            return self.detector
+        elif self.model_type == "classifier":
+            if self.classifier is None:
+                raise ValueError("Classifier configuration is required for classifier model type")
+            return self.classifier
+        else:
+            raise ValueError(f"Unknown model type: {self.model_type}")
+
+
 # Update forward references
 ClassificationEvalConfig.model_rebuild()
 ClassificationEvalDatasetConfig.model_rebuild()
@@ -830,3 +963,6 @@ DetectionWeightsConfig.model_rebuild()
 DetectionMetricsConfig.model_rebuild()
 DetectionEvalParamsConfig.model_rebuild()
 ClassificationVisualizationConfig.model_rebuild()
+DetectorRegistrationConfig.model_rebuild()
+ClassifierRegistrationConfig.model_rebuild()
+ModelRegistrationConfig.model_rebuild()
