@@ -33,6 +33,9 @@ runs/
 checkpoints/
 mlartifacts/
 wildai-localization/
+*.pt
+*.torchscript
+*.pkl
 
 # PyInstaller
 #  Usually these files are written by a python script from a template

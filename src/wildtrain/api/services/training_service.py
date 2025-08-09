@@ -8,9 +8,9 @@ from typing import Dict, Any, Optional
 import logging
 
 from omegaconf import OmegaConf
-from wildtrain.cli.config_loader import ConfigLoader
-from wildtrain.cli.models import ClassificationConfig, DetectionConfig
-from wildtrain.cli import train_classifier, train_detector
+from ...cli.config_loader import ConfigLoader
+from ...cli.models import ClassificationConfig, DetectionConfig
+from ...shared.config_types import ConfigType
 
 logger = logging.getLogger(__name__)
 
@@ -33,8 +33,9 @@ class TrainingService:
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
-            # Run the CLI command
-            train_classifier(config=Path(temp_config_path),template=False)
+            # Import and run the CLI command
+            from ...cli.commands.train import classifier
+            classifier(config=Path(temp_config_path), template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -62,8 +63,9 @@ class TrainingService:
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
-            # Run the CLI command
-            train_detector(config=Path(temp_config_path),template=False)
+            # Import and run the CLI command
+            from ...cli.commands.train import detector
+            detector(config=Path(temp_config_path), template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -79,7 +81,7 @@ class TrainingService:
     def generate_classification_train_template() -> str:
         """Generate a classification training template."""
         try:
-            template = ConfigLoader.generate_default_config("classification")
+            template = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION)
             return template
         except Exception as e:
             logger.error(f"Failed to generate classification training template: {e}")
@@ -89,7 +91,7 @@ class TrainingService:
     def generate_detection_train_template() -> str:
         """Generate a detection training template."""
         try:
-            template = ConfigLoader.generate_default_config("detection")
+            template = ConfigLoader.generate_default_config(ConfigType.DETECTION)
             return template
         except Exception as e:
             logger.error(f"Failed to generate detection training template: {e}")

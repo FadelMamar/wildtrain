@@ -8,9 +8,9 @@ from typing import Dict, Any, Optional
 import logging
 
 from omegaconf import OmegaConf
-from wildtrain.cli.config_loader import ConfigLoader
-from wildtrain.cli.models import ClassificationVisualizationConfig, DetectionVisualizationConfig
-from wildtrain.cli import visualize_classifier_predictions, visualize_detector_predictions
+from ...cli.config_loader import ConfigLoader
+from ...cli.models import ClassificationVisualizationConfig, DetectionVisualizationConfig
+from ...shared.config_types import ConfigType
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,9 @@ class VisualizationService:
 
             logger.debug(f"Created temporary config file: {temp_config_path}")
 
-            # Run the CLI command
-            visualize_classifier_predictions(config=Path(temp_config_path),template=False)
+            # Import and run the CLI command
+            from ...cli.commands.visualize import classifier_predictions
+            classifier_predictions(config=Path(temp_config_path), template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -56,8 +57,9 @@ class VisualizationService:
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
-            # Run the CLI command
-            visualize_detector_predictions(config=Path(temp_config_path),template=False)
+            # Import and run the CLI command
+            from ...cli.commands.visualize import detector_predictions
+            detector_predictions(config=Path(temp_config_path), template=False)
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -72,7 +74,7 @@ class VisualizationService:
     def generate_classification_visualization_template() -> str:
         """Generate a classification visualization template."""
         try:
-            template = ConfigLoader.generate_default_config("classification_visualization")
+            template = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION_VISUALIZATION)
             return template
         except Exception as e:
             raise Exception(f"Failed to generate classification visualization template: {e}")
@@ -81,7 +83,7 @@ class VisualizationService:
     def generate_detection_visualization_template() -> str:
         """Generate a detection visualization template."""
         try:
-            template = ConfigLoader.generate_default_config("detection_visualization")
+            template = ConfigLoader.generate_default_config(ConfigType.DETECTION_VISUALIZATION)
             return template
         except Exception as e:
             raise Exception(f"Failed to generate detection visualization template: {e}")

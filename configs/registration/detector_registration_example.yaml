@@ -1,0 +1,32 @@
+# Example detector registration configuration
+# This file can be used with: wildtrain register-detector --config configs/registration/detector_registration_example.yaml
+
+# Path to the model weights file (required)
+weights_path: models/best.pt
+
+# Model name for registration (optional, defaults to "detector")
+name: "localizer"
+
+# Export format (optional, defaults to "pt")
+# Valid formats: torchscript, openvino, onnx, pt
+export_format: "pt"
+
+# Input image size (optional, defaults to 800)
+image_size: 800
+
+# Batch size for inference (optional, defaults to 8)
+batch_size: 8
+
+# Device to use for export (optional, defaults to "cpu")
+# Valid devices: cpu, cuda, auto
+device: "cpu"
+
+# Whether to use dynamic batching (optional, defaults to false)
+dynamic: false
+
+# YOLO task type (optional, defaults to "detect")
+# Valid tasks: detect, classify, segment
+task: "detect"
+
+# MLflow tracking server URI (optional, defaults to "http://localhost:5000")
+mlflow_tracking_uri: "http://localhost:5000"

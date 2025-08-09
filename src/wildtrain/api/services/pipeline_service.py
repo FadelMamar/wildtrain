@@ -8,9 +8,9 @@ from typing import Dict, Any, Optional
 import logging
 
 from omegaconf import OmegaConf
-from wildtrain.cli.config_loader import ConfigLoader
-from wildtrain.cli.models import ClassificationPipelineConfig, DetectionPipelineConfig
-from wildtrain.cli import run_classification_pipeline, run_detection_pipeline
+from ...cli.config_loader import ConfigLoader
+from ...cli.models import ClassificationPipelineConfig, DetectionPipelineConfig
+from ...shared.config_types import ConfigType
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +31,9 @@ class PipelineService:
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
-            # Run the CLI command
-            run_classification_pipeline(config=Path(temp_config_path))
+            # Import and run the CLI command
+            from ...cli.commands.pipeline import classification
+            classification(config=Path(temp_config_path))
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -57,8 +58,9 @@ class PipelineService:
 
             logger.info(f"Created temporary config file: {temp_config_path}")
 
-            # Run the CLI command
-            run_detection_pipeline(config=Path(temp_config_path))
+            # Import and run the CLI command
+            from ...cli.commands.pipeline import detection
+            detection(config=Path(temp_config_path))
 
             # Clean up temporary file
             Path(temp_config_path).unlink(missing_ok=True)
@@ -74,7 +76,7 @@ class PipelineService:
     def generate_classification_pipeline_template() -> str:
         """Generate a classification pipeline template."""
         try:
-            template = ConfigLoader.generate_default_config("classification_pipeline")
+            template = ConfigLoader.generate_default_config(ConfigType.CLASSIFICATION_PIPELINE)
             return template
         except Exception as e:
             logger.error(f"Failed to generate classification pipeline template: {e}")
@@ -84,7 +86,7 @@ class PipelineService:
     def generate_detection_pipeline_template() -> str:
         """Generate a detection pipeline template."""
         try:
-            template = ConfigLoader.generate_default_config("detection_pipeline")
+            template = ConfigLoader.generate_default_config(ConfigType.DETECTION_PIPELINE)
             return template
         except Exception as e:
             logger.error(f"Failed to generate detection pipeline template: {e}")

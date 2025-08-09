@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 import logging
 
-from wildtrain.cli import get_dataset_stats
-from wildtrain.cli.config_loader import ConfigLoader
+from ...cli.config_loader import ConfigLoader
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +20,15 @@ class DatasetService:
         try:
             logger.info(f"Getting dataset statistics for {data_dir}, split: {split}")
 
-            # Run the CLI command
-            stats = get_dataset_stats(
-                data_dir=data_dir,
-                split=split,
-                output_file=output_file
-            )
+            # Import and run the CLI command
+            from ...cli.commands.dataset import stats
+            results = stats(data_dir=data_dir, split=split, output_file=output_file)
 
             # Parse results (this would need to be enhanced based on actual CLI output)
             formatted_results = {
                 "stats": {
-                    "mean": stats["mean"],
-                    "std": stats["std"]
+                    "mean": results["mean"],
+                    "std": results["std"]
                 },
                 "split_info": {
                     "split": split,
@@ -51,7 +47,7 @@ class DatasetService:
     def get_dataset_splits(data_dir: Path) -> Dict[str, Any]:
         """Get available dataset splits."""
         try:
-            from wildtrain.data import ClassificationDataModule
+            from ...data.classification_datamodule import ClassificationDataModule
             
             # Create the data module to check available splits
             datamodule = ClassificationDataModule(

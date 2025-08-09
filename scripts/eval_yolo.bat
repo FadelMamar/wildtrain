@@ -7,4 +7,4 @@ REM Set example config path
 set CONFIG_PATH=configs\detection\yolo_eval.yaml
 
 REM Run the eval-yolo CLI command
-call uv run wildtrain evaluate-detector %CONFIG_PATH% -t yolo
+call uv run wildtrain evaluate detector %CONFIG_PATH% -t yolo
