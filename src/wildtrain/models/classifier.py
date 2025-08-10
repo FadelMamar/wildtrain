@@ -60,8 +60,7 @@ class GenericClassifier(nn.Module):
     ):
         preprocessing = torch.nn.Sequential(
             T.Resize([self.input_size.item(), self.input_size.item()], interpolation=T.InterpolationMode.BICUBIC),
-            T.ToDtype(torch.float32),
-            T.Normalize(mean=self.mean, std=self.std),
+            T.Normalize(mean=self.mean.tolist(), std=self.std.tolist()),
         )
         return preprocessing
 
@@ -86,13 +85,13 @@ class GenericClassifier(nn.Module):
             )
             data_cfg = timm.data.resolve_data_config(model.pretrained_cfg)
             transform = timm.data.create_transform(**data_cfg)
-            trfs = [T.ToDtype(torch.float32)] + [t for t in transform.transforms if isinstance(t, nn.Module)]
+            trfs = [t for t in transform.transforms if isinstance(t, T.Normalize)]
 
-            if hasattr(model, "set_input_size"):
+            try:
                 model.set_input_size((self.input_size.item(),self.input_size.item()))
-                trfs = [t for t in trfs if not isinstance(t, T.Resize)]
-                trfs = [T.Resize([self.input_size.item(), self.input_size.item()], interpolation=T.InterpolationMode.BICUBIC),] + trfs
-
+            except Exception:
+                logger.info(f"Backbone {self.backbone} does not support setting input size")
+                pass
         else:
             raise ValueError(f"Unsupported backbone source: {self.backbone_source}")
 
@@ -105,7 +104,7 @@ class GenericClassifier(nn.Module):
         return nn.Sequential(*trfs,model)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.preprocessing(x)
+        x = self.preprocessing(x.float())
         x = self.feature_extractor(x)
         return self.fc(x)
 
