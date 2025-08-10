@@ -39,7 +39,7 @@ class ModelMetadata(BaseModel):
     This class provides structured metadata for MLflow model registration,
     including validation and default values.
     """
-    batch_size: int = Field(default=8, gt=0, description="Batch size for inference")
+    batch: int = Field(default=8, gt=0, description="Batch size for inference")
     imgsz: int = Field(default=800, gt=0, description="Input image size")
     task: ModelTask = Field(default=ModelTask.DETECT, description="Model task type")
     num_classes: Optional[int] = Field(default=None, ge=2, description="Number of classes")
@@ -49,7 +49,7 @@ class ModelMetadata(BaseModel):
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for MLflow metadata."""
         return {
-            "batch_size": self.batch_size,
+            "batch": self.batch,
             "imgsz": self.imgsz,
             "task": self.task.value,
             "num_classes": self.num_classes,
@@ -200,7 +200,7 @@ class ModelRegistrar:
         
         # Create metadata using the new ModelMetadata class
         metadata = ModelMetadata(
-            batch_size=batch_size,
+            batch=batch_size,
             imgsz=image_size,
             task=ModelTask(task) if isinstance(task, str) else task,
             model_type=ModelType.DETECTOR,
@@ -240,14 +240,10 @@ class ModelRegistrar:
         
         dummy_input = torch.randn(batch_size, 3, model.input_size.item(), model.input_size.item())
         try:
-            try:
-                scripted_model = torch.jit.script(model)
-            except Exception as e:
-                logger.info(f"Scripting failed. Falling back to tracing.")
-                scripted_model = torch.jit.trace(model, dummy_input)
+            scripted_model = torch.jit.script(model)
         except Exception as e:
-            logger.warning(f"Tracing failed with strict=True, trying with strict=False")
-            scripted_model = torch.jit.trace(model, dummy_input, strict=False)
+            logger.info(f"Scripting failed. Falling back to tracing.")
+            scripted_model = torch.jit.trace(model, dummy_input)
         
         # Save the scripted model
         scripted_path = model_path.with_suffix(".torchscript")
@@ -257,7 +253,7 @@ class ModelRegistrar:
         
         # Create metadata using the new ModelMetadata class
         metadata = ModelMetadata(
-            batch_size=batch_size,
+            batch=batch_size,
             image_size=model.input_size.item(),
             task=ModelTask.CLASSIFY,
             num_classes=model.num_classes.item(),
@@ -328,7 +324,7 @@ class ModelRegistrar:
                 "model",
                 python_model=python_model,
                 conda_env=get_conda_env(),
-                input_example=input_example,
+                #input_example=input_example,
                 artifacts=artifacts,
                 registered_model_name=name,
                 metadata=metadata,
