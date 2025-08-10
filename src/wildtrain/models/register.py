@@ -3,9 +3,10 @@
 import os
 import platform
 from pathlib import Path
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 from enum import Enum
 
+import numpy as np
 import torch
 import mlflow
 from ultralytics import YOLO
@@ -39,20 +40,20 @@ class ModelMetadata(BaseModel):
     including validation and default values.
     """
     batch_size: int = Field(default=8, gt=0, description="Batch size for inference")
-    image_size: int = Field(default=800, gt=0, description="Input image size")
+    imgsz: int = Field(default=800, gt=0, description="Input image size")
     task: ModelTask = Field(default=ModelTask.DETECT, description="Model task type")
     num_classes: Optional[int] = Field(default=None, ge=2, description="Number of classes")
-    input_size: Optional[int] = Field(default=None, gt=0, description="Input size for classification models")
+    cls_imgsz: Optional[int] = Field(default=None, gt=0, description="Input size for classification models")
     model_type: ModelType = Field(description="Type of model (detector or classifier)")
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for MLflow metadata."""
         return {
             "batch_size": self.batch_size,
-            "image_size": self.image_size,
+            "imgsz": self.imgsz,
             "task": self.task.value,
             "num_classes": self.num_classes,
-            "input_size": self.input_size,
+            "cls_imgsz": self.cls_imgsz,
             "model_type": self.model_type.value
         }
 
@@ -81,7 +82,7 @@ class UltralyticsWrapper(mlflow.pyfunc.PythonModel):
         
         self.model = YOLO(str(model_path), task="detect")
         self.artifacts = context.artifacts
-
+    
 
 class ClassifierWrapper(mlflow.pyfunc.PythonModel):
     """MLflow wrapper for classification models."""
@@ -113,7 +114,7 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
         self.model = torch.jit.load(str(model_path), map_location="cpu")
         self.model.eval()
         self.artifacts = context.artifacts
-
+    
 
 def get_experiment_id(name: str) -> str:
     """Get or create an MLflow experiment ID.
@@ -200,9 +201,10 @@ class ModelRegistrar:
         # Create metadata using the new ModelMetadata class
         metadata = ModelMetadata(
             batch_size=batch_size,
-            image_size=image_size,
+            imgsz=image_size,
             task=ModelTask(task) if isinstance(task, str) else task,
-            model_type=ModelType.DETECTOR
+            model_type=ModelType.DETECTOR,
+            cls_imgsz=None,
         )
         
         self._register_model(
@@ -210,6 +212,7 @@ class ModelRegistrar:
             metadata=metadata.to_dict(),
             name=name,
             python_model=UltralyticsWrapper(),
+            input_example=np.random.rand(batch_size, 3, image_size, image_size),
         )
         
         logger.info(f"Successfully registered detector model: {name}")
@@ -235,15 +238,15 @@ class ModelRegistrar:
         model = GenericClassifier.load_from_checkpoint(str(model_path))
         model.eval()
         
-        # Use tracing instead of scripting for better compatibility with transforms
-        # Create a dummy input for tracing
-        dummy_input = torch.randn(1, 3, model.input_size.item(), model.input_size.item())
-        
+        dummy_input = torch.randn(batch_size, 3, model.input_size.item(), model.input_size.item())
         try:
-            # Trace the model with strict=False to handle minor differences
-            scripted_model = torch.jit.trace(model, dummy_input, strict=False)
+            try:
+                scripted_model = torch.jit.script(model)
+            except Exception as e:
+                logger.info(f"Scripting failed. Falling back to tracing.")
+                scripted_model = torch.jit.trace(model, dummy_input)
         except Exception as e:
-            logger.warning(f"Tracing failed with strict=True, trying with strict=False: {e}")
+            logger.warning(f"Tracing failed with strict=True, trying with strict=False")
             scripted_model = torch.jit.trace(model, dummy_input, strict=False)
         
         # Save the scripted model
@@ -267,6 +270,7 @@ class ModelRegistrar:
             metadata=metadata.to_dict(),
             name=name,
             python_model=ClassifierWrapper(),
+            input_example=dummy_input.cpu().numpy(),
         )
         
         logger.info(f"Successfully registered classifier model: {name}")
@@ -313,6 +317,7 @@ class ModelRegistrar:
         artifacts: Dict[str, str],
         metadata: Dict[str, Any],
         name: str,
+        input_example: np.ndarray,
         python_model: mlflow.pyfunc.PythonModel,
     ) -> None:
         """Register a model to MLflow Model Registry."""
@@ -323,6 +328,7 @@ class ModelRegistrar:
                 "model",
                 python_model=python_model,
                 conda_env=get_conda_env(),
+                input_example=input_example,
                 artifacts=artifacts,
                 registered_model_name=name,
                 metadata=metadata,
