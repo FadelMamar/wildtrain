@@ -34,7 +34,7 @@ class Detector(object):
             classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device) 
         return cls(localizer=localizer,classifier=classifier)
 
-    def predict(self, images: torch.Tensor) -> list[sv.Detections]:
+    def predict(self, images: torch.Tensor,return_as_dict:bool=True) -> list[sv.Detections]:
         """Detects objects in a batch of images and classifies each ROI."""
         assert images.dim() == 4, "Input images must be a batch of images"
         assert images.shape[1] == 3, "Input images must be RGB"
@@ -113,5 +113,11 @@ class Detector(object):
                 class_id=class_ids,
                 metadata={"class_mapping":class_mapping},
             )
+        
+        if return_as_dict:
+            results = [vars(result) for result in results]
+            #results = [{k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in result.items()} for result in results]
+            return results
+
 
         return results

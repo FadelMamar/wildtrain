@@ -12,10 +12,10 @@ import mlflow
 from ultralytics import YOLO
 from pydantic import BaseModel, Field
 
-from .classifier import GenericClassifier
-from .detector import Detector
-from ..utils.logging import get_logger
-from ..cli.config_loader import ConfigLoader
+from wildtrain.models.classifier import GenericClassifier
+from wildtrain.models.detector import Detector
+from wildtrain.utils.logging import get_logger
+from wildtrain.cli.config_loader import ConfigLoader
 
 
 # Disable torch XNNPACK for compatibility
@@ -81,7 +81,7 @@ class UltralyticsWrapper(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
         """Load the YOLO model from the artifacts."""
-        model_path = Path(context.artifacts["path"]).resolve()
+        model_path = Path(context.artifacts["localizer_ckpt"]).resolve()
         
         # Handle Windows path issues
         if platform.system().lower() != "windows":
@@ -112,7 +112,7 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
         """Load the TorchScript classification model from the artifacts."""
-        model_path = Path(context.artifacts["path"]).resolve()
+        model_path = Path(context.artifacts["classifier_ckpt"]).resolve()
         
         # Handle Windows path issues
         if platform.system().lower() != "windows":
@@ -160,6 +160,10 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         self.model = Detector.from_config(localizer_config=localizer_cfg,
                                         classifier_ckpt=classifier_ckpt)
         self.artifacts = context.artifacts
+    
+    #def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input:List[List[float]]):
+    #    torch_input = torch.tensor(model_input)
+    #    return self.model.predict(torch_input,return_as_dict=True)
 
 
 def get_experiment_id(name: str) -> str:
@@ -224,11 +228,21 @@ class ModelRegistrar:
         localizer_processing = config.localizer.processing
 
         self.tracking_uri = config.processing.mlflow_tracking_uri
+
+        localizer_ckpt = self._export_localizer(
+            model_path=Path(localizer_cfg.weights),
+            export_format=localizer_processing.export_format,
+            image_size=localizer_cfg.imgsz,
+            batch_size=localizer_processing.batch_size,
+            device=localizer_cfg.device,
+            dynamic=localizer_processing.dynamic,
+            task=localizer_cfg.task,
+        )
         
         self.model = Detector.from_config(localizer_config=localizer_cfg,
                                         classifier_ckpt=str(config.classifier.weights_path))
           
-        artifacts = {"localizer_ckpt": str(localizer_cfg.weights),
+        artifacts = {"localizer_ckpt": str(localizer_ckpt),
                     "classifier_ckpt":str(config.classifier.weights_path),
                     "config":str(config_path)
         }
@@ -251,7 +265,6 @@ class ModelRegistrar:
             metadata=metadata.to_dict(),
             name=config.processing.name,
             python_model=DetectorWrapper(),
-            input_example=np.random.rand(localizer_processing.batch_size, 3, localizer_cfg.imgsz, localizer_cfg.imgsz),
         )
         
         logger.info(f"Successfully registered detector model: {config.processing.name}")
@@ -293,7 +306,7 @@ class ModelRegistrar:
             model_path, export_format, image_size, batch_size, device, dynamic, task
         )
         
-        artifacts = {"path": str(export_path)}
+        artifacts = {"localizer_ckpt": str(export_path)}
         
         # Create metadata using the new ModelMetadata class
         metadata = ModelMetadata(
@@ -309,7 +322,6 @@ class ModelRegistrar:
             metadata=metadata.to_dict(),
             name=name,
             python_model=UltralyticsWrapper(),
-            input_example=np.random.rand(batch_size, 3, image_size, image_size),
         )
         
         logger.info(f"Successfully registered detector model: {name}")
@@ -333,28 +345,21 @@ class ModelRegistrar:
         
         # Load the model
         model = GenericClassifier.load_from_checkpoint(str(model_path))
-        model.eval()
         
-        dummy_input = torch.randn(batch_size, 3, model.input_size.item(), model.input_size.item())
-        try:
-            scripted_model = torch.jit.script(model)
-        except Exception as e:
-            logger.info(f"Scripting failed. Falling back to tracing.")
-            scripted_model = torch.jit.trace(model, dummy_input)
+        classifier_ckpt = self._export_classifier(
+            model_path=model_path,
+            batch_size=batch_size,
+        )
         
-        # Save the scripted model
-        scripted_path = model_path.with_suffix(".torchscript")
-        scripted_model.save(str(scripted_path))
-        
-        artifacts = {"path": str(scripted_path)}
+        artifacts = {"classifier_ckpt": str(classifier_ckpt)}
         
         # Create metadata using the new ModelMetadata class
         metadata = ModelMetadata(
             batch=batch_size,
-            image_size=model.input_size.item(),
+            imgsz=None,
             task=ModelTask.CLASSIFY,
             num_classes=model.num_classes.item(),
-            input_size=model.input_size.item(),
+            cls_imgsz=model.input_size.item(),
             model_type=ModelType.CLASSIFIER
         )
         
@@ -363,7 +368,6 @@ class ModelRegistrar:
             metadata=metadata.to_dict(),
             name=name,
             python_model=ClassifierWrapper(),
-            input_example=dummy_input.cpu().numpy(),
         )
         
         logger.info(f"Successfully registered classifier model: {name}")
@@ -405,12 +409,34 @@ class ModelRegistrar:
             logger.error(f"Failed to export model: {e}")
             raise
     
+    def _export_classifier(
+        self,
+        model_path: Path,
+        batch_size: int,
+    ) -> Path:
+        """Export the classifier model in the specified format."""
+        
+        try:
+            model = GenericClassifier.load_from_checkpoint(str(model_path))
+            model.eval()
+            dummy_input = torch.randn(batch_size, 3, model.input_size.item(), model.input_size.item())
+            try:
+                scripted_model = torch.jit.script(model)
+            except Exception as e:
+                logger.info(f"Scripting failed. Falling back to tracing.")
+                scripted_model = torch.jit.trace(model, dummy_input)
+            scripted_path = model_path.with_suffix(".torchscript")
+            scripted_model.save(str(scripted_path))
+            return normalize_path(scripted_path)
+        except Exception as e:
+            logger.error(f"Failed to export model: {e}")
+            raise
+    
     def _register_model(
         self,
         artifacts: Dict[str, str],
         metadata: Dict[str, Any],
         name: str,
-        input_example: np.ndarray,
         python_model: mlflow.pyfunc.PythonModel,
     ) -> None:
         """Register a model to MLflow Model Registry."""
@@ -423,7 +449,6 @@ class ModelRegistrar:
                 "model",
                 python_model=python_model,
                 conda_env=get_conda_env(),
-                #input_example=input_example,
                 artifacts=artifacts,
                 registered_model_name=name,
                 metadata=metadata,
