@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from wildtrain.models.classifier import GenericClassifier
 from wildtrain.models.detector import Detector
 from wildtrain.utils.logging import get_logger
-from wildtrain.cli.config_loader import ConfigLoader
 
 
 # Disable torch XNNPACK for compatibility
@@ -142,6 +141,8 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
         """Load the TorchScript classification model from the artifacts."""
+        from wildtrain.cli.config_loader import ConfigLoader
+        
         localizer_ckpt = Path(context.artifacts["localizer_ckpt"])
         classifier_ckpt = Path(context.artifacts["classifier_ckpt"])
         config = Path(context.artifacts["config"])
@@ -218,6 +219,7 @@ class ModelRegistrar:
     ) -> None:
         """Register a YOLO detection model to MLflow Model Registry.
         """
+        from wildtrain.cli.config_loader import ConfigLoader
 
         config = ConfigLoader.load_detector_registration_config(config_path)
 
