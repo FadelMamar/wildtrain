@@ -28,7 +28,6 @@ class UltralyticsEvaluator(BaseEvaluator):
         self.dataloader = self._create_dataloader()    
 
     def _load_model(self) -> Any:
-        # Create a flattened config for the localizer that includes eval parameters
         localizer_config = OmegaConf.create({
             'weights': str(self.config.weights.localizer),
             'imgsz': self.config.eval.imgsz,
@@ -39,16 +38,7 @@ class UltralyticsEvaluator(BaseEvaluator):
             'task': self.config.eval.task,
             'max_det': self.config.eval.max_det,
         })
-        
-        localizer = UltralyticsLocalizer.from_config(localizer_config)
-        
-        classifier = None
-        if self.config.weights.classifier:
-            classifier = GenericClassifier.load_from_checkpoint(
-                self.config.weights.classifier, map_location=self.config.device
-            )
-
-        return Detector(localizer, classifier)
+        return Detector.from_config(localizer_config=localizer_config,classifier_ckpt=self.config.weights.classifier)
 
     def _create_dataloader(self) -> DataLoader:
         """

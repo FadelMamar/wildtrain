@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 import lightning as L
 
 # Import the Pydantic model for type hints
-from wildtrain.cli.models import CurriculumConfig
+from ...shared.models import CurriculumConfig
 
 
 class DifficultyStrategy(ABC):

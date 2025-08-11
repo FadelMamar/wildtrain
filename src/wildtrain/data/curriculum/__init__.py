@@ -26,7 +26,7 @@ Usage:
             # ... rest of initialization
 """
 
-from wildtrain.cli.models import CurriculumConfig
+from ...shared.models import CurriculumConfig
 from .manager import CurriculumManager
 from .mixins import CurriculumDataModuleMixin
 from .callback import CurriculumCallback

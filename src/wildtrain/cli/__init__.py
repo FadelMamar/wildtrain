@@ -1,16 +1,6 @@
 """CLI module for WildTrain using Typer and Rich."""
 
 from .cli import app
-from .commands import (
-    config,
-    train,
-    evaluate,
-    register,
-    pipeline,
-    visualize,
-    dataset,
-    utils
-)
 from ..shared.validation import validate_config_file
 
 # Import individual commands for backward compatibility
@@ -23,14 +13,6 @@ from .commands.config import validate as validate_config, template as show_confi
 
 __all__ = [
     "app",
-    "config",
-    "train", 
-    "evaluate",
-    "register",
-    "pipeline",
-    "visualize",
-    "dataset",
-    "utils",
     # Backward compatibility exports
     "train_classifier",
     "train_detector", 

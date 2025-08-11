@@ -16,7 +16,7 @@ from pathlib import Path
 
 # Import our modules
 from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
-from wildtrain.cli.models import CurriculumConfig
+from wildtrain.shared.models import CurriculumConfig
 from wildtrain.data.filters import ClassificationRebalanceFilter
 
 

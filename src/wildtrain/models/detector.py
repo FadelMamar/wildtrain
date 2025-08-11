@@ -2,11 +2,14 @@ import torch
 import supervision as sv
 import torchvision.ops as ops
 import numpy as np
-from typing import Optional
+from typing import Optional, Union
 from copy import deepcopy
-from .classifier import GenericClassifier
-from .localizer import ObjectLocalizer
 from collections import defaultdict
+from omegaconf import DictConfig
+
+from .classifier import GenericClassifier
+from .localizer import ObjectLocalizer, UltralyticsLocalizer
+from ..shared.models import YoloConfig, MMDetConfig
 
 
 class Detector(object):
@@ -20,6 +23,16 @@ class Detector(object):
     def __init__(self, localizer: ObjectLocalizer, classifier: Optional[GenericClassifier]=None):
         self.localizer = localizer
         self.classifier = classifier
+    
+    @classmethod
+    def from_config(cls,localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],classifier_ckpt:Optional[str]=None):
+        if isinstance(localizer_config,MMDetConfig):
+            raise NotImplementedError("Support only Yolo.")
+        localizer = UltralyticsLocalizer.from_config(localizer_config)
+        classifier = None
+        if isinstance(classifier_ckpt,str):
+            classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device) 
+        return cls(localizer=localizer,classifier=classifier)
 
     def predict(self, images: torch.Tensor) -> list[sv.Detections]:
         """Detects objects in a batch of images and classifies each ROI."""

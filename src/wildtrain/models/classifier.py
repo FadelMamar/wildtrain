@@ -123,9 +123,12 @@ class GenericClassifier(nn.Module):
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = "cpu"):
         try:
-            return cls.load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
+            return cls._load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
         except Exception:
             return cls._load_from_checkpoint(checkpoint_path=checkpoint_path, map_location=map_location,) 
+        except Exception:
+            if map_location != "cpu":
+                return cls.load_from_checkpoint(checkpoint_path=checkpoint_path, map_location="cpu") 
 
     @classmethod
     def _load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None) -> 'GenericClassifier':
@@ -152,7 +155,7 @@ class GenericClassifier(nn.Module):
         return model
 
     @classmethod
-    def load_from_lightning_ckpt(cls, checkpoint_path: str, map_location: str = "cpu"):
+    def _load_from_lightning_ckpt(cls, checkpoint_path: str, map_location: str = "cpu"):
         state_dict = torch.load(
                 checkpoint_path, map_location=map_location, weights_only=False
             ).get('state_dict')

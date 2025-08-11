@@ -11,7 +11,7 @@ from rich.text import Text
 import yaml
 from enum import Enum
 
-from .models import (
+from ..shared.models import (
     ClassificationConfig,
     DetectionConfig,
     DetectionVisualizationConfig,
@@ -20,9 +20,9 @@ from .models import (
     ClassificationEvalConfig,
     DetectionEvalConfig,
     ClassificationVisualizationConfig,
-    DetectorRegistrationConfig,
+    LocalizerRegistrationConfig,
     ClassifierRegistrationConfig,
-    ModelRegistrationConfig,
+    DetectorRegistrationConfig,
 )
 from ..shared.config_types import ConfigType
 from ..shared.validation import ConfigValidationError, ConfigFileNotFoundError, ConfigParseError
@@ -149,12 +149,12 @@ class ConfigLoader:
         )
     
     @staticmethod
-    def load_detector_registration_config(config_path: Path) -> DetectorRegistrationConfig:
+    def load_localizer_registration_config(config_path: Path) -> LocalizerRegistrationConfig:
         """Load and validate detector registration configuration."""
         return ConfigLoader.load_and_validate(
             config_path,
-            DetectorRegistrationConfig,
-            "Detector registration configuration"
+            LocalizerRegistrationConfig,
+            "Localizer registration configuration"
         )
     
     @staticmethod
@@ -167,11 +167,11 @@ class ConfigLoader:
         )
     
     @staticmethod
-    def load_model_registration_config(config_path: Path) -> ModelRegistrationConfig:
-        """Load and validate model registration configuration."""
+    def load_detector_registration_config(config_path: Path) -> DetectorRegistrationConfig:
+        """Load and validate Detector registration configuration."""
         return ConfigLoader.load_and_validate(
             config_path,
-            ModelRegistrationConfig,
+            DetectorRegistrationConfig,
             "Model registration configuration"
         )
     
@@ -217,7 +217,7 @@ class ConfigLoader:
             elif config_type == ConfigType.DETECTION_PIPELINE:
                 ConfigLoader.load_pipeline_config(config_path, "detection")
             elif config_type == ConfigType.DETECTOR_REGISTRATION:
-                ConfigLoader.load_detector_registration_config(config_path)
+                ConfigLoader.load_localizer_registration_config(config_path)
             elif config_type == ConfigType.CLASSIFIER_REGISTRATION:
                 ConfigLoader.load_classifier_registration_config(config_path)
             elif config_type == ConfigType.MODEL_REGISTRATION:
@@ -262,9 +262,9 @@ class ConfigLoader:
             ConfigType.DETECTION_VISUALIZATION: DetectionVisualizationConfig,
             ConfigType.CLASSIFICATION_PIPELINE: ClassificationPipelineConfig,
             ConfigType.DETECTION_PIPELINE: DetectionPipelineConfig,
-            ConfigType.DETECTOR_REGISTRATION: DetectorRegistrationConfig,
+            ConfigType.DETECTOR_REGISTRATION: LocalizerRegistrationConfig,
             ConfigType.CLASSIFIER_REGISTRATION: ClassifierRegistrationConfig,
-            ConfigType.MODEL_REGISTRATION: ModelRegistrationConfig,
+            ConfigType.MODEL_REGISTRATION: DetectorRegistrationConfig,
         }
         
         if config_type not in config_class_map:

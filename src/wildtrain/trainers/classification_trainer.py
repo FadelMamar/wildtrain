@@ -213,7 +213,7 @@ class ClassifierTrainer(ModelTrainer):
         if model.mlflow_run_id and self.best_model_path:
             with mlflow.start_run(run_id=model.mlflow_run_id):
                 try:
-                    best_model = GenericClassifier.load_from_lightning_ckpt(
+                    best_model = GenericClassifier.load_from_checkpoint(
                         str(self.best_model_path),
                         map_location=str(model.device)
                     )

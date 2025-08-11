@@ -18,8 +18,8 @@ from tqdm import tqdm
 import json
 from concurrent.futures import ThreadPoolExecutor
 
-from wildtrain.cli.models import CurriculumConfig
-from wildtrain.data.utils import load_all_detection_datasets
+from ...shared.models import CurriculumConfig
+from ..utils import load_all_detection_datasets
 
 logger = logging.getLogger(__name__)
 

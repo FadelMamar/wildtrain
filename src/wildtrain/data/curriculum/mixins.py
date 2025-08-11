@@ -8,8 +8,8 @@ to existing data modules.
 from typing import Optional, Dict, Any
 import lightning as L
 
-from wildtrain.data.curriculum.manager import CurriculumManager
-from wildtrain.cli.models import CurriculumConfig
+from .manager import CurriculumManager
+from ...shared.models import CurriculumConfig
 
 
 class CurriculumDataModuleMixin:

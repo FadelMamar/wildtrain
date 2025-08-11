@@ -1,11 +1,11 @@
 import torch
 import torch.nn as nn
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union   
 from abc import ABC, abstractmethod
 import supervision as sv
 from ultralytics import YOLO
 from omegaconf import DictConfig
-
+from ..shared.models import YoloConfig
 
 class ObjectLocalizer(ABC):
     """
@@ -57,7 +57,8 @@ class UltralyticsLocalizer(ObjectLocalizer):
                    }
         
     @classmethod
-    def from_config(cls, config: DictConfig):
+    def from_config(cls, config: Union[DictConfig,YoloConfig]):
+        
         return cls(
             weights=config.weights,
             imgsz=config.imgsz,
@@ -68,6 +69,7 @@ class UltralyticsLocalizer(ObjectLocalizer):
             task=getattr(config,"task","detect"),
             max_det=getattr(config,"max_det",300),
         )
+
 
     def predict(self, images: torch.Tensor) -> list[sv.Detections]:
         """

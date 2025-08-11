@@ -13,7 +13,7 @@ from ..utils.logging import get_logger
 from .filters import ClassificationRebalanceFilter
 from .curriculum.dataset import PatchDataset, CurriculumDetectionDataset
 from .curriculum.mixins import CurriculumDataModuleMixin
-from wildtrain.cli.models import CurriculumConfig
+from ..shared.models import CurriculumConfig
 from omegaconf import DictConfig, OmegaConf
 from ..utils.transforms import create_transforms
 
