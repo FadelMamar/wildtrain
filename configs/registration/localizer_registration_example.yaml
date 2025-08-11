@@ -1,0 +1,25 @@
+# Example detector registration configuration
+
+# Model name for registration (optional, defaults to "detector")
+processing:
+  name: "localizer"
+  # Export format (optional, defaults to "pt")
+  # Valid formats: torchscript, openvino, onnx, pt
+  export_format: "pt"
+  # Batch size for inference (optional, defaults to 8)
+  batch_size: 8
+  mlflow_tracking_uri: "http://localhost:5000"
+  dynamic: false
+
+yolo:
+  weights: models/best.pt
+  imgsz: 640
+  device: "cpu"
+  conf_thres: 0.2
+  iou_thres: 0.3
+  max_det: 300
+  overlap_metric: "IOU"
+  task: "detect"
+
+mmdet: null
+

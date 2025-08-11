@@ -1,14 +1,10 @@
 # Example classifier registration configuration
-# This file can be used with: wildtrain register-classifier --config configs/registration/classifier_registration_example.yaml
 
-# Path to the model checkpoint file (required)
-weights_path: models/best_classifier.pt
+processing:
+  name: "classifier"
+  export_format: "pt"
+  batch_size: 8
+  mlflow_tracking_uri: "http://localhost:5000"
+  dynamic: false
 
-# Model name for registration (optional, defaults to "classifier")
-name: classifier
-
-# Batch size for inference (optional, defaults to 8)
-batch_size: 8
-
-# MLflow tracking server URI (optional, defaults to "http://localhost:5000")
-mlflow_tracking_uri: "http://localhost:5000"
+weights_path: models/classifier_demo.pt

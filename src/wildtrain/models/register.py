@@ -48,7 +48,6 @@ class ModelMetadata(BaseModel):
     imgsz: int = Field(default=800, gt=0, description="Input image size")
     task: ModelTask = Field(default=ModelTask.DETECT, description="Model task type")
     num_classes: Optional[int] = Field(default=None, ge=2, description="Number of classes")
-    cls_imgsz: Optional[int] = Field(default=None, gt=0, description="Input size for classification models")
     model_type: ModelType = Field(description="Type of model (detector or classifier)")
     
     def to_dict(self) -> Dict[str, Any]:
@@ -58,7 +57,6 @@ class ModelMetadata(BaseModel):
             "imgsz": self.imgsz,
             "task": self.task.value,
             "num_classes": self.num_classes,
-            "cls_imgsz": self.cls_imgsz,
             "model_type": self.model_type.value
         }
 
@@ -257,7 +255,6 @@ class ModelRegistrar:
             imgsz=localizer_cfg.imgsz,
             task=ModelTask(task),
             model_type=ModelType.DETECTOR,
-            cls_imgsz=None,
         )
         
         self._register_model(
@@ -314,7 +311,6 @@ class ModelRegistrar:
             imgsz=image_size,
             task=ModelTask(task) if isinstance(task, str) else task,
             model_type=ModelType.LOCALIZER,
-            cls_imgsz=None,
         )
         
         self._register_model(
@@ -353,13 +349,11 @@ class ModelRegistrar:
         
         artifacts = {"classifier_ckpt": str(classifier_ckpt)}
         
-        # Create metadata using the new ModelMetadata class
         metadata = ModelMetadata(
             batch=batch_size,
-            imgsz=None,
+            imgsz=model.input_size.item(),
             task=ModelTask.CLASSIFY,
             num_classes=model.num_classes.item(),
-            cls_imgsz=model.input_size.item(),
             model_type=ModelType.CLASSIFIER
         )
         
