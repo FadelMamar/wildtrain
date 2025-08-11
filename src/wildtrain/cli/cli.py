@@ -3,7 +3,9 @@
 import typer
 from pathlib import Path
 from typing import Optional
-
+import os
+from ..server import run_inference_server
+from ..shared.models import InferenceConfig
 from .commands.utils import display_welcome_message
 from .commands import config, train, evaluate, register, pipeline, visualize, dataset
 
@@ -39,3 +41,20 @@ app.add_typer(register.register_app, name="register", help="Model registration c
 app.add_typer(pipeline.pipeline_app, name="pipeline", help="Pipeline commands")
 app.add_typer(visualize.visualize_app, name="visualize", help="Visualization commands")
 app.add_typer(dataset.dataset_app, name="dataset", help="Dataset commands")
+
+@app.command()
+def run_server(
+    port: int = typer.Option(4141, "--port", help="Port to run the server on"),
+    workers_per_device: int = typer.Option(1, "-w", help="Number of workers per device"),
+    config_path: Optional[Path] = typer.Option(None, "--config", "-c", help="Path to config file"),
+):
+    if config_path is not None:
+        config = InferenceConfig.from_yaml(config_path)
+        os.environ["MLFLOW_REGISTRY_NAME"] = config.mlflow_registry_name
+        os.environ["MLFLOW_ALIAS"] = config.mlflow_alias
+        os.environ["MLFLOW_LOCAL_DIR"] = config.mlflow_local_dir
+        os.environ["MLFLOW_TRACKING_URI"] = config.mlflow_tracking_uri
+        port = config.port
+        workers_per_device = config.workers_per_device
+
+    run_inference_server(port=port, workers_per_device=workers_per_device)

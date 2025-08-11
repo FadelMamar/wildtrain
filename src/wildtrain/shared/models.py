@@ -851,6 +851,13 @@ class DetectorRegistrationConfig(BaseConfig):
     classifier: ClassifierRegistrationConfig = Field(description="Classifier registration configuration")
     processing: RegistrationBase = Field(description="processing information")
         
+class InferenceConfig(BaseConfig):
+    port: int = Field(default=4141, description="Port to run the server on")
+    workers_per_device: int = Field(default=1, description="Number of workers per device")
+    mlflow_registry_name: str = Field(default="detector", description="MLflow registry name")
+    mlflow_alias: str = Field(default="demo", description="MLflow alias")
+    mlflow_local_dir: str = Field(default="models-registry", description="MLflow local directory")
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking server URI")
 
 
 # Update forward references
@@ -865,3 +872,4 @@ ClassificationVisualizationConfig.model_rebuild()
 LocalizerRegistrationConfig.model_rebuild()
 ClassifierRegistrationConfig.model_rebuild()
 DetectorRegistrationConfig.model_rebuild()
+InferenceConfig.model_rebuild()

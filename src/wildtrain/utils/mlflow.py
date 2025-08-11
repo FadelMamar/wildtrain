@@ -9,7 +9,6 @@ logger = get_logger(__name__)
 def load_registered_model(
     alias,
     name,
-    tag_to_append: str = "",
     mlflow_tracking_url="http://localhost:5000",
     load_unwrapped: bool = False,
     dwnd_location: Optional[Union[str, Path]] = None,
@@ -19,7 +18,7 @@ def load_registered_model(
     client = mlflow.MlflowClient()
 
     version = client.get_model_version_by_alias(name=name, alias=alias).version
-    modelversion = f"{name}:{version}" + tag_to_append
+    modelversion = f"{name}:{version}"
     modelURI = f"models:/{name}/{version}"
 
     if dwnd_location is None:
