@@ -65,6 +65,10 @@ cover/
 # Translations
 *.mo
 *.pot
+*.pt
+*.torchscript
+
+models-registry/
 
 # Django stuff:
 *.log
