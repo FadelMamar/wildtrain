@@ -1,15 +1,17 @@
 # YOLOv8 detection config
 
 dataset:
-  data_cfg: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
+  data_cfg: null
   load_as_single_class: true
   
+enable_curriculum: true
+use_alldatasets: true
 
 curriculum:
-  data_cfg: null
+  data_cfg: null 
   ratios: [0., 1., 2.5, 5.]
   epochs: [10, 10, 5, 5]
-  freeze: [0, 0, 9, 9]
+  freeze: [9, 9, 9, 9]
   lr0s: [0.0001, 0.0001, 0.00005, 0.00005]
   save_dir: null
 
@@ -21,13 +23,14 @@ pretraining:
   freeze: 0
   save_dir: null
 
+# Initialization of localizer model
 model:
   pretrained: true
-  weights: D:\workspace\repos\wildtrain\models\yolo12s.pt
-  architecture_file: D:\workspace\repos\wildtrain\configs\detection\yolo_configs\models\yolo12n.yaml
+  weights: C:/Users/Machine Learning/Desktop/workspace-wildAI/datalabeling/runs/mlflow/771014640604815853/21736771b96e4649afb9052ae9f4bfc5/artifacts/finetuned/artifacts/best.pt
+  architecture_file: D:\workspace\repos\wildtrain\configs\detection\yolo_configs\models\yolo12s.yaml
 
 # run name and project name for tracking
-name: yolo12
+name: yolo12-d0
 project: wildai-localization
 
 mlflow:
@@ -46,18 +49,18 @@ custom_yolo_kwargs:
   box_size: 224
 
 train:
-  batch: 16
-  epochs: 50
+  batch: 32
+  epochs: 25
   optimizer: AdamW
   lr0: 0.0001
   lrf: 0.1
-  momentum: 0.937
+  momentum: 0.99
   weight_decay: 0.0005
-  warmup_epochs: 1
+  warmup_epochs: 0
   cos_lr: true
   patience: 10
-  iou: 0.65
-  imgsz: 640
+  iou: 0.4
+  imgsz: 800
   
   # loss weights
   box: 3.5
