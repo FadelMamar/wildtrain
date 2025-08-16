@@ -30,16 +30,7 @@ class ClassificationPipeline:
         logger.info("[Pipeline] Starting classification evaluation...")
         assert self.best_model_path is not None, "Best model path is not set by trainer"
         eval_config = OmegaConf.load(self.config.eval.config)
-        # Prepare evaluation config
-        eval_config = OmegaConf.merge(
-            eval_config,
-            {
-                "classifier": self.best_model_path,
-                "device": self.config.eval.device,
-                "split": self.config.eval.split,
-                "batch_size": self.config.eval.batch_size,
-            }
-        )
+        eval_config.classifier = self.best_model_path
         evaluator = ClassificationEvaluator(config=DictConfig(eval_config))
         results = evaluator.evaluate(debug=self.config.eval.debug, 
         save_path=os.path.join(self.config.results_dir, "eval_report.json"))

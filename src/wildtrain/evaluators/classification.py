@@ -24,7 +24,6 @@ class ClassificationEvaluator:
 
     def _load_model(self):
         model = GenericClassifier.load_from_checkpoint(self.config.classifier, map_location=self.config.device)
-        model.eval()
         return model
 
     def _load_data(self):
