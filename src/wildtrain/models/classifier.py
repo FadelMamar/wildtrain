@@ -107,77 +107,74 @@ class GenericClassifier(nn.Module):
         x = self.preprocessing(x.float())
         x = self.feature_extractor(x)
         return self.fc(x)
-
+    
+    @torch.no_grad()
     def predict(self, x: torch.Tensor) -> list[dict]:
         self.eval()
-        with torch.no_grad():
-            logits = self.forward(x)
-            probs = torch.softmax(logits, dim=1)
-            labels = probs.cpu().argmax(dim=1).tolist()
-            classes = [
-                self.label_to_class_map[i] for i in labels
-            ]
-            scores = probs.cpu().max(dim=1).values.tolist()
-            return [{"class": c, "score": s, "class_id":l} for c, s, l in zip(classes, scores, labels)]
+        logits = self.forward(x)
+        probs = torch.softmax(logits, dim=1)
+        labels = probs.argmax(dim=1).cpu().tolist()
+        classes = [
+            self.label_to_class_map[i] for i in labels
+        ]
+        scores = probs.max(dim=1).values.cpu().tolist()
+        return [{"class": c, "score": s, "class_id":l} for c, s, l in zip(classes, scores, labels)]
     
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = "cpu"):
         try:
             return cls._load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
-        except Exception:
-            return cls._load_from_checkpoint(checkpoint_path=checkpoint_path, map_location=map_location,) 
-        except Exception:
-            if map_location != "cpu":
-                return cls.load_from_checkpoint(checkpoint_path=checkpoint_path, map_location="cpu") 
+        except Exception as e:
+            #print(f"Failed to load checkpoint from {checkpoint_path} using lightning. {e}")
+            return cls._load_from_checkpoint(checkpoint_path=checkpoint_path, map_location=map_location,)
+
+    @classmethod
+    def _load_from_lightning_ckpt(cls, checkpoint_path: str, map_location: str = "cpu"):
+        """Load from a PyTorch Lightning checkpoint by extracting the underlying model."""
+        checkpoint = torch.load(checkpoint_path, map_location=map_location)
+        
+        # Check if this is a Lightning checkpoint
+        if 'state_dict' in checkpoint and 'hyper_parameters' in checkpoint:
+            # Extract the model state dict from the Lightning checkpoint
+            state_dict = checkpoint['state_dict']
+            
+            # Remove the 'model.' prefix from state dict keys
+            model_state_dict = {k.replace('model.', ''): v for k, v in state_dict.items() if k.startswith('model.')}
+            
+            # Get hyperparameters from the Lightning module
+            hparams = checkpoint['hyper_parameters']
+            
+            # Create model instance using saved hyperparameters
+            model = cls(
+                label_to_class_map=hparams['label_to_class_map'],
+                backbone=hparams['backbone'],
+                backbone_source=hparams['backbone_source'],
+                input_size=hparams['input_size'],
+                mean=hparams['mean'],
+                std=hparams['std'],
+            )
+            
+            # Load the model weights
+            model.load_state_dict(model_state_dict)
+            return model
+        else:
+            raise ValueError("Checkpoint does not appear to be a valid PyTorch Lightning checkpoint")
 
     @classmethod
     def _load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None) -> 'GenericClassifier':
         
-        if state_dict is not None:
-            label_to_class_map = state_dict["label_to_class_map"]
-            backbone = state_dict["backbone"]
-            backbone_source = state_dict["backbone_source"]
-            model = cls(
-                label_to_class_map=label_to_class_map,
-                backbone=backbone,
-                backbone_source=backbone_source,
-                input_size=state_dict["input_size"].item(),
-            )
-            model.load_state_dict(state_dict)
-        else:
-            if checkpoint_path is None:
-                raise ValueError("checkpoint_path or state_dict must be provided")
-            model = torch.load(
-                checkpoint_path, map_location=map_location, weights_only=False
-            )
-            # warmup
-            #model(torch.randn(1,3,model.input_size.item(),model.input_size.item()).to(model.device))
-        return model
-
-    @classmethod
-    def _load_from_lightning_ckpt(cls, checkpoint_path: str, map_location: str = "cpu"):
-        state_dict = torch.load(
-                checkpoint_path, map_location=map_location, weights_only=False
-            ).get('state_dict')
         if state_dict is None:
-            raise KeyError("state_dict not found in checkpoint. Make sure to use checkpoint from pytorch lightning.")
-        state_dict = {k.replace('model.', ''): v for k, v in state_dict.items()}
-        return cls._load_from_checkpoint(checkpoint_path=None, map_location=map_location, state_dict=state_dict)
+            state_dict = torch.load(checkpoint_path, map_location=map_location)
 
-    def state_dict(self, *args, **kwargs):
-        state = super().state_dict(*args, **kwargs)
-        # Create a new dict with the additional items
-        new_state = dict(state)
-        # Save label_to_class_map as a string (or use pickle for more complex objects)
-        new_state["label_to_class_map"] = self.label_to_class_map
-        new_state["backbone"] = self.backbone
-        new_state["backbone_source"] = self.backbone_source
-        return new_state
+        label_to_class_map = state_dict["label_to_class_map"]
+        backbone = state_dict["backbone"]
+        backbone_source = state_dict["backbone_source"]
+        model = cls(
+            label_to_class_map=label_to_class_map,
+            backbone=backbone,
+            backbone_source=backbone_source,
+            input_size=state_dict["input_size"].item(),
+        )
+        model.load_state_dict(state_dict)
 
-    def load_state_dict(self, state_dict, **kwargs):
-        # Restore label_to_class_map
-        if "label_to_class_map" in state_dict:
-            self.label_to_class_map = state_dict.pop("label_to_class_map")
-            self.backbone = state_dict.pop("backbone")
-            self.backbone_source = state_dict.pop("backbone_source")
-        super().load_state_dict(state_dict, **kwargs)
+        return model
