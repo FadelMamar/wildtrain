@@ -33,7 +33,7 @@ from wildata.pipeline.path_manager import PathManager
 logger = logging.getLogger(__name__)
 
 def load_yaml(path: str):
-    with open(path, "r") as file:
+    with open(path, "r",encoding="utf-8") as file:
         return yaml.safe_load(file)
 
 def save_yaml(cfg: dict, save_path: str, mode="w"):
@@ -44,7 +44,6 @@ def save_yaml(cfg: dict, save_path: str, mode="w"):
     except Exception:
         logger.error(f"Error saving yaml to {save_path}: {traceback.format_exc()}")
         
-
 def remove_label_cache(data_config_yaml: str):
     """
     Remove the labels.cache files from the dataset directories specified in the YOLO data config YAML.
@@ -66,117 +65,187 @@ def remove_label_cache(data_config_yaml: str):
         else:
             logger.info(f"split={split} does not exist.")
 
-def sample_pos_neg(images_paths: list, ratio: float, seed: int = 41):
-    """
-    Sample positive and negative image paths based on the ratio of empty to non-empty samples.
+class FilterDataCfg:
+    def __init__(self,data_config_yaml: str,keep_classes:Optional[list[str]]=None,discard_classes:Optional[list[str]]=None):
+        self.data_config_yaml = data_config_yaml
+        self.yolo_config = load_yaml(data_config_yaml)
+        self.keep_classes = keep_classes
+        self.discard_classes = discard_classes
 
-    Args:
-        images_paths (list): List of image paths.
-        ratio (float): Ratio defined as num_empty/num_non_empty.
-        seed (int, optional): Random seed. Defaults to 41.
+        assert (keep_classes is not None) ^ (discard_classes is not None), "Either keep_classes or discard_classes must be provided"
+    
+    def sample_pos_neg(self,images_paths: list, ratio: float, seed: int = 41):
+        """
+        Sample positive and negative image paths based on the ratio of empty to non-empty samples.
 
-    Returns:
-        list: Selected image paths.
-    """
+        Args:
+            images_paths (list): List of image paths.
+            ratio (float): Ratio defined as num_empty/num_non_empty.
+            seed (int, optional): Random seed. Defaults to 41.
 
-    # build dataframe
-    is_empty = [
-        1 - Path(str(p).replace("images", "labels")).with_suffix(".txt").exists()
-        for p in images_paths
-    ]
-    data = pd.DataFrame.from_dict(
-        {"image_paths": images_paths, "is_empty": is_empty}, orient="columns"
-    )
-    # get empty and non empty
-    num_empty = (data["is_empty"] == 1).sum()
-    num_non_empty = len(data) - num_empty
-    if num_empty == 0:
-        logger.info("contains only positive samples")
-    num_sampled_empty = min(int(num_non_empty * ratio), num_empty)
-    sampled_empty = data.loc[data["is_empty"] == 1].sample(
-        n=num_sampled_empty, random_state=seed
-    )
-    # concatenate
-    sampled_data = pd.concat([sampled_empty, data.loc[data["is_empty"] == 0]])
+        Returns:
+            list: Selected image paths.
+        """
 
-    logger.info(f"Sampling: pos={num_non_empty} & neg={num_sampled_empty}")
+        # build dataframe
+        is_empty = [
+            1 - Path(str(p).replace("images", "labels")).with_suffix(".txt").exists()
+            for p in images_paths
+        ]
+        data = pd.DataFrame.from_dict(
+            {"image_paths": images_paths, "is_empty": is_empty}, orient="columns"
+        )
+        # get empty and non empty
+        num_empty = (data["is_empty"] == 1).sum()
+        num_non_empty = len(data) - num_empty
+        if num_empty == 0:
+            logger.info("contains only positive samples")
+        num_sampled_empty = min(int(num_non_empty * ratio), num_empty)
+        sampled_empty = data.loc[data["is_empty"] == 1].sample(
+            n=num_sampled_empty, random_state=seed
+        )
+        # concatenate
+        sampled_data = pd.concat([sampled_empty, data.loc[data["is_empty"] == 0]])
 
-    return sampled_data["image_paths"].to_list()
+        logger.info(f"Sampling: pos={num_non_empty} & neg={num_sampled_empty}")
 
-def get_data_cfg_paths_for_cl(
-    ratio: float,
-    data_config_yaml: str,
-    cl_save_dir: str,
-    seed: int = 41,
-    split: str = "train",
-    pattern_glob: str = "*",
-):
-    """
-    Generate and save a YOLO data config YAML for continual learning with sampled images.
+        return sampled_data["image_paths"].to_list()
+    
+    def get_split_images_paths(self,split:str) -> list[str]:
+        root = self.yolo_config["path"]
+        if isinstance(self.yolo_config[split], list):
+            dirs_images = [os.path.join(root, p) for p in self.yolo_config[split]]
+        else:
+            dirs_images = [self.yolo_config[split]]
 
-    Args:
-        ratio (float): Ratio for sampling.
-        data_config_yaml (str): Path to YOLO data config YAML.
-        cl_save_dir (str): Directory to save sampled images and config.
-        seed (int, optional): Random seed. Defaults to 41.
-        split (str, optional): Dataset split. Defaults to 'train'.
-        pattern_glob (str, optional): Glob pattern for images. Defaults to '*'.
+        images_paths = []
+        for dir_images in dirs_images:
+            images_paths.extend(list(Path(dir_images).glob("*")))
+        
+        return images_paths
 
-    Returns:
-        str: Path to the saved config YAML.
-    """
+    def filter_data_cfg(self,split:str) -> list[str]:
+        
+        images_paths = self.get_split_images_paths(split=split)
 
-    yolo_config = load_yaml(data_config_yaml)
+        if self.keep_classes is None and self.discard_classes is None:
+            return images_paths
+        
+        filtered_images_paths = []
 
-    root = yolo_config["path"]
-    if isinstance(yolo_config[split], list):
-        dirs_images = [os.path.join(root, p) for p in yolo_config[split]]
-    else:
-        dirs_images = [yolo_config[split]]
+        label_map = self.yolo_config["names"]
 
-    # sample positive and negative images
-    sampled_imgs_paths = []
-    for dir_images in dirs_images:
-        logger.info(f"Sampling positive and negative samples from {dir_images}")
-        paths = sample_pos_neg(
-            images_paths=list(Path(dir_images).glob(pattern_glob)),
+        for image_path in images_paths:
+            label_path = image_path.with_suffix(".txt").as_posix().replace("images","labels")
+            if not os.path.exists(label_path):
+                continue
+            
+            with open(label_path,"r",encoding="utf-8") as f:
+                labels = [line.split(" ")[0] for line in f.read().splitlines()]
+                classes = [label_map[int(label)] for label in labels]
+                if self.keep_classes is not None:
+                    if any(class_name in self.keep_classes for class_name in classes):
+                        filtered_images_paths.append(image_path)
+                elif self.discard_classes is not None:
+                    if not any(class_name in self.discard_classes for class_name in classes):
+                        filtered_images_paths.append(image_path)
+
+        if self.keep_classes is not None:
+            logger.info(f"Keeping classes: {self.keep_classes}")
+        elif self.discard_classes is not None:
+            logger.info(f"Discarding classes: {self.discard_classes}")
+        
+        return filtered_images_paths
+    
+    def save_images_paths(self,images_paths:list[str],save_path:str):
+        pd.Series(images_paths).to_csv(save_path,index=False,header=False)
+    
+    def get_filtered_data_cfg(self,save_dir:str) -> str:
+        root = self.yolo_config["path"]
+
+        # updated cfg
+        cfg = {
+            "path": root,
+            "names": self.yolo_config["names"],
+            "nc": self.yolo_config["nc"]
+        }
+        splits = [t for t in ["train","val","test"] if t in self.yolo_config.keys()]
+        for split in splits:
+            images_paths = self.filter_data_cfg(split=split)
+            save_path_samples = os.path.join(
+                save_dir, f"{split}_flatten.txt"
+            )
+            self.save_images_paths(images_paths=images_paths,save_path=save_path_samples)
+
+            # update cfg
+            cfg[split] = os.path.relpath(save_path_samples, start=root)
+        
+        # save cfg
+        save_path_cfg = Path(self.data_config_yaml).with_stem("filtered_data").as_posix()
+        save_yaml(cfg,save_path_cfg,mode="w")
+
+        
+        return save_path_cfg
+            
+    def get_data_cfg_paths_for_cl(
+        self,
+        ratio: float,
+        split:str,
+        cl_save_dir: str,
+        seed: int = 41,
+    ):
+        """
+        Generate and save a YOLO data config YAML for continual learning with sampled images.
+
+        Args:
+            ratio (float): Ratio for sampling.
+            data_config_yaml (str): Path to YOLO data config YAML.
+            cl_save_dir (str): Directory to save sampled images and config.
+            seed (int, optional): Random seed. Defaults to 41.
+
+        Returns:
+            str: Path to the saved config YAML.
+        """
+
+        root = self.yolo_config["path"]
+
+        images_paths = self.filter_data_cfg(split=split)
+
+        sampled_imgs_paths = self.sample_pos_neg(
+            images_paths=images_paths,
             ratio=ratio,
             seed=seed,
         )
-        sampled_imgs_paths = sampled_imgs_paths + paths
 
-    # save selected images in txt file
-    save_path_samples = os.path.join(
-        cl_save_dir, f"{split}_ratio_{ratio}-seed_{seed}.txt"
-    )
-    pd.Series(sampled_imgs_paths).to_csv(save_path_samples, index=False, header=False)
-    logger.info(f"Saving {len(sampled_imgs_paths)} sampled images.")
+        # save selected images in txt file
+        save_path_samples = os.path.join(
+            cl_save_dir, f"{split}_ratio_{ratio}-seed_{seed}.txt"
+        )
+        self.save_images_paths(images_paths=sampled_imgs_paths,save_path=save_path_samples)
 
-    # save config
-    save_path_cfg = Path(save_path_samples).with_suffix(".yaml").as_posix()
+        # updated cfg
+        cfg = {
+            "path": root,
+            "names": self.yolo_config["names"],
+            "nc": self.yolo_config["nc"]
+        }
+        if split == "train":
+            cfg["val"] = self.yolo_config["val"]
+            cfg["train"] = os.path.relpath(save_path_samples, start=root)
+        elif split == "val":
+            cfg["val"] = os.path.relpath(save_path_samples, start=root)
+            cfg["train"] = self.yolo_config["train"]
+        else:
+            raise NotImplementedError
 
-    # save yolo data cfg
-    cfg = {
-        "path": root,
-        "names": yolo_config["names"],
-        "nc": yolo_config["nc"]
-    }
-    if split == "train":
-        cfg["val"] = yolo_config["val"]
-        cfg["train"] = os.path.relpath(save_path_samples, start=root)
-    elif split == "val":
-        cfg["val"] = os.path.relpath(save_path_samples, start=root)
-        cfg["train"] = yolo_config["train"]
-    else:
-        raise NotImplementedError
+        save_path_cfg = Path(save_path_samples).with_suffix(".yaml").as_posix()
+        save_yaml(cfg,save_path_cfg,mode="w")
 
-    save_yaml(cfg,save_path_cfg,mode="w")
+        logger.info(
+            f"Saving samples at: {save_path_samples} and data_cfg at {save_path_cfg}",
+        )
 
-    logger.info(
-        f"Saving samples at: {save_path_samples} and data_cfg at {save_path_cfg}",
-    )
-
-    return str(save_path_cfg)
+        return str(save_path_cfg)
 
 def merge_data_cfg(root_data_directory:Optional[str]=None,data_configs:Optional[list[str]]=None,output_path:Optional[str]=None,force_merge:bool=True):
     
