@@ -71,7 +71,6 @@ class FilterDataCfg:
         self.yolo_config = load_yaml(data_config_yaml)
         self.keep_classes = keep_classes
         self.discard_classes = discard_classes
-
         assert (keep_classes is not None) ^ (discard_classes is not None), "Either keep_classes or discard_classes must be provided"
     
     def sample_pos_neg(self,images_paths: list, ratio: float, seed: int = 41):
@@ -89,7 +88,7 @@ class FilterDataCfg:
 
         # build dataframe
         is_empty = [
-            1 - Path(str(p).replace("images", "labels")).with_suffix(".txt").exists()
+            1 - os.path.exists(Path(p).with_suffix(".txt").as_posix().replace("/images/", "/labels/"))
             for p in images_paths
         ]
         data = pd.DataFrame.from_dict(
@@ -123,38 +122,60 @@ class FilterDataCfg:
             images_paths.extend(list(Path(dir_images).glob("*")))
         
         return images_paths
+    
+    @staticmethod
+    def filter_image_paths(image_paths: list[str],label_map:dict,
+                            keep_classes:Optional[list[str]]=None,
+                            discard_classes:Optional[list[str]]=None) -> list[str]:
 
-    def filter_data_cfg(self,split:str) -> list[str]:
-        
-        images_paths = self.get_split_images_paths(split=split)
-
-        if self.keep_classes is None and self.discard_classes is None:
-            return images_paths
+        assert (keep_classes is not None) ^ (discard_classes is not None), "Either keep_classes or discard_classes must be provided"
         
         filtered_images_paths = []
 
-        label_map = self.yolo_config["names"]
+        for image_path in image_paths:
+            label_path = Path(image_path).with_suffix(".txt").as_posix().replace("/images/", "/labels/")
 
-        for image_path in images_paths:
-            label_path = image_path.with_suffix(".txt").as_posix().replace("images","labels")
             if not os.path.exists(label_path):
+                filtered_images_paths.append(image_path)
                 continue
             
-            with open(label_path,"r",encoding="utf-8") as f:
+            with open(label_path, "r", encoding="utf-8") as f:
                 labels = [line.split(" ")[0] for line in f.read().splitlines()]
                 classes = [label_map[int(label)] for label in labels]
-                if self.keep_classes is not None:
-                    if any(class_name in self.keep_classes for class_name in classes):
-                        filtered_images_paths.append(image_path)
-                elif self.discard_classes is not None:
-                    if not any(class_name in self.discard_classes for class_name in classes):
-                        filtered_images_paths.append(image_path)
+                
+                # If no labels in the image, skip it
+                if len(classes) == 0:
+                    filtered_images_paths.append(image_path)
+                    continue
+                
+                should_include = True
+                
+                # Apply keep_classes filter if specified
+                if keep_classes is not None:
+                    should_include = any(class_name in keep_classes for class_name in classes)
+                
+                # Apply discard_classes filter if specified
+                if discard_classes is not None and should_include:
+                    should_include = not any(class_name in discard_classes for class_name in classes)
+                
+                if should_include:
+                    filtered_images_paths.append(image_path)
+                
+        return filtered_images_paths
 
+    def filter_data_cfg(self, split: str) -> list[str]:
+        images_paths = self.get_split_images_paths(split=split)
+        if self.keep_classes is None and self.discard_classes is None:
+            return images_paths
+        filtered_images_paths = self.filter_image_paths(image_paths=images_paths,
+                                                        label_map=self.yolo_config["names"],
+                                                        keep_classes=self.keep_classes,
+                                                        discard_classes=self.discard_classes)
         if self.keep_classes is not None:
-            logger.info(f"Keeping classes: {self.keep_classes}")
-        elif self.discard_classes is not None:
-            logger.info(f"Discarding classes: {self.discard_classes}")
-        
+            logger.info(f"Keeping classes for split {split}: {self.keep_classes}")
+        if self.discard_classes is not None:
+            logger.info(f"Discarding classes for split {split}: {self.discard_classes}")
+                
         return filtered_images_paths
     
     def save_images_paths(self,images_paths:list[str],save_path:str):
@@ -172,18 +193,17 @@ class FilterDataCfg:
         splits = [t for t in ["train","val","test"] if t in self.yolo_config.keys()]
         for split in splits:
             images_paths = self.filter_data_cfg(split=split)
-            save_path_samples = os.path.join(
-                save_dir, f"{split}_flatten.txt"
-            )
-            self.save_images_paths(images_paths=images_paths,save_path=save_path_samples)
+            #save_path_samples = os.path.join(
+            #    save_dir, f"{split}_flatten.txt"
+            #)
+            #self.save_images_paths(images_paths=images_paths,save_path=save_path_samples)
 
             # update cfg
-            cfg[split] = os.path.relpath(save_path_samples, start=root)
+            cfg[split] = [os.path.relpath(p, start=root) for p in images_paths]
         
         # save cfg
         save_path_cfg = Path(self.data_config_yaml).with_stem("filtered_data").as_posix()
         save_yaml(cfg,save_path_cfg,mode="w")
-
         
         return save_path_cfg
             

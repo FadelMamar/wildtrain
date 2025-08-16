@@ -21,7 +21,7 @@ dataset:
     mean: [0.554, 0.469, 0.348]
     std: [0.203, 0.173, 0.144]
   
-  input_size: 224
+  input_size: 384
 
   batch_size: 64
 
@@ -59,7 +59,7 @@ dataset:
   rebalance: false
   
   # Crop dataset parameters (used when dataset_type = "crop")
-  crop_size: 224
+  crop_size: ${dataset.input_size}
   max_tn_crops: 1
   p_draw_annotations: 0.0
   
@@ -68,7 +68,7 @@ dataset:
   preserve_aspect_ratio: true
 
 model:
-  backbone: timm/mobilenetv4_hybrid_large.ix_e600_r384_in1k
+  backbone: timm/vit_small_patch14_dinov2.lvd142m
   pretrained: true
   backbone_source: timm
   dropout: 0.2
@@ -95,7 +95,7 @@ checkpoint:
   dirpath: checkpoints/classification
   patience: 10
   save_weights_only: true
-  filename: "{epoch:02d}-{val_f1score:.2f}"
+  filename: "best" # "{epoch:02d}-{val_f1score:.2f}"
   min_delta: 0.001
 
 mlflow:
@@ -105,5 +105,5 @@ mlflow:
 
 
 # DVC dataset tracking configuration
-track_dataset: false
-dataset_name: "roi-demo"
+# track_dataset: false
+# dataset_name: "roi-demo"

@@ -3,15 +3,15 @@
 # ----------------------
 disable_train: false
 train:
-  config: D:\workspace\repos\wildtrain\configs\classification\classification_train.yaml
-  debug: false
+  config: configs\classification\classification_train.yaml
+  debug: true
 
 # ----------------------
 # Eval
 # ----------------------
-disable_eval: true
+disable_eval: false
 eval:
-  config: D:\workspace\repos\wildtrain\configs\classification\classification_eval.yaml
+  config: configs\classification\classification_eval.yaml
   debug: false
 
 # ----------------------

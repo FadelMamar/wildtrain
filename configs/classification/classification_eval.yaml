@@ -5,7 +5,7 @@ split: val  # 'val' or 'test'
 device: cuda  # or 'cuda' if available
 batch_size: 64
 
-input_size: 224
+input_size: 384
 
 dataset:
   root_data_directory: D:\PhD\workspace\data
@@ -20,5 +20,5 @@ dataset:
    val:
       - name: Resize
         params:
-          size: ${dataset.input_size}
+          size: ${input_size}
 

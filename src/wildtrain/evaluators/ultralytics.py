@@ -1,19 +1,19 @@
 from typing import Any, Dict, Tuple, Union, List, Generator
 
+import numpy as np
 import torch
 from ultralytics.data.build import build_yolo_dataset
 from ultralytics.utils import IterableSimpleNamespace
 from torch.utils.data import DataLoader
-from ultralytics import YOLO
 import os
 from omegaconf import OmegaConf, DictConfig
 from tqdm import tqdm
 import supervision as sv
-
+from pathlib import Path
 from .base import BaseEvaluator
 from ..models.detector import Detector
-from ..models.localizer import UltralyticsLocalizer
-from ..models.classifier import GenericClassifier
+from ..trainers.yolo_utils import FilterDataCfg, merge_data_cfg
+from ..data.utils import load_all_detection_datasets
 
 
 class UltralyticsEvaluator(BaseEvaluator):
@@ -26,6 +26,18 @@ class UltralyticsEvaluator(BaseEvaluator):
         super().__init__(config)
         self.model = self._load_model()
         self.dataloader = self._create_dataloader()    
+
+    def _set_data_cfg(self):
+        assert (self.config.dataset.data_cfg is not None) ^ (self.config.dataset.root_data_directory is not None), "Either data_cfg or root_data_directory must be provided"
+        Path(self.config.results_dir).mkdir(parents=True, exist_ok=True)
+
+        # updating data_cfg
+        if self.config.dataset.root_data_directory is not None:
+            data_cfg = Path(self.config.results_dir)/"merged_data_cfg.yaml"
+            merge_data_cfg(root_data_directory=self.config.dataset.root_data_directory,
+                                                        output_path=data_cfg,
+                                                        force_merge=self.config.dataset.force_merge)
+            self.config.dataset.data_cfg = data_cfg 
 
     def _load_model(self) -> Any:
         localizer_config = OmegaConf.create({
@@ -51,100 +63,55 @@ class UltralyticsEvaluator(BaseEvaluator):
         Returns:
             PyTorch DataLoader for the evaluation split.
         """
-        data_config = DictConfig(OmegaConf.load(self.config.data))
         # Convert DictConfig to dict properly to preserve all fields
-        eval_config = OmegaConf.to_container(self.config.eval, resolve=True)
-
-        names = data_config.get("names")
-        root_path = data_config.get("path")
-        split = eval_config.get("split")
+        eval_config = self.config.eval
+        split = eval_config.split
         if split is None:
             raise ValueError(f"No 'split' found in eval_config: {eval_config}")
-        img_path = os.path.join(root_path, data_config.get(split))
-        batch_size = eval_config.get("batch_size", 16)
-        mode = "val" if "val" in data_config else "test"
+        
+        dataset = load_all_detection_datasets(root_data_directory=self.config.dataset.root_data_directory,
+                                              split=split)
 
-        assert os.path.exists(img_path), f"{img_path} does not exist."
-
-        # Prepare cfg for build_yolo_dataset
-        cfg = IterableSimpleNamespace(mask_ratio=1, overlap_mask=False, **eval_config)
-
-        dataset = build_yolo_dataset(
-            cfg=cfg,
-            img_path=img_path,
-            batch=batch_size,
-            data={"names": names, "channels": 3},
-            mode=mode,
-            rect=getattr(cfg, "rect", False),
-            stride=getattr(cfg, "stride", 32),
-            multi_modal=getattr(cfg, "multi_modal", False),
-        )
         dataloader = DataLoader(
             dataset,
-            batch_size=batch_size,
+            batch_size=eval_config.batch_size,
             shuffle=False,
-            num_workers=eval_config.get("num_workers", 0),
+            num_workers=eval_config.num_workers,
             pin_memory=torch.cuda.is_available(),
             collate_fn=self._collate_fn,
         )
         return dataloader
 
-    def _collate_fn(self, batch: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _collate_fn(self, batch: List[Tuple[str, np.ndarray, sv.Detections]]) -> Dict[str, Any]:
         """
         Custom collate function for YOLO evaluation batches.
         Stacks images into a batch tensor; collects all other fields as lists.
         Discards 'batch_idx'.
         """
-        imgs = torch.stack([item["img"] for item in batch], dim=0).float() / 255.0
-        im_files = [item["im_file"] for item in batch]
-        #ori_shapes = [item["ori_shape"] for item in batch]
-        #resized_shapes = [item["resized_shape"] for item in batch]
-        #ratio_pads = [item["ratio_pad"] for item in batch]
-        cls = [item["cls"] for item in batch]
+        imgs = torch.stack([torch.from_numpy(item[1]) for item in batch], dim=0).float()
+        imgs = imgs.permute(0,3,1,2)
+        if imgs.min()>= 0. and imgs.max() > 1.:
+            imgs = imgs / 255.
 
-        bboxes = []
-        for item in batch:
-            bbox = item["bboxes"]
-            if bbox.numel() > 0:  # convert bbox to xyxy format
-                bbox[:, [0, 2]] = bbox[:, [0, 2]] * item["resized_shape"][1]  # x w
-                bbox[:, [1, 3]] = bbox[:, [1, 3]] * item["resized_shape"][0]  # y h
-                bbox[:, [0, 1]] = bbox[:, [0, 1]] - bbox[:, [2, 3]] / 2  # x y
-                bbox[:, [2, 3]] = bbox[:, [2, 3]] + bbox[:, [0, 1]]  # x y x y
-                bboxes.append(bbox)
-            else:
-                bboxes.append(bbox)
+        im_files = [item[0] for item in batch]
+
+        # filter images
+        selected_im_files = FilterDataCfg.filter_image_paths(image_paths=im_files,
+                                                    label_map=self.model.class_mapping,
+                                                    keep_classes=self.config.dataset.keep_classes,
+                                                    discard_classes=self.config.dataset.discard_classes)
+        indices = [im_files.index(im_file) for im_file in selected_im_files]
+        annotations = [batch[i][2] for i in indices]
+        for i,ann in enumerate(annotations):
+            ann.metadata["file_path"] = selected_im_files[i]
 
         return {
             "img": imgs,
-            "im_file": im_files,
-            # "ori_shape": ori_shapes,
-            # "resized_shape": resized_shapes,
-            # "ratio_pad": ratio_pads,
-            "cls": cls,
-            "bboxes": bboxes,
+            "annotations": annotations,
         }
 
     def _run_inference(self) -> Generator[Dict[str, List[sv.Detections]], None, None]:
         for batch in tqdm(self.dataloader, desc="Running inference"):
-            predictions = self.model.predict(batch["img"])
-
-            offset = 0
-            if self.config.eval.single_cls:
-                # because ultralytics:   0 -> negative class
-                # while we use 1 -> positive class
-                offset = 1 
-
-            # convert ultralytics detections to supervision detections
-            gt_detections = [
-                sv.Detections(
-                    xyxy=gt.cpu().numpy(),
-                    class_id=cls.cpu().int().flatten().numpy() + offset,
-                    metadata=dict(file_path=file_path),
-                )
-                for gt, cls, file_path in zip(
-                    batch["bboxes"], batch["cls"], batch["im_file"]
-                )
-            ]
-
-
-            yield dict(predictions=predictions, ground_truth=gt_detections)
+            predictions = self.model.predict(batch["img"],return_as_dict=False)
+            gt = batch["annotations"]
+            yield dict(predictions=predictions, ground_truth=gt)

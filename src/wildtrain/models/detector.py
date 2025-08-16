@@ -24,6 +24,10 @@ class Detector(object):
         self.localizer = localizer
         self.classifier = classifier
     
+    @property
+    def class_mapping(self):
+        return self.localizer.class_mapping
+    
     @classmethod
     def from_config(cls,localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],classifier_ckpt:Optional[str]=None):
         if isinstance(localizer_config,MMDetConfig):
@@ -34,7 +38,7 @@ class Detector(object):
             classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device) 
         return cls(localizer=localizer,classifier=classifier)
 
-    def predict(self, images: torch.Tensor,return_as_dict:bool=True) -> list[sv.Detections]:
+    def predict(self, images: torch.Tensor,return_as_dict:bool=False) -> list[sv.Detections]:
         """Detects objects in a batch of images and classifies each ROI."""
         assert images.dim() == 4, "Input images must be a batch of images"
         assert images.shape[1] == 3, "Input images must be RGB"
