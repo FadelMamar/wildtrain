@@ -7,6 +7,7 @@ import yaml
 import os
 import pandas as pd
 from pathlib import Path
+from copy import deepcopy
 
 from ..utils.logging import ROOT, get_logger
 from .base import ModelTrainer
@@ -30,6 +31,12 @@ class UltralyticsDetectionTrainer(ModelTrainer):
 
         if not self.config.dataset.load_as_single_class:
             raise ValueError("Not supported. Current pipeline only trains a localizer.")
+        
+        assert ((self.config.dataset.root_data_directory is not None) ^
+                (self.config.dataset.data_cfg is not None)), "Either root_data_directory or data_cfg must be provided"
+
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        
         
     def validate_config(self) -> None:
         if (
@@ -89,6 +96,8 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             assert len(flag) == len(self.config.curriculum.lr0s), (
                 f"All cl_* flags should match length. {len(flag)} != {len(self.config.curriculum.lr0s)}"
             )
+        
+        data_cfg = deepcopy(self.config.dataset.data_cfg)
 
         original_run_name = self.config.name
         for lr, ratio, num_epochs, freeze in zip(
@@ -100,8 +109,8 @@ class UltralyticsDetectionTrainer(ModelTrainer):
 
             cl_cfg_path = get_data_cfg_paths_for_cl(
                 ratio=ratio,
-                data_config_yaml=self.config.curriculum.data_cfg,
-                cl_save_dir=self.config.curriculum.save_dir,
+                data_config_yaml=data_cfg,
+                cl_save_dir=self.save_dir,
                 seed=self.config.train.seed,
                 split="train",
                 pattern_glob=img_glob_pattern,
@@ -138,12 +147,19 @@ class UltralyticsDetectionTrainer(ModelTrainer):
 
     def run(self,debug:bool=False) -> None:
 
-        if self.config.pretraining.data_cfg:
+        if self.config.pretraining.data_cfg is not None:
             self.pretrain(debug=debug)
-
-        if self.config.curriculum.data_cfg is not None:
-            self.curriculum_learning(debug=debug)
         
+        # updating data_cfg
+        if self.config.dataset.root_data_directory is not None:
+            data_cfg = self.save_dir/f"{self.config.name}_merged.yaml"
+            merge_data_cfg(root_data_directory=self.config.dataset.root_data_directory,
+                                                        output_path=data_cfg,
+                                                        force_merge=self.config.dataset.force_merge)
+            self.config.dataset.data_cfg = data_cfg
+
+        if self.config.curriculum.enable:
+            self.curriculum_learning(debug=debug)
         else:
             self._train(debug=debug)
     
@@ -165,7 +181,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
 
         if isinstance(self.config.dataset.data_cfg, list):
             data_cfg = os.path.join(self.save_dir, f"{self.config.name}_merged.yaml")
-            merge_data_cfg(self.config.dataset.data_cfg, output_path=data_cfg,single_class=self.config.dataset.load_as_single_class,single_class_name=self.single_class_name)
+            merge_data_cfg(data_configs=self.config.dataset.data_cfg, output_path=data_cfg,enforce=self.config.dataset.enforce)
         else:
             assert isinstance(self.config.dataset.data_cfg, (str,Path)), f"data_cfg must be str or path, got {type(self.config.dataset.data_cfg)}"
             data_cfg = self.config.dataset.data_cfg  

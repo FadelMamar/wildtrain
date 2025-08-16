@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any
 import typer
-from fastapi_mcp import FastApiMCP
+import traceback
 
 from .routers import training, evaluation, pipeline, visualization, dataset, config
 from .utils.error_handling import WildTrainAPIException, wildtrain_exception_handler
@@ -30,14 +30,7 @@ def create_app() -> FastAPI:
         openapi_url="/openapi.json"
     )
 
-    mcp = FastApiMCP(
-    app,
-    name="WildTrain API MCP",
-    description="WildTrain API MCP server",
-    describe_all_responses=True,
-    describe_full_response_schema=True,
-    )
-    mcp.mount_http()
+    
     
     # Add CORS middleware
     app.add_middleware(
@@ -90,8 +83,22 @@ def create_app() -> FastAPI:
             }
         )
     
-    # Refresh the MCP server to include the new endpoint
-    mcp.setup_server()
+    try:
+        from fastapi_mcp import FastApiMCP
+
+        mcp = FastApiMCP(
+        app,
+        name="WildTrain API MCP",
+        description="WildTrain API MCP server",
+        describe_all_responses=True,
+        describe_full_response_schema=True,
+        )
+        mcp.mount_http()
+        mcp.setup_server()
+    except ImportError:
+        logger.warning("fastapi_mcp is not installed, MCP server will not be available")
+    except Exception:
+        logger.error(f"Error initializing MCP server: {traceback.format_exc()}")
 
     return app
 

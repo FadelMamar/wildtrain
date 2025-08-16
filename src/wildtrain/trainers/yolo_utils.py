@@ -27,6 +27,9 @@ import torch.nn.functional as F
 from torchvision.ops import roi_align
 from torchmetrics.functional.detection import complete_intersection_over_union
 
+from wildata.pipeline.path_manager import PathManager
+
+
 logger = logging.getLogger(__name__)
 
 def load_yaml(path: str):
@@ -34,26 +37,13 @@ def load_yaml(path: str):
         return yaml.safe_load(file)
 
 def save_yaml(cfg: dict, save_path: str, mode="w"):
-    with open(save_path, mode, encoding="utf-8") as file:
-        yaml.dump(cfg, file)
-
-def save_yolo_yaml_cfg(
-    root_dir: str,
-    labels_map: dict,
-    yolo_train: list | str,
-    yolo_val: list | str,
-    save_path: str,
-    mode="w",
-) -> None:
-    cfg_dict = {
-        "path": root_dir,
-        "names": labels_map,
-        "train": yolo_train,
-        "val": yolo_val,
-        "nc": len(labels_map),
-    }
-
-    save_yaml(cfg=cfg_dict, save_path=save_path, mode=mode)
+    try:
+        with open(save_path, mode, encoding="utf-8") as file:
+            yaml.dump(cfg, file)
+        logger.info(f"Successfully saved yaml to {save_path}")
+    except Exception:
+        logger.error(f"Error saving yaml to {save_path}: {traceback.format_exc()}")
+        
 
 def remove_label_cache(data_config_yaml: str):
     """
@@ -139,7 +129,10 @@ def get_data_cfg_paths_for_cl(
     yolo_config = load_yaml(data_config_yaml)
 
     root = yolo_config["path"]
-    dirs_images = [os.path.join(root, p) for p in yolo_config[split]]
+    if isinstance(yolo_config[split], list):
+        dirs_images = [os.path.join(root, p) for p in yolo_config[split]]
+    else:
+        dirs_images = [yolo_config[split]]
 
     # sample positive and negative images
     sampled_imgs_paths = []
@@ -160,21 +153,24 @@ def get_data_cfg_paths_for_cl(
     logger.info(f"Saving {len(sampled_imgs_paths)} sampled images.")
 
     # save config
-    save_path_cfg = Path(save_path_samples).with_suffix(".yaml")
-    cfg = dict(root_dir=root, save_path=save_path_cfg, labels_map=yolo_config["names"])
+    save_path_cfg = Path(save_path_samples).with_suffix(".yaml").as_posix()
+
+    # save yolo data cfg
+    cfg = {
+        "path": root,
+        "names": yolo_config["names"],
+        "nc": yolo_config["nc"]
+    }
     if split == "train":
-        cfg["yolo_val"] = yolo_config["val"]
-        cfg["yolo_train"] = os.path.relpath(save_path_samples, start=root)
-
+        cfg["val"] = yolo_config["val"]
+        cfg["train"] = os.path.relpath(save_path_samples, start=root)
     elif split == "val":
-        cfg["yolo_val"] = os.path.relpath(save_path_samples, start=root)
-        cfg["yolo_train"] = yolo_config["train"]
-
+        cfg["val"] = os.path.relpath(save_path_samples, start=root)
+        cfg["train"] = yolo_config["train"]
     else:
         raise NotImplementedError
 
-    # save yolo data cfg
-    save_yolo_yaml_cfg(mode="w", **cfg)
+    save_yaml(cfg,save_path_cfg,mode="w")
 
     logger.info(
         f"Saving samples at: {save_path_samples} and data_cfg at {save_path_cfg}",
@@ -182,75 +178,97 @@ def get_data_cfg_paths_for_cl(
 
     return str(save_path_cfg)
 
-def merge_data_cfg(data_configs: list[str], single_class: bool = True, single_class_name: str = "wildlife",output_path: Optional[str]=None) -> dict:
-    """
-    Load and merge multiple YOLO data configuration files.
+def merge_data_cfg(root_data_directory:Optional[str]=None,data_configs:Optional[list[str]]=None,output_path:Optional[str]=None,force_merge:bool=True):
     
-    Args:
-        data_configs: List of paths to YAML configuration files
-        
-    Returns:
-        dict: Merged configuration with common path prefix and unified names
-    """
-    if not data_configs:
-        raise ValueError("At least one data config file must be provided")
+    assert root_data_directory is not None or data_configs is not None, "Either root_data_directory or data_configs must be provided"
+
+
+    if root_data_directory is not None:
+        path_manager = PathManager(Path(root_data_directory))
+        data_configs = [path/"data.yaml" for path in path_manager.yolo_formats_dir.iterdir() if path.is_dir()]
     
-    if single_class:
-        labels_map = {0: single_class_name}
-    else:
-        raise ValueError("Not supported. Current pipeline only trains a localizer.")
+    assert len(data_configs) > 0, "No data.yaml files found"
+
     
-    # Load all configs
-    loaded_configs = []
-    for config_path in data_configs:
-        if not os.path.exists(config_path):
-            raise FileNotFoundError(f"Data config file not found: {config_path}")
-        config = load_yaml(config_path)
-        loaded_configs.append(config)
-        
-    # Collect all train and val paths
+    roots = []
     train_paths = []
     val_paths = []
+    test_paths = []
+    names = []
+    nc = []
     
-    for config in loaded_configs:
-        config_path = config.get('path', '')
-        
-        # Handle train paths
-        if 'train' in config:
-            train_path = config['train']
-            if isinstance(train_path, str):
-                train_paths.append(os.path.join(config_path, train_path))
-            elif isinstance(train_path, list):
-                train_paths.extend([os.path.join(config_path, p) for p in train_path])
-        
-        # Handle val paths
-        if 'val' in config:
-            val_path = config['val']
-            if isinstance(val_path, str):
-                val_paths.append(os.path.join(config_path, val_path))
-            elif isinstance(val_path, list):
-                val_paths.extend([os.path.join(config_path, p) for p in val_path])
+    # load data.yaml for each dataset
+    for data_cfg in data_configs:
+        data_cfg = load_yaml(data_cfg)
+        roots.append(data_cfg["path"])
+        train_paths.append(data_cfg["train"])
+        val_paths.append(data_cfg["val"])
+        test_paths.append(data_cfg["test"])
+        names.append(data_cfg["names"])
+        if "nc" in data_cfg:
+            nc.append(data_cfg["nc"])
+        else:
+            nc.append(len(data_cfg["names"]))
     
-    # Add train and val to merged config if they exist
-    common_path = os.path.commonpath(train_paths + val_paths)
-    if not common_path:
-        raise ValueError("No common path prefix found among data configs")
-    
-    # Merge train and val paths
-    merged_config = {
-        'path': common_path,
-        'names': labels_map,
-        'nc': len(labels_map)
+    # unify the cfgs
+    unified_cfg = {
+        "path": roots[0],
+        "train": [],
+        "val": [],
+        "test": [],
+        "names": names[0],
+        "nc": nc[0]
     }
 
-    merged_config['train'] = [os.path.relpath(p, start=common_path) for p in train_paths]
-    merged_config['val'] = [os.path.relpath(p, start=common_path) for p in val_paths]
+    # get common prefix for all paths
+    common_path = os.path.commonpath(roots)
+    unified_cfg["path"] = common_path
 
-    if output_path is not None:
-        save_yaml(merged_config, output_path, mode="w")
-
-    return merged_config
+    # check that all nc are the same
+    if not force_merge:
+        for n in nc:
+            if n != nc[0]:
+                raise ValueError(f"nc are not the same: {n} != {nc[0]}")
+        unified_cfg["nc"] = nc[0]
+    else:
+        unified_cfg["nc"] = max(nc)
     
+    # check that all names are the same
+    if not force_merge:
+        for name in names:
+            if name != names[0]:
+                raise ValueError(f"Names are not the same: {name} != {names[0]}")
+        unified_cfg["names"] = names[0]
+    else:
+        unified_cfg["names"] = {i: f"class_{i}" for i in range(max(nc))}
+    
+    for root, train_path, val_path, test_path in zip(roots, train_paths, val_paths, test_paths):
+        
+        train_path = os.path.join(root, train_path)
+        val_path = os.path.join(root, val_path)
+        test_path = os.path.join(root, test_path)
+
+        if os.path.exists(train_path):
+            unified_cfg["train"].append(os.path.relpath(train_path, common_path))
+        if os.path.exists(val_path):
+            unified_cfg["val"].append(os.path.relpath(val_path, common_path))
+        if os.path.exists(test_path):
+            unified_cfg["test"].append(os.path.relpath(test_path, common_path))
+    
+    if len(unified_cfg["test"]) == 0:
+        unified_cfg.pop("test")
+    
+    if len(unified_cfg["val"]) == 0:
+        unified_cfg.pop("val")
+    
+    if len(unified_cfg["train"]) == 0:
+        raise ValueError("No train paths found")
+
+    # save the unified cfg
+    if output_path is not None:
+        save_yaml(unified_cfg, output_path, mode="w")
+
+    return unified_cfg
 
 RANK = int(os.getenv("RANK", -1))
 

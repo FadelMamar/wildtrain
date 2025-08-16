@@ -3,7 +3,7 @@ from torchvision import transforms as T
 import torch
 from omegaconf import DictConfig, OmegaConf
 import os
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Optional
 from wildata.datasets.detection import load_detection_dataset
 from wildata.pipeline.path_manager import PathManager
 from pathlib import Path
