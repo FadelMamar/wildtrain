@@ -55,6 +55,8 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         self.config.train.lr0 = self.config.train.ptr_lr0
         self.config.train.lrf = self.config.train.ptr_lrf
         self.config.train.freeze = self.config.train.ptr_freeze
+        self.config.dataset.data_cfg = self.config.pretraining.data_cfg
+        
 
         save_dir = self.config.pretraining.save_dir
         if save_dir is None:
@@ -139,7 +141,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         if self.config.pretraining.data_cfg:
             self.pretrain(debug=debug)
 
-        if self.config.curriculum.data_cfg is not None and self.config.curriculum.data_cfg > 0:
+        if self.config.curriculum.data_cfg is not None:
             self.curriculum_learning(debug=debug)
         
         else:
