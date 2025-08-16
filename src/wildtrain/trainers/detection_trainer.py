@@ -119,6 +119,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         ):
             # load best weights
             if self.best_model_path is not None:
+                logger.info(f"Loading best model from {self.best_model_path}")
                 self.config.model.weights = self.best_model_path
 
             cl_cfg_path = self.filter.get_data_cfg_paths_for_cl(
