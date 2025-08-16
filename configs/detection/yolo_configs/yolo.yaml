@@ -2,7 +2,7 @@
 dataset:
   data_cfg: null
   load_as_single_class: true
-  root_data_directory: D:\workspace\data\demo-dataset
+  root_data_directory: D:\PhD\workspace\data
   force_merge: true
 
 curriculum:
@@ -24,8 +24,8 @@ pretraining:
 # Initialization of localizer model
 model:
   pretrained: true
-  weights: models\best.pt
-  architecture_file: configs\detection\yolo_configs\models\yolo12n.yaml
+  weights: "C:/Users/Machine Learning/Desktop/workspace-wildAI/datalabeling/runs/mlflow/771014640604815853/21736771b96e4649afb9052ae9f4bfc5/artifacts/finetuned/artifacts/best.pt"
+  architecture_file: configs\detection\yolo_configs\models\yolo12s.yaml
 
 # run name and project name for tracking
 name: yolo12-d0
@@ -65,7 +65,7 @@ train:
   cls: 1.0
   dfl: 1.5
 
-  device: cpu
+  device: cuda
   workers: 0
 
   # augmentations
