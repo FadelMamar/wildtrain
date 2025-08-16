@@ -4,6 +4,8 @@ dataset:
   load_as_single_class: true
   root_data_directory: D:\workspace\data\demo-dataset
   force_merge: true
+  keep_classes: null # either keep_classes or discard_classes must be provided, not both
+  discard_classes: ["rocks","vegetation","other","termite mound"]
 
 curriculum:
   enable: true
