@@ -9,6 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 import yaml
+import traceback
 from enum import Enum
 
 from ..shared.models import (
@@ -92,7 +93,7 @@ class ConfigLoader:
                 console.print(Panel(error_text, title="❌ Validation Error", border_style="red"))
                 raise ConfigValidationError(f"{config_name} validation failed: {str(e)}")
             
-            raise ConfigParseError(f"Failed to parse {config_name} file: {str(e)}")
+            raise ConfigParseError(f"Failed to parse {config_name} file: {traceback.format_exc()}")
     
     @staticmethod
     def load_classification_config(config_path: Path) -> ClassificationConfig:

@@ -459,7 +459,7 @@ class ClassificationPipelineConfig(PipelineConfig):
     @classmethod
     def validate_classification_results_dir(cls, v):
         # Ensure classification-specific results directory
-        v = Path(v) / "classification" if v.name != "classification" else v
+        v = Path(v) / "classification" if Path(v).name != "classification" else v
         Path(v).mkdir(parents=True, exist_ok=True)
         return v
     
