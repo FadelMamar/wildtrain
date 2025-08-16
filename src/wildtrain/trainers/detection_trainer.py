@@ -11,7 +11,7 @@ from copy import deepcopy
 
 from ..utils.logging import ROOT, get_logger
 from .base import ModelTrainer
-from .yolo_utils import CustomYOLO, merge_data_cfg,get_data_cfg_paths_for_cl,remove_label_cache
+from .yolo_utils import CustomYOLO, merge_data_cfg,FilterDataCfg,remove_label_cache
 
 logger = get_logger(__name__)
 
@@ -36,7 +36,23 @@ class UltralyticsDetectionTrainer(ModelTrainer):
                 (self.config.dataset.data_cfg is not None)), "Either root_data_directory or data_cfg must be provided"
 
         self.save_dir.mkdir(parents=True, exist_ok=True)
+
+        self._set_data_cfg()
+
+        self.filter = FilterDataCfg(data_config_yaml=self.config.dataset.data_cfg,
+            keep_classes=self.config.dataset.keep_classes,
+            discard_classes=self.config.dataset.discard_classes)
+    
+    def _set_data_cfg(self):
+        assert (self.config.dataset.data_cfg is not None) ^ (self.config.dataset.root_data_directory is not None), "Either data_cfg or root_data_directory must be provided"
         
+        # updating data_cfg
+        if self.config.dataset.root_data_directory is not None:
+            data_cfg = self.save_dir/f"{self.config.name}_merged.yaml"
+            merge_data_cfg(root_data_directory=self.config.dataset.root_data_directory,
+                                                        output_path=data_cfg,
+                                                        force_merge=self.config.dataset.force_merge)
+            self.config.dataset.data_cfg = data_cfg      
         
     def validate_config(self) -> None:
         if (
@@ -75,7 +91,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
 
         self._train(debug=debug)
     
-    def curriculum_learning(self, img_glob_pattern: str = "*", debug:bool=False):
+    def curriculum_learning(self, debug:bool=False):
         """
         Run continual learning strategy for the model.
 
@@ -96,9 +112,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             assert len(flag) == len(self.config.curriculum.lr0s), (
                 f"All cl_* flags should match length. {len(flag)} != {len(self.config.curriculum.lr0s)}"
             )
-        
-        data_cfg = deepcopy(self.config.dataset.data_cfg)
-
+                
         original_run_name = self.config.name
         for lr, ratio, num_epochs, freeze in zip(
             self.config.curriculum.lr0s, self.config.curriculum.ratios, self.config.curriculum.epochs, self.config.curriculum.freeze,
@@ -107,13 +121,11 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             if self.best_model_path is not None:
                 self.config.model.weights = self.best_model_path
 
-            cl_cfg_path = get_data_cfg_paths_for_cl(
+            cl_cfg_path = self.filter.get_data_cfg_paths_for_cl(
                 ratio=ratio,
-                data_config_yaml=data_cfg,
+                split="train",
                 cl_save_dir=self.save_dir,
                 seed=self.config.train.seed,
-                split="train",
-                pattern_glob=img_glob_pattern,
             )
             self.config.name = f"{original_run_name}-cl_ratio-{ratio}_freeze-{freeze}"
             self.config.train.freeze = freeze
@@ -122,6 +134,14 @@ class UltralyticsDetectionTrainer(ModelTrainer):
             self.config.dataset.data_cfg = cl_cfg_path
 
             self._train(debug=debug)
+
+    def standard_training(self,debug:bool=False):
+        """
+        Run standard training phase for the model.
+        """
+        logger.info("\n\n------------ Standard Training ----------\n")
+        self.config.dataset.data_cfg = self.filter.get_filtered_data_cfg(save_dir=self.save_dir)
+        self._train(debug=debug)
 
     def get_model(self,):
         """Returns a customized detection model instance configured with specified config and weights."""
@@ -150,18 +170,10 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         if self.config.pretraining.data_cfg is not None:
             self.pretrain(debug=debug)
         
-        # updating data_cfg
-        if self.config.dataset.root_data_directory is not None:
-            data_cfg = self.save_dir/f"{self.config.name}_merged.yaml"
-            merge_data_cfg(root_data_directory=self.config.dataset.root_data_directory,
-                                                        output_path=data_cfg,
-                                                        force_merge=self.config.dataset.force_merge)
-            self.config.dataset.data_cfg = data_cfg
-
         if self.config.curriculum.enable:
             self.curriculum_learning(debug=debug)
         else:
-            self._train(debug=debug)
+            self.standard_training(debug=debug)
     
     def _train(self,debug:bool=False) -> None:
         """
@@ -181,7 +193,9 @@ class UltralyticsDetectionTrainer(ModelTrainer):
 
         if isinstance(self.config.dataset.data_cfg, list):
             data_cfg = os.path.join(self.save_dir, f"{self.config.name}_merged.yaml")
-            merge_data_cfg(data_configs=self.config.dataset.data_cfg, output_path=data_cfg,enforce=self.config.dataset.enforce)
+            merge_data_cfg(data_configs=self.config.dataset.data_cfg, 
+            output_path=data_cfg,
+            force_merge=self.config.dataset.force_merge)
         else:
             assert isinstance(self.config.dataset.data_cfg, (str,Path)), f"data_cfg must be str or path, got {type(self.config.dataset.data_cfg)}"
             data_cfg = self.config.dataset.data_cfg  
