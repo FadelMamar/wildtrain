@@ -38,14 +38,12 @@ def setup_logging(verbose: bool = False):
         handlers=handlers,
     )
 
-
 # setup_logging()
 logger = logging.getLogger("Inference_service")
 
 class Request(BaseModel):
     tensor: str
     shape: List[int]
-
 
 class PredictionTimeLogger(ls.Callback):
     def on_before_predict(self, lit_api):
@@ -56,7 +54,6 @@ class PredictionTimeLogger(ls.Callback):
         t1 = time.perf_counter()
         elapsed = t1 - self._start_time
         logger.info(f"Prediction took {elapsed:.3f} seconds")
-
 
 class InferenceService(ls.LitAPI):
     def setup(
