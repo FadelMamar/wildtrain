@@ -52,10 +52,10 @@ def detection(
         console.print(results)
         
     except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
-        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Configuration error: {traceback.format_exc()}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]✗[/bold red] Pipeline failed: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Pipeline failed: {traceback.format_exc()}")
         raise typer.Exit(1)
 
 
