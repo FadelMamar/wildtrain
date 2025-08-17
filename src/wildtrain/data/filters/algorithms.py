@@ -627,13 +627,13 @@ class FilterDataCfg:
         splits = [t for t in ["train","val","test"] if t in self.yolo_config.keys()]
         for split in splits:
             images_paths = self.filter_data_cfg(split=split)
-            #save_path_samples = os.path.join(
-            #    save_dir, f"{split}_flatten.txt"
-            #)
-            #self.save_images_paths(images_paths=images_paths,save_path=save_path_samples)
+            save_path_samples = os.path.join(
+                save_dir, f"{split}_flatten.txt"
+            )
+            self.save_images_paths(images_paths=images_paths,save_path=save_path_samples)
 
             # update cfg
-            cfg[split] = [os.path.relpath(p, start=root) for p in images_paths]
+            cfg[split] = os.path.relpath(save_path_samples, start=root)
         
         # save cfg
         save_path_cfg = Path(self.data_config_yaml).with_stem("filtered_data").as_posix()
