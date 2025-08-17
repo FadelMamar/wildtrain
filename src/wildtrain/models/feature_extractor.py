@@ -12,26 +12,20 @@ import numpy as np
 import torch
 from PIL import Image
 import timm
-from torchvision.transforms.v2 import Compose, Resize, Normalize, ToDtype,ToImage, InterpolationMode
-import torch.nn.functional as F
-
-from wildtrain.utils.logging import get_logger
+import torch.nn as nn
 
 
-class FeatureExtractor:
+class FeatureExtractor(nn.Module):
     """
     Feature extractor from timm (timm/vit_small_patch16_224.dino).
     """
 
     def __init__(
         self,
-        model_name: str = "timm/vit_small_patch16_224.dino",
+        backbone: str = "timm/vit_small_patch16_224.dino",
+        backbone_source: str = "timm",
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         pretrained: bool = True,
-        mean: list[float] = [0.554, 0.469, 0.348],
-        std: list[float] = [0.203, 0.173, 0.144],
-        input_size: int = 224,
-        weights: Optional[str] = None,
     ):
         """
         Initialize the feature extractor.
@@ -39,32 +33,28 @@ class FeatureExtractor:
             model_name: timm model name (default: 'timm/vit_small_patch16_224.dino')
             device: Device to run inference on ('cpu', 'cuda',)
         """
-        self.transform = Compose([
-            ToImage(),
-            ToDtype(torch.float32),
-            Resize(input_size,interpolation=InterpolationMode.NEAREST),
-            Normalize(mean=mean, std=std),
-        ])
-        self.model = timm.create_model(
-                model_name, pretrained=pretrained, num_classes=0
-            )
-        self.model.set_input_size(img_size=(input_size,input_size))
+        super().__init__()
+        if backbone_source != "timm":
+            raise ValueError(f"Backbone source must be 'timm', got {backbone_source}")
 
+        self.model = timm.create_model(
+                backbone, pretrained=pretrained, num_classes=0
+            )
+        data_cfg = timm.data.resolve_data_config(self.model.pretrained_cfg)
+        self.transform = nn.Sequential(*timm.data.create_transform(**data_cfg))
         self.model.eval()
         self.model.to(device)
         self.device = device
-        if weights:
-            self.model.load_state_dict(torch.load(weights))
 
     @property
     def feature_dim(self) -> int:
         """
         Return the dimension of the extracted feature vector.
         """
-        return self.model.embed_dim
+        return self.model.num_features
 
     @torch.no_grad()
-    def __call__(self, image_paths: List[Union[str, Path]]) -> np.ndarray:
+    def forward(self, image_paths: List[Union[str, Path]]) -> np.ndarray:
         """
         Extract features from a list of images.
         Args:
@@ -72,8 +62,8 @@ class FeatureExtractor:
         Returns:
             Features as a numpy array
         """
-        images = [Image.open(image_path) for image_path in image_paths]
-        images = torch.stack([self.transform(image).to(self.device) for image in images])
+        images = [Image.open(image_path).convert("RGB") for image_path in image_paths]
+        images = torch.stack([self.transform(image).to(self.device) for image in images],dim=0)
         outputs = self.model(images)
         features = outputs.cpu().reshape(len(image_paths), -1).numpy()
         return features

@@ -3,10 +3,15 @@
 # Path to the trained YOLO weights file
 weights:
   localizer: D:/workspace/repos/wildtrain/models/best.pt
-  classifier: null #D:/workspace/repos/wildtrain/models/best_classifier.pt
+  classifier: D:\workspace\repos\wildtrain\checkpoints\classification\unified_classifier\best.ckpt
 
-# Path to the data config YAML (YOLO format)
-data: D:/workspace/repos/wildtrain/configs/detection/yolo_configs/data/demo.yaml
+dataset:
+  data_cfg: null
+  load_as_single_class: true
+  root_data_directory: D:\workspace\data\demo-dataset
+  force_merge: true
+  keep_classes: null # either keep_classes or discard_classes must be provided, not both
+  discard_classes: ["rocks","vegetation","other","termite mound"]
 
 device: "cuda"  # Device to run the evaluation on (cuda/cpu)
 
@@ -17,9 +22,9 @@ metrics:
 # Evaluation parameters
 # 'eval' section is passed as eval_config to the evaluator
 eval:
-  imgsz: 640           # Image size for evaluation
-  split: "val"           # Split to evaluate on
-  iou: 0.6
+  imgsz: 800           # Image size for evaluation
+  split: "val"          # Split to evaluate on
+  iou: 0.5
   single_cls: true   # Treat dataset as single-class
   half: false
   batch_size: 8       # Batch size for DataLoader
@@ -30,8 +35,9 @@ eval:
   classes: null        # Optionally restrict to specific class indices
   cache: false         # Use cache for images/labels
   multi_modal: false   # Not using multi-modal data
-  conf: 0.1         # Confidence threshold for evaluation
+  conf: 0.25        # Confidence threshold for evaluation
   max_det: 300      # Maximum detections per image
   verbose: false    # Verbosity level
   augment: false        # Use Test Time Augmentation
 
+results_dir: results/eval

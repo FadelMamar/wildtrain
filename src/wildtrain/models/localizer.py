@@ -17,6 +17,10 @@ class ObjectLocalizer(ABC):
     def predict(self, images: torch.Tensor) -> list[sv.Detections]:
         """ """
         pass
+    
+    @property
+    def class_mapping(self):
+        raise NotImplementedError("Subclasses must implement class_mapping")
 
 
 class UltralyticsLocalizer(ObjectLocalizer):
@@ -55,6 +59,10 @@ class UltralyticsLocalizer(ObjectLocalizer):
         self.metrics = {"IOU":sv.detection.utils.iou_and_nms.OverlapMetric.IOU,
                    "IOS":sv.detection.utils.iou_and_nms.OverlapMetric.IOS
                    }
+    
+    @property
+    def class_mapping(self):
+        return self.model.names
         
     @classmethod
     def from_config(cls, config: Union[DictConfig,YoloConfig]):
@@ -99,4 +107,9 @@ class UltralyticsLocalizer(ObjectLocalizer):
                                    class_agnostic=self.class_agnostic) for det in detections]
         for det in detections:
             det.metadata["class_mapping"] = self.model.names
+        
+        if len(self.model.names) == 1:
+            for det in detections:
+                det.class_id = det.class_id + 1
+
         return detections

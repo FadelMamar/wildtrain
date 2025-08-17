@@ -243,6 +243,10 @@ class YoloDatasetConfig(BaseConfig):
     """YOLO dataset configuration."""
     data_cfg: Optional[str] = Field(default=None, description="str to data configuration file")
     load_as_single_class: bool = Field(default=True, description="Load dataset as single class")
+    root_data_directory: str = Field(default="", description="Root data directory")
+    force_merge: bool = Field(default=False, description="Force merge")
+    keep_classes: Optional[List[str]] = Field(default=None, description="Keep classes")
+    discard_classes: Optional[List[str]] = Field(default=None, description="Discard classes")
 
 class YoloCurriculumConfig(BaseConfig):
     """YOLO curriculum learning configuration."""
@@ -610,58 +614,18 @@ class DetectionEvalConfig(BaseConfig):
     This configuration is specifically for evaluation workflows and has a different
     structure compared to training configurations.
     
-    Example:
-        config = DetectionEvalConfig(
-            weights=DetectionWeightsConfig(
-                localizer="path/to/localizer.pt",
-                classifier=None
-            ),
-            data="path/to/data.yaml",
-            device="cpu",
-            metrics=DetectionMetricsConfig(
-                average="macro",
-                class_agnostic=False
-            ),
-            eval=DetectionEvalParamsConfig(
-                imgsz=640,
-                split="val",
-                iou=0.6,
-                single_cls=True,
-                half=False,
-                batch_size=8,
-                num_workers=0,
-                rect=False,
-                stride=32,
-                task="detect",
-                classes=None,
-                cache=False,
-                multi_modal=False,
-                conf=0.1,
-                max_det=300,
-                verbose=False,
-                augment=False
-            )
-        )
     """
     weights: "DetectionWeightsConfig" = Field(description="Model weights configuration")
-    data: str = Field(description="str to the data config YAML (YOLO format)")
+    dataset: "YoloDatasetConfig" = Field(description="Dataset configuration")
     device: str = Field(default="cpu", description="Device to run evaluation on")
     metrics: "DetectionMetricsConfig" = Field(description="Evaluation metrics configuration")
-    eval: "DetectionEvalParamsConfig" = Field(description="Evaluation parameters")    
-    
-    @field_validator('data')
-    @classmethod
-    def validate_data_config_exists(cls, v):
-        if not Path(v).exists():
-            raise ValueError(f"Data config file does not exist: {v}")
-        return v
+    eval: "DetectionEvalParamsConfig" = Field(description="Evaluation parameters")   
+    results_dir: str = Field(description="Results directory for pipeline outputs")
     
     @field_validator('device')
     @classmethod
     def validate_device(cls, v):
-        valid_devices = ["cpu", "cuda", "cuda:0", "cuda:1"]
-        if v not in valid_devices:
-            raise ValueError(f"Device must be one of {valid_devices}, got: {v}")
+        assert (v == "cpu") or ("cuda" in v), f"Device must be one of ['cpu', 'cuda'], got: {v}"
         return v
 
 
@@ -887,6 +851,13 @@ class DetectorRegistrationConfig(BaseConfig):
     classifier: ClassifierRegistrationConfig = Field(description="Classifier registration configuration")
     processing: RegistrationBase = Field(description="processing information")
         
+class InferenceConfig(BaseConfig):
+    port: int = Field(default=4141, description="Port to run the server on")
+    workers_per_device: int = Field(default=1, description="Number of workers per device")
+    mlflow_registry_name: str = Field(default="detector", description="MLflow registry name")
+    mlflow_alias: str = Field(default="demo", description="MLflow alias")
+    mlflow_local_dir: str = Field(default="models-registry", description="MLflow local directory")
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking server URI")
 
 
 # Update forward references
@@ -901,3 +872,4 @@ ClassificationVisualizationConfig.model_rebuild()
 LocalizerRegistrationConfig.model_rebuild()
 ClassifierRegistrationConfig.model_rebuild()
 DetectorRegistrationConfig.model_rebuild()
+InferenceConfig.model_rebuild()

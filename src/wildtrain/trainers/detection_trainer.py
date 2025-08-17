@@ -3,15 +3,15 @@ from omegaconf import DictConfig, OmegaConf
 import mlflow
 from ultralytics import YOLO
 from ultralytics import settings
-import yaml
 import os
 import pandas as pd
 from pathlib import Path
-from copy import deepcopy
 
 from ..utils.logging import ROOT, get_logger
 from .base import ModelTrainer
-from .yolo_utils import CustomYOLO, merge_data_cfg,FilterDataCfg,remove_label_cache
+from .yolo_utils import CustomYOLO
+from ..utils.io import merge_data_cfg,remove_label_cache
+from ..data.filters.algorithms import FilterDataCfg
 
 logger = get_logger(__name__)
 
@@ -119,6 +119,7 @@ class UltralyticsDetectionTrainer(ModelTrainer):
         ):
             # load best weights
             if self.best_model_path is not None:
+                logger.info(f"Loading best model from {self.best_model_path}")
                 self.config.model.weights = self.best_model_path
 
             cl_cfg_path = self.filter.get_data_cfg_paths_for_cl(

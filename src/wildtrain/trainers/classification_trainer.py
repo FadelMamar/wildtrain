@@ -66,6 +66,18 @@ class ClassifierModule(L.LightningModule):
         self.num_classes = int(model.num_classes.item())
         self.label_to_class_map = model.label_to_class_map
         
+        # Save model-specific hyperparameters for checkpoint restoration
+        self.save_hyperparameters({
+            'label_to_class_map': model.label_to_class_map,
+            'backbone': model.backbone,
+            'backbone_source': model.backbone_source,
+            'input_size': model.input_size,
+            'dropout': getattr(model, 'dropout', 0.1),
+            'freeze_backbone': getattr(model, 'freeze_backbone', False),
+            'mean': getattr(model, 'mean'),
+            'std': getattr(model, 'std'),
+        })
+        
         self.mlflow_run_id = None
         self.mlflow_experiment_id = None
 
