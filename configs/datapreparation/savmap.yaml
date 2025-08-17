@@ -24,7 +24,7 @@ ls_parse_config: false
 # ROI configuration (optional)
 roi_config:
   random_roi_count: 2
-  roi_box_size: 128
+  roi_box_size: 384
   min_roi_size: 32
   dark_threshold: 0.7 # 0.0 - 1.0; if 70% of the image is dark then it is discarded
   background_class: "background"
@@ -53,8 +53,8 @@ transformations:
   
   enable_tiling: true
   tiling:
-    tile_size: 512
-    stride: 416
+    tile_size: 800
+    stride: 640
     min_visibility: 0.1
     max_negative_tiles_in_negative_image: 3
     negative_positive_ratio: 1.0
