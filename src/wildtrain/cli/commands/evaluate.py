@@ -4,6 +4,7 @@ import typer
 from pathlib import Path
 from typing import Dict, Any
 from omegaconf import OmegaConf
+import traceback
 
 from ..config_loader import ConfigLoader
 from ...evaluators.ultralytics import UltralyticsEvaluator
@@ -30,7 +31,7 @@ def classifier(
             console.print(f"\n```yaml\n{template_yaml}```")
             return {}
         except Exception as e:
-            console.print(f"[bold red]✗[/bold red] Failed to generate template: {str(e)}")
+            console.print(f"[bold red]✗[/bold red] Failed to generate template: {traceback.format_exc()}")
             raise typer.Exit(1)
     
     console.print(f"[bold green]Running classifier evaluation with config:[/bold green] {config}")
@@ -54,10 +55,10 @@ def classifier(
         console.print(results)
         
     except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
-        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Configuration error: {traceback.format_exc()}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]✗[/bold red] Evaluation failed: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Evaluation failed: {traceback.format_exc()}")
         raise typer.Exit(1)
     
     return results
