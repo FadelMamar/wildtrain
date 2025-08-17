@@ -62,7 +62,12 @@ class BaseEvaluator(ABC):
         """
         count = 0
         for results in self._run_inference():
-            self._compute_metrics(results)
+            try:
+                self._compute_metrics(results)
+            except Exception:
+                logger.error(f"Error computing metrics: {traceback.format_exc()}")
+                logger.info(results)
+                raise
             count += 1
             if debug and count > 10:
                 break
@@ -89,37 +94,15 @@ class BaseEvaluator(ABC):
         """
         Compute metrics for a batch of results.
         """
+        assert len(results["predictions"]) == len(results["ground_truth"]), "Number of predictions and ground truth must be the same"
         for metric_name, metric in self.metrics.items():
             for pred, gt in zip(results["predictions"], results["ground_truth"]):
-                metric.update(pred, gt)
-                
-                try:
-                    self._record_per_image_stats(pred, gt, metric_name)
-                except Exception:
-                    logger.info(gt)
-                    logger.info(pred)
-                    logger.error(f"Error recording per image stats for {gt.metadata['file_path']}. {traceback.format_exc()}")
-                    raise 
-                
-    def _record_per_image_stats(self,pred,gt,metric_name):
-        
-        # compute per image metrics
-        if (pred.xyxy.size == 0) and (gt.xyxy.size == 0):
-            self.per_image_results[(gt.metadata['file_path'],metric_name)] = "True-Negative"
-            return
-            
-        elif pred.xyxy.size == 0:
-            self.per_image_results[(gt.metadata['file_path'],metric_name)] = ["False-Negative",gt]
-            return
-
-        elif gt.xyxy.size == 0:
-            self.per_image_results[(gt.metadata['file_path'],metric_name)] = ["False-Positive",pred]
-            return
-
-        metric_i = self.per_image_metrics[metric_name]
-        metric_i.reset()
-        result_i = metric_i.update(pred, gt).compute()
-        self.per_image_results[(gt.metadata['file_path'],metric_name)] = result_i.to_pandas().to_dict(orient='records')
+                if not isinstance(pred, sv.Detections):
+                    raise ValueError(f"Prediction must be a sv.Detections object, got {type(pred)}")
+                if not isinstance(gt, sv.Detections):
+                    raise ValueError(f"Ground truth must be a sv.Detections object, got {type(gt)}")
+                #if not pred.is_empty():
+                metric.update(pred, gt)               
         
     def _reset(self) -> None:
         for metric in self.metrics.values():

@@ -23,6 +23,7 @@ class ClassificationEvaluator:
             self.config = config    
 
     def _load_model(self):
+        logger.info(f"Loading model from {self.config.classifier}")
         model = GenericClassifier.load_from_checkpoint(self.config.classifier, map_location=self.config.device)
         return model
 

@@ -75,7 +75,6 @@ class UltralyticsEvaluator(BaseEvaluator):
             batch_size=eval_config.batch_size,
             shuffle=False,
             num_workers=eval_config.num_workers,
-            pin_memory=torch.cuda.is_available(),
             collate_fn=self._collate_fn,
         )
         return dataloader
