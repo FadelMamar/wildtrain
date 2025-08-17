@@ -7,10 +7,8 @@ quality, and representativeness.
 """
 
 from .algorithms import ClusteringFilter, ClassificationRebalanceFilter, CropClusteringAdapter
-from .feature_extractor import FeatureExtractor
 
 __all__ = [
-    "FeatureExtractor",
     "ClusteringFilter",
     "ClassificationRebalanceFilter",
     "CropClusteringAdapter",

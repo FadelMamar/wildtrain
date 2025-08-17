@@ -2,17 +2,15 @@ from typing import Any, Dict, Tuple, Union, List, Generator
 
 import numpy as np
 import torch
-from ultralytics.data.build import build_yolo_dataset
-from ultralytics.utils import IterableSimpleNamespace
 from torch.utils.data import DataLoader
-import os
 from omegaconf import OmegaConf, DictConfig
 from tqdm import tqdm
 import supervision as sv
 from pathlib import Path
 from .base import BaseEvaluator
 from ..models.detector import Detector
-from ..trainers.yolo_utils import FilterDataCfg, merge_data_cfg
+from ..utils.io import merge_data_cfg
+from ..data.filters.algorithms import FilterDataCfg
 from ..data.utils import load_all_detection_datasets
 
 

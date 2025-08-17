@@ -1,21 +1,21 @@
-# NOTE: Some type checkers may report false positives for pandas/numpy/sklearn operations. These are safe for runtime if the correct packages are installed.
-
 import random
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 from abc import ABC, abstractmethod
+import os
 import numpy as np
-import pandas as pd  # Ensure pandas is installed
-from sklearn.cluster import MiniBatchKMeans  # Use MiniBatchKMeans for scalability
+import pandas as pd 
+from sklearn.cluster import MiniBatchKMeans  
 from sklearn.metrics import silhouette_score
 from collections import defaultdict
 import random
-from PIL import Image # Added for in-memory image processing
-import torch # Added for in-memory image processing
+from PIL import Image 
+import torch 
 
-from wildtrain.utils.logging import get_logger
-from wildtrain.data.filters.feature_extractor import FeatureExtractor
-from wildtrain.data.curriculum.dataset import PatchDataset  # Add import for PatchDataset
+from ...utils.logging import get_logger
+from ...models.feature_extractor import FeatureExtractor
+from ...utils.io import save_yaml,load_yaml
+from ..curriculum.dataset import PatchDataset 
 
 
 logger = get_logger(__name__)
@@ -134,7 +134,7 @@ class ClusteringFilter(BaseFilter):
             f"Target: keeping {n_keep} out of {n_total} images ({self.x_percent*100:.1f}%)"
         )
         # Proportional allocation
-        samples_per_cluster = self._allocate_samples_per_cluster(df, n_keep, best_k)
+        samples_per_cluster = self._allocate_samples_per_cluster(df, n_keep)
         self.last_samples_per_cluster = samples_per_cluster
         logger.info(f"Samples per cluster: {samples_per_cluster}")
         selected_indices = []
@@ -180,22 +180,13 @@ class ClusteringFilter(BaseFilter):
         return best_k, best_labels, silhouette_scores  # type: ignore
 
     def _allocate_samples_per_cluster(
-        self, df: pd.DataFrame, n_keep: int, n_clusters: int
+        self, df: pd.DataFrame, n_keep: int,
     ) -> List[int]:
         # Proportional allocation, at least 1 per cluster if possible
         cluster_sizes = df["cluster"].value_counts().sort_index().values
         total = cluster_sizes.sum()
-        base = (cluster_sizes / total * n_keep).astype(int)  # type: ignore
-        # Ensure at least 1 per cluster if possible
-        base[base == 0] = 1  # type: ignore
-        # Adjust to match n_keep
-        while base.sum() > n_keep:
-            idx = int(np.argmax(base))  # type: ignore
-            base[idx] -= 1  # type: ignore
-        while base.sum() < n_keep:
-            idx = int(np.argmin(base))  # type: ignore
-            base[idx] += 1  # type: ignore
-        return base.tolist()  # type: ignore
+        base = np.floor(cluster_sizes / total * n_keep).astype(int) + 1 
+        return base.tolist()  
 
     def add_embeddings(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not images:
@@ -205,7 +196,7 @@ class ClusteringFilter(BaseFilter):
             Path(img["file_name"]).resolve() for img in images
         ]
         embeddings = self._compute_embeddings_in_batches(image_paths)
-        for img, emb in zip(images, embeddings):  # type: ignore
+        for img, emb in zip(images, embeddings):  
             img["_embedding"] = emb
         return images
 
@@ -506,3 +497,206 @@ class CropClusteringFilter(ClusteringFilter):
             all_embeddings.append(batch_embeddings)
         
         return np.vstack(all_embeddings)
+
+
+class FilterDataCfg:
+    def __init__(self,data_config_yaml: str,keep_classes:Optional[list[str]]=None,discard_classes:Optional[list[str]]=None):
+        self.data_config_yaml = data_config_yaml
+        self.yolo_config = load_yaml(data_config_yaml)
+        self.keep_classes = keep_classes
+        self.discard_classes = discard_classes
+        assert (keep_classes is not None) ^ (discard_classes is not None), "Either keep_classes or discard_classes must be provided"
+    
+    def sample_pos_neg(self,images_paths: list, ratio: float, seed: int = 41):
+        """
+        Sample positive and negative image paths based on the ratio of empty to non-empty samples.
+
+        Args:
+            images_paths (list): List of image paths.
+            ratio (float): Ratio defined as num_empty/num_non_empty.
+            seed (int, optional): Random seed. Defaults to 41.
+
+        Returns:
+            list: Selected image paths.
+        """
+
+        # build dataframe
+        is_empty = [
+            1 - os.path.exists(Path(p).with_suffix(".txt").as_posix().replace("/images/", "/labels/"))
+            for p in images_paths
+        ]
+        data = pd.DataFrame.from_dict(
+            {"image_paths": images_paths, "is_empty": is_empty}, orient="columns"
+        )
+        # get empty and non empty
+        num_empty = (data["is_empty"] == 1).sum()
+        num_non_empty = len(data) - num_empty
+        if num_empty == 0:
+            logger.info("contains only positive samples")
+        num_sampled_empty = min(int(num_non_empty * ratio), num_empty)
+        sampled_empty = data.loc[data["is_empty"] == 1].sample(
+            n=num_sampled_empty, random_state=seed
+        )
+        # concatenate
+        sampled_data = pd.concat([sampled_empty, data.loc[data["is_empty"] == 0]])
+
+        logger.info(f"Sampling: pos={num_non_empty} & neg={num_sampled_empty}")
+
+        return sampled_data["image_paths"].to_list()
+    
+    def get_split_images_paths(self,split:str) -> list[str]:
+        root = self.yolo_config["path"]
+        if isinstance(self.yolo_config[split], list):
+            dirs_images = [os.path.join(root, p) for p in self.yolo_config[split]]
+        else:
+            dirs_images = [self.yolo_config[split]]
+
+        images_paths = []
+        for dir_images in dirs_images:
+            images_paths.extend(list(Path(dir_images).glob("*")))
+        
+        return images_paths
+    
+    @staticmethod
+    def filter_image_paths(image_paths: list[str],label_map:dict,
+                            keep_classes:Optional[list[str]]=None,
+                            discard_classes:Optional[list[str]]=None) -> list[str]:
+
+        assert (keep_classes is not None) ^ (discard_classes is not None), "Either keep_classes or discard_classes must be provided"
+        
+        filtered_images_paths = []
+
+        for image_path in image_paths:
+            label_path = Path(image_path).with_suffix(".txt").as_posix().replace("/images/", "/labels/")
+
+            if not os.path.exists(label_path):
+                filtered_images_paths.append(image_path)
+                continue
+            
+            with open(label_path, "r", encoding="utf-8") as f:
+                labels = [line.split(" ")[0] for line in f.read().splitlines()]
+                classes = [label_map[int(label)] for label in labels]
+                
+                # If no labels in the image, skip it
+                if len(classes) == 0:
+                    filtered_images_paths.append(image_path)
+                    continue
+                
+                should_include = True
+                
+                # Apply keep_classes filter if specified
+                if keep_classes is not None:
+                    should_include = any(class_name in keep_classes for class_name in classes)
+                
+                # Apply discard_classes filter if specified
+                if discard_classes is not None and should_include:
+                    should_include = not any(class_name in discard_classes for class_name in classes)
+                
+                if should_include:
+                    filtered_images_paths.append(image_path)
+                
+        return filtered_images_paths
+
+    def filter_data_cfg(self, split: str) -> list[str]:
+        images_paths = self.get_split_images_paths(split=split)
+        if self.keep_classes is None and self.discard_classes is None:
+            return images_paths
+        filtered_images_paths = self.filter_image_paths(image_paths=images_paths,
+                                                        label_map=self.yolo_config["names"],
+                                                        keep_classes=self.keep_classes,
+                                                        discard_classes=self.discard_classes)
+        if self.keep_classes is not None:
+            logger.info(f"Keeping classes for split {split}: {self.keep_classes}")
+        if self.discard_classes is not None:
+            logger.info(f"Discarding classes for split {split}: {self.discard_classes}")
+                
+        return filtered_images_paths
+    
+    def save_images_paths(self,images_paths:list[str],save_path:str):
+        pd.Series(images_paths).to_csv(save_path,index=False,header=False)
+    
+    def get_filtered_data_cfg(self,save_dir:str) -> str:
+        root = self.yolo_config["path"]
+
+        # updated cfg
+        cfg = {
+            "path": root,
+            "names": self.yolo_config["names"],
+            "nc": self.yolo_config["nc"]
+        }
+        splits = [t for t in ["train","val","test"] if t in self.yolo_config.keys()]
+        for split in splits:
+            images_paths = self.filter_data_cfg(split=split)
+            #save_path_samples = os.path.join(
+            #    save_dir, f"{split}_flatten.txt"
+            #)
+            #self.save_images_paths(images_paths=images_paths,save_path=save_path_samples)
+
+            # update cfg
+            cfg[split] = [os.path.relpath(p, start=root) for p in images_paths]
+        
+        # save cfg
+        save_path_cfg = Path(self.data_config_yaml).with_stem("filtered_data").as_posix()
+        save_yaml(cfg,save_path_cfg,mode="w")
+        
+        return save_path_cfg
+            
+    def get_data_cfg_paths_for_cl(
+        self,
+        ratio: float,
+        split:str,
+        cl_save_dir: str,
+        seed: int = 41,
+    ):
+        """
+        Generate and save a YOLO data config YAML for continual learning with sampled images.
+
+        Args:
+            ratio (float): Ratio for sampling.
+            data_config_yaml (str): Path to YOLO data config YAML.
+            cl_save_dir (str): Directory to save sampled images and config.
+            seed (int, optional): Random seed. Defaults to 41.
+
+        Returns:
+            str: Path to the saved config YAML.
+        """
+
+        root = self.yolo_config["path"]
+
+        images_paths = self.filter_data_cfg(split=split)
+
+        sampled_imgs_paths = self.sample_pos_neg(
+            images_paths=images_paths,
+            ratio=ratio,
+            seed=seed,
+        )
+
+        # save selected images in txt file
+        save_path_samples = os.path.join(
+            cl_save_dir, f"{split}_ratio_{ratio}-seed_{seed}.txt"
+        )
+        self.save_images_paths(images_paths=sampled_imgs_paths,save_path=save_path_samples)
+
+        # updated cfg
+        cfg = {
+            "path": root,
+            "names": self.yolo_config["names"],
+            "nc": self.yolo_config["nc"]
+        }
+        if split == "train":
+            cfg["val"] = self.yolo_config["val"]
+            cfg["train"] = os.path.relpath(save_path_samples, start=root)
+        elif split == "val":
+            cfg["val"] = os.path.relpath(save_path_samples, start=root)
+            cfg["train"] = self.yolo_config["train"]
+        else:
+            raise NotImplementedError
+
+        save_path_cfg = Path(save_path_samples).with_suffix(".yaml").as_posix()
+        save_yaml(cfg,save_path_cfg,mode="w")
+
+        logger.info(
+            f"Saving samples at: {save_path_samples} and data_cfg at {save_path_cfg}",
+        )
+
+        return str(save_path_cfg)
