@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as T
 import timm
-from typing import Optional
+from typing import Optional,Tuple
 
 from ..utils.logging import get_logger
 
@@ -44,7 +44,7 @@ class GenericClassifier(nn.Module):
         self.backbone_source = backbone_source
         self.pretrained = pretrained
 
-        self.feature_extractor = self._get_backbone()
+        self.backbone_trfs,self.feature_extractor = self._get_backbone()
         self.fc = torch.nn.Sequential(
             torch.nn.LazyLinear(128),
             torch.nn.ReLU(),
@@ -78,14 +78,14 @@ class GenericClassifier(nn.Module):
 
     def _get_backbone(
         self,
-    ) -> nn.Module:
+    ) -> Tuple[nn.Module,nn.Module]:
         if self.backbone_source == "timm":
             model = timm.create_model(
                 self.backbone, pretrained=self.pretrained, num_classes=0
             )
             data_cfg = timm.data.resolve_data_config(model.pretrained_cfg)
             transform = timm.data.create_transform(**data_cfg)
-            trfs = [t for t in transform.transforms if isinstance(t, T.Normalize)]
+            trfs = nn.Sequential(*[t for t in transform.transforms if isinstance(t, T.Normalize)])
 
             try:
                 model.set_input_size((self.input_size.item(),self.input_size.item()))
@@ -98,16 +98,24 @@ class GenericClassifier(nn.Module):
         if self.freeze_backbone:
             for param in model.parameters():
                 param.requires_grad = False
-            #model.eval()
+            model.eval()
             logger.info(f"Backbone {self.backbone} frozen")
-        
-        return nn.Sequential(*trfs,model)
+        return trfs,model
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.preprocessing(x.float())
-        x = self.feature_extractor(x)
+        x = self.backbone_trfs(x)
+        if "vit" in self.backbone: # get CLS token for ViT models
+            x = self.feature_extractor.forward_features(x)[:,0,:]
+        else:
+            x = self.feature_extractor(x)
         return self.fc(x)
     
+    def to_torchscript(self):
+        self.feature_extractor = torch.jit.script(self.feature_extractor)
+        self.fc = torch.jit.script(self.fc)
+        return self
+
     @torch.no_grad()
     def predict(self, x: torch.Tensor) -> list[dict]:
         self.eval()
@@ -125,7 +133,7 @@ class GenericClassifier(nn.Module):
         try:
             return cls._load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
         except Exception as e:
-            #print(f"Failed to load checkpoint from {checkpoint_path} using lightning. {e}")
+            logger.error(f"Failed to load checkpoint from {checkpoint_path} using lightning. {e}")
             return cls._load_from_checkpoint(checkpoint_path=checkpoint_path, map_location=map_location,)
 
     @classmethod
@@ -153,6 +161,8 @@ class GenericClassifier(nn.Module):
                 mean=hparams['mean'],
                 std=hparams['std'],
             )
+            # Initialize the model
+            model(torch.rand(1, 3, hparams['input_size'], hparams['input_size']))  
             
             # Load the model weights
             model.load_state_dict(model_state_dict)
@@ -164,17 +174,23 @@ class GenericClassifier(nn.Module):
     def _load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None) -> 'GenericClassifier':
         
         if state_dict is None:
+            assert checkpoint_path is not None, "checkpoint_path must be provided if state_dict is not provided"
             state_dict = torch.load(checkpoint_path, map_location=map_location)
 
         label_to_class_map = state_dict["label_to_class_map"]
         backbone = state_dict["backbone"]
         backbone_source = state_dict["backbone_source"]
+        input_size = state_dict["input_size"].item()
         model = cls(
             label_to_class_map=label_to_class_map,
             backbone=backbone,
             backbone_source=backbone_source,
-            input_size=state_dict["input_size"].item(),
+            input_size=input_size,
         )
+
+        # Initialize the model
+        model(torch.rand(1, 3,input_size, input_size))
+
         model.load_state_dict(state_dict)
 
         return model

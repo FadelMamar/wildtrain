@@ -23,14 +23,17 @@ class ClassificationPipeline:
         train_config = OmegaConf.load(self.config.train.config)
         trainer = ClassifierTrainer(DictConfig(train_config))
         trainer.run(debug=self.config.train.debug)
-        logger.info("[Pipeline] Training completed.")
         self.best_model_path = trainer.best_model_path
+        logger.info(f"[Pipeline] Best model path: {self.best_model_path}")
+        logger.info("[Pipeline] Training completed.")
 
     def evaluate(self):
         logger.info("[Pipeline] Starting classification evaluation...")
-        assert self.best_model_path is not None, "Best model path is not set by trainer"
         eval_config = OmegaConf.load(self.config.eval.config)
-        eval_config.classifier = self.best_model_path
+        
+        if self.best_model_path is not None:
+            eval_config.classifier = self.best_model_path
+
         evaluator = ClassificationEvaluator(config=DictConfig(eval_config))
         results = evaluator.evaluate(debug=self.config.eval.debug, 
         save_path=os.path.join(self.config.results_dir, "eval_report.json"))

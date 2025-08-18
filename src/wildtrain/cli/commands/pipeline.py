@@ -17,7 +17,7 @@ pipeline_app = typer.Typer(name="pipeline", help="Pipeline commands")
 
 @pipeline_app.command()
 def detection(
-    config: Path = typer.Option("","--config", "-c", help="Path to unified detection pipeline YAML config"),
+    config: Path = typer.Option(None,"--config", "-c", help="Path to unified detection pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full detection pipeline (train + eval) for object detection."""
@@ -52,16 +52,16 @@ def detection(
         console.print(results)
         
     except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
-        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Configuration error: {traceback.format_exc()}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]✗[/bold red] Pipeline failed: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Pipeline failed: {traceback.format_exc()}")
         raise typer.Exit(1)
 
 
 @pipeline_app.command()
 def classification(
-    config: Path = typer.Option("","--config", "-c", help="Path to unified classification pipeline YAML config"),
+    config: Path = typer.Option(None,"--config", "-c", help="Path to unified classification pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full classification pipeline (train + eval) for image classification."""

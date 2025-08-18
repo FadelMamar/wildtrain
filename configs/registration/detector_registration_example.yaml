@@ -1,17 +1,15 @@
 
 classifier:
-  weights_path: models/classifier_demo.pt
+  weights_path: checkpoints/classification/unified_classifier/best.ckpt
   processing:
-    export_format: "pt"
     batch_size: 8
-    dynamic: false
 
 localizer:
   yolo:
     weights: models/best.pt
-    imgsz: 640
+    imgsz: 800
     device: "cpu"
-    conf_thres: 0.2
+    conf_thres: 0.1
     iou_thres: 0.3
     max_det: 300
     overlap_metric: "IOU"

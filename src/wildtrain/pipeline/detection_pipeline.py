@@ -33,11 +33,10 @@ class DetectionPipeline:
         eval_config.weights.localizer = self.best_model_path
 
         evaluator = UltralyticsEvaluator(config=DictConfig(eval_config))
-        results = evaluator.evaluate(debug=self.config.eval.debug)
+        results = evaluator.evaluate(debug=self.config.eval.debug,
+                                     save_path=os.path.join(self.config.results_dir, "eval_report.json")
+                                    )
         logger.info("[Pipeline] Evaluation completed.")
-        
-        report_path = os.path.join(self.config.results_dir, "eval_report.json")
-        evaluator.save_report(report_path)
         return results
 
     def run(self):
