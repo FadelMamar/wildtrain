@@ -148,6 +148,12 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         classifier_ckpt = Path(context.artifacts["classifier_ckpt"])
         config = Path(context.artifacts["config"])
 
+        # Handle Windows path issues
+        if platform.system().lower() != "windows":
+            localizer_ckpt = Path(normalize_path(localizer_ckpt))
+            classifier_ckpt = Path(normalize_path(classifier_ckpt))
+            config = Path(normalize_path(config))
+
         for a in [localizer_ckpt,classifier_ckpt,config]:
             a = normalize_path(a)
         
