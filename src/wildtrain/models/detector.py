@@ -97,13 +97,35 @@ class Detector(object):
           
     def _to_dict(self,results:List[sv.Detections])->List[Dict]:
         results = [vars(result) for result in results]
-        results = [{k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in result.items()} for result in results]
-        return results
+        results_as_dict = []
+        for result in results:
+            result_as_dict = {}
+            for k,v in result.items():
+                if isinstance(v,np.ndarray):
+                    result_as_dict[k] = v.tolist()
+                elif isinstance(v,dict):
+                    result_as_dict[k] = {k:v[k].tolist() if isinstance(v[k],np.ndarray) else v[k] for k in v}
+                else:
+                    result_as_dict[k] = v
+            results_as_dict.append(result_as_dict)
+        return results_as_dict
+    
+    @staticmethod
+    def _to_sv_detections(results:List[Dict])->List[sv.Detections]:
+        detections = []
+        for result in results:
+            detections.append(sv.Detections(
+                xyxy=np.array(result["xyxy"]),
+                confidence=np.array(result["confidence"]),
+                class_id=np.array(result["class_id"]),
+                metadata={"class_mapping":result["metadata"].get("class_mapping",{})},
+            ))
+        return detections
 
     @staticmethod
     def predict_inference_service(
         batch: torch.Tensor,url:str="http://localhost:4141/predict",timeout:int=15
-    ) -> List[List[Dict]]:
+    ) -> List[sv.Detections]:
         as_bytes = batch.cpu().numpy().tobytes()
         payload = {
             "tensor": base64.b64encode(as_bytes).decode("utf-8"),
@@ -115,9 +137,11 @@ class Detector(object):
         detections = res.get("detections")
         if detections is None:
             raise ValueError(f"Inference service failed: {res}")
+
+        detections = Detector._to_sv_detections(detections)
         return detections
 
-    def predict(self, images: torch.Tensor,return_as_dict:bool=True) -> list:
+    def predict(self, images: torch.Tensor,return_as_dict:bool=True) -> Union[List[sv.Detections],List[Dict]]:
         """Detects objects in a batch of images and classifies each ROI."""
         b = images.shape[0]
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
