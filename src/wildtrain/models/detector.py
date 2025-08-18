@@ -15,7 +15,9 @@ from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
 from ..shared.models import YoloConfig, MMDetConfig
 from ..utils.mlflow import load_registered_model
+from ..utils.logging import get_logger
 
+logger = get_logger(__name__)
 
 class Detector(object):
     """
@@ -29,6 +31,7 @@ class Detector(object):
         self.localizer = localizer
         self.classifier = classifier
         self.metadata: Optional[Dict[str,Any]] = None
+        self.is_scripted:bool = False
     
     @property
     def input_shape(self,)->Tuple:
@@ -141,10 +144,21 @@ class Detector(object):
         detections = Detector._to_sv_detections(detections)
         return detections
 
-    def predict(self, images: torch.Tensor,return_as_dict:bool=True) -> Union[List[sv.Detections],List[Dict]]:
+    def predict(self, images: torch.Tensor,return_as_dict:bool=False) -> Union[List[sv.Detections],List[Dict]]:
         """Detects objects in a batch of images and classifies each ROI."""
         b = images.shape[0]
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
+        
+        # scripting classifier for faster predictions
+        if not self.is_scripted and self.classifier is not None:
+            try:
+                self.classifier = torch.jit.script(self.classifier)
+                logger.info("Classifier is now scripted for predictions.")
+            except Exception as e:
+                logger.error(f"Failed to script classifier: {e}")
+                pass
+            finally:
+                self.is_scripted = True
 
         if self.classifier is None:
             if return_as_dict:
