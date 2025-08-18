@@ -15,8 +15,10 @@ from pydantic import BaseModel, Field
 from wildtrain.models.classifier import GenericClassifier
 from wildtrain.models.detector import Detector
 from wildtrain.utils.logging import get_logger
+from wildtrain.utils.io import save_yaml
 
-from omegaconf import OmegaConf
+
+from omegaconf import OmegaConf, DictConfig
 
 # Disable torch XNNPACK for compatibility
 os.environ["TORCH_XNNPACK_DISABLE"] = "1"
@@ -63,7 +65,7 @@ class ModelMetadata(BaseModel):
 
 def normalize_path(model_path: Path) -> Path:
     """Normalize path for cross-platform compatibility."""
-    resolved_path = model_path.resolve()
+    resolved_path = Path(model_path).resolve()
     if platform.system().lower() != "windows":
         return Path(resolved_path.as_posix().replace("\\", "/"))
     return resolved_path
@@ -116,8 +118,7 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
         if platform.system().lower() != "windows":
             model_path = Path(normalize_path(model_path))
         
-        self.model = torch.jit.load(str(model_path), map_location="cpu")
-        self.model.eval()
+        self.model = GenericClassifier.load_from_checkpoint(str(model_path)) #torch.jit.load(str(model_path), map_location="cpu")
         self.artifacts = context.artifacts
 
 
@@ -142,27 +143,20 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
         """Load the TorchScript classification model from the artifacts."""
-        from wildtrain.cli.config_loader import ConfigLoader
         
-        localizer_ckpt = Path(context.artifacts["localizer_ckpt"])
-        classifier_ckpt = Path(context.artifacts["classifier_ckpt"])
-        config = Path(context.artifacts["config"])
+        localizer_ckpt = context.artifacts["localizer_ckpt"]
+        config = context.artifacts["localizer_config"]
 
-        # Handle Windows path issues
-        if platform.system().lower() != "windows":
-            localizer_ckpt = Path(normalize_path(localizer_ckpt))
-            classifier_ckpt = Path(normalize_path(classifier_ckpt))
-            config = Path(normalize_path(config))
+        classifier_ckpt = context.artifacts.get("classifier_ckpt")
 
         for a in [localizer_ckpt,classifier_ckpt,config]:
-            a = normalize_path(a)
-        
-        config = OmegaConf.load(config)
+            a = normalize_path(Path(a))
 
-        assert (config.localizer.yolo is None) + (config.localizer.mmdet is None) == 1, f"Exactly one should be given"
-        localizer_cfg = config.localizer.yolo or config.localizer.mmdet
-        localizer_cfg.weights = str(localizer_ckpt)
+        print("\n--- DEBUG INFO ---")
+        print(f"[DEBUG] Loading localizer from {localizer_ckpt}, classifier from {classifier_ckpt}\n")
 
+
+        localizer_cfg = DictConfig(OmegaConf.load(normalize_path(config)))   
         self.model = Detector.from_config(localizer_config=localizer_cfg,
                                         classifier_ckpt=classifier_ckpt)
         self.artifacts = context.artifacts
@@ -223,9 +217,10 @@ class ModelRegistrar:
     ) -> None:
         """Register a YOLO detection model to MLflow Model Registry.
         """
-        from wildtrain.cli.config_loader import ConfigLoader
-
-        config = ConfigLoader.load_detector_registration_config(config_path)
+        from wildtrain.cli.config_loader import ConfigLoader # avoid curcular import
+        # Validate and load config
+        ConfigLoader.load_detector_registration_config(config_path)
+        config = OmegaConf.load(config_path)
 
         assert (config.localizer.yolo is None) + (config.localizer.mmdet is None) == 1, f"Exactly one should be given"
         localizer_cfg = config.localizer.yolo or config.localizer.mmdet
@@ -242,19 +237,28 @@ class ModelRegistrar:
             dynamic=localizer_processing.dynamic,
             task=localizer_cfg.task,
         )
-
-        classifier_ckpt = self._export_classifier(
-            model_path=config.classifier.weights_path,
-            batch_size=config.classifier.processing.batch_size,
-        )
         
-        self.model = Detector.from_config(localizer_config=localizer_cfg,
-                                        classifier_ckpt=str(config.classifier.weights_path))
-          
-        artifacts = {"localizer_ckpt": str(localizer_ckpt),
-                    "classifier_ckpt":str(classifier_ckpt),
-                    "config":str(config_path)
-        }
+        localizer_cfg.weights = str(localizer_ckpt)
+        localizer_config_path = str(Path(localizer_cfg.weights).parent / "localizer_config.yaml")
+
+        #classifier_ckpt = self._export_classifier(
+        #    model_path=config.classifier.weights_path,
+        #    batch_size=config.classifier.processing.batch_size,
+        #)
+        classifier_ckpt = config.classifier.weights_path
+
+        artifacts = {"localizer_ckpt": localizer_cfg.weights,
+                    "localizer_config":localizer_config_path
+        }        
+        save_yaml(dict(localizer_cfg),save_path=localizer_config_path)
+        
+        model = Detector.from_config(localizer_config=localizer_cfg,
+                                        classifier_ckpt=classifier_ckpt)
+
+        #print("[DEBUG]",model.localizer is None, model.classifier is None)            
+
+        if classifier_ckpt is not None:
+            artifacts["classifier_ckpt"] = str(classifier_ckpt)
 
         if getattr(localizer_cfg,"config",None) is not None:
             artifacts["mmdet_config"] = getattr(localizer_cfg,"config",None)
@@ -353,10 +357,11 @@ class ModelRegistrar:
         # Load the model
         model = GenericClassifier.load_from_checkpoint(str(model_path))
         
-        classifier_ckpt = self._export_classifier(
-            model_path=model_path,
-            batch_size=batch_size,
-        )
+        #classifier_ckpt = self._export_classifier(
+        #    model_path=model_path,
+        #    batch_size=batch_size,
+        #)
+        classifier_ckpt = model_path  # Use the original checkpoint path
         
         artifacts = {"classifier_ckpt": str(classifier_ckpt)}
         
