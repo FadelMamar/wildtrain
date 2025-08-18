@@ -425,11 +425,11 @@ class ModelRegistrar:
             model = GenericClassifier.load_from_checkpoint(str(model_path))
             model.eval()
             dummy_input = torch.randn(batch_size, 3, model.input_size.item(), model.input_size.item())
-            try:
-                scripted_model = torch.jit.script(model)
-            except Exception as e:
-                logger.info(f"Scripting failed. Falling back to tracing.")
-                scripted_model = torch.jit.trace(model, dummy_input)
+            #try:
+            scripted_model = torch.jit.script(model)
+            #except Exception as e:
+                #logger.info(f"Scripting failed. Falling back to tracing. Error: {e}")
+                #scripted_model = torch.jit.trace(model, dummy_input)
             scripted_path = model_path.with_suffix(".torchscript")
             scripted_model.save(str(scripted_path))
             return normalize_path(scripted_path)

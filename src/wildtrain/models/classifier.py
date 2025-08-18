@@ -156,6 +156,8 @@ class GenericClassifier(nn.Module):
                 mean=hparams['mean'],
                 std=hparams['std'],
             )
+            # Initialize the model
+            model(torch.rand(1, 3, hparams['input_size'], hparams['input_size']))  
             
             # Load the model weights
             model.load_state_dict(model_state_dict)
@@ -167,17 +169,23 @@ class GenericClassifier(nn.Module):
     def _load_from_checkpoint(cls, checkpoint_path: Optional[str]=None, map_location: str = "cpu",state_dict:Optional[dict]=None) -> 'GenericClassifier':
         
         if state_dict is None:
+            assert checkpoint_path is not None, "checkpoint_path must be provided if state_dict is not provided"
             state_dict = torch.load(checkpoint_path, map_location=map_location)
 
         label_to_class_map = state_dict["label_to_class_map"]
         backbone = state_dict["backbone"]
         backbone_source = state_dict["backbone_source"]
+        input_size = state_dict["input_size"].item()
         model = cls(
             label_to_class_map=label_to_class_map,
             backbone=backbone,
             backbone_source=backbone_source,
-            input_size=state_dict["input_size"].item(),
+            input_size=input_size,
         )
+
+        # Initialize the model
+        model(torch.rand(1, 3,input_size, input_size))
+
         model.load_state_dict(state_dict)
 
         return model
