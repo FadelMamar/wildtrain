@@ -118,7 +118,7 @@ class Detector(object):
         detections = []
         for result in results:
             detections.append(sv.Detections(
-                xyxy=np.array(result["xyxy"]),
+                xyxy=np.array(result["xyxy"]).reshape(-1,4),
                 confidence=np.array(result["confidence"]),
                 class_id=np.array(result["class_id"]),
                 metadata={"class_mapping":result["metadata"].get("class_mapping",{})},
@@ -141,8 +141,7 @@ class Detector(object):
         if detections is None:
             raise ValueError(f"Inference service failed: {res}")
 
-        detections = Detector._to_sv_detections(detections)
-        return detections
+        return Detector._to_sv_detections(detections)
 
     def predict(self, images: torch.Tensor,return_as_dict:bool=False) -> Union[List[sv.Detections],List[Dict]]:
         """Detects objects in a batch of images and classifies each ROI."""
@@ -151,14 +150,8 @@ class Detector(object):
         
         # scripting classifier for faster predictions
         if not self.is_scripted and self.classifier is not None:
-            try:
-                self.classifier = torch.jit.script(self.classifier)
-                logger.info("Classifier is now scripted for predictions.")
-            except Exception as e:
-                logger.error(f"Failed to script classifier: {e}")
-                pass
-            finally:
-                self.is_scripted = True
+            self.classifier.to_torchscript()
+            self.is_scripted = True
 
         if self.classifier is None:
             if return_as_dict:

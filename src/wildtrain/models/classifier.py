@@ -111,6 +111,11 @@ class GenericClassifier(nn.Module):
             x = self.feature_extractor(x)
         return self.fc(x)
     
+    def to_torchscript(self):
+        self.feature_extractor = torch.jit.script(self.feature_extractor)
+        self.fc = torch.jit.script(self.fc)
+        return self
+
     @torch.no_grad()
     def predict(self, x: torch.Tensor) -> list[dict]:
         self.eval()
