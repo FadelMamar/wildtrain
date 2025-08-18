@@ -9,6 +9,7 @@ from collections import defaultdict
 from omegaconf import DictConfig
 import requests
 import base64
+from pathlib import Path
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
@@ -40,12 +41,13 @@ class Detector(object):
         return self.localizer.class_mapping
     
     @classmethod
-    def from_config(cls,localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],classifier_ckpt:Optional[str]=None):
+    def from_config(cls,localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],classifier_ckpt:Optional[Union[str,Path]]=None):
         if isinstance(localizer_config,MMDetConfig):
             raise NotImplementedError("Support only Yolo.")
         localizer = UltralyticsLocalizer.from_config(localizer_config)
         classifier = None
-        if isinstance(classifier_ckpt,str):
+        if classifier_ckpt is not None:
+            assert isinstance(classifier_ckpt,(Path,str)), "classifier_ckpt must be a Path object or a string"
             classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device) 
         return cls(localizer=localizer,classifier=classifier)
     
@@ -121,7 +123,6 @@ class Detector(object):
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
 
         if self.classifier is None:
-            print(f"[DEBUG] classifier is None")
             if return_as_dict:
                 detections = self._to_dict(detections)
             return detections

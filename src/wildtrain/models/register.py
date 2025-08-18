@@ -144,20 +144,21 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
         """Load the TorchScript classification model from the artifacts."""
         
-        localizer_ckpt = context.artifacts["localizer_ckpt"]
         config = context.artifacts["localizer_config"]
+        config = normalize_path(config)
+
+        localizer_ckpt = context.artifacts["localizer_ckpt"]
+        localizer_ckpt = normalize_path(localizer_ckpt)
+        localizer_cfg = DictConfig(OmegaConf.load(config))  
+        localizer_cfg.weights = localizer_ckpt        
 
         classifier_ckpt = context.artifacts.get("classifier_ckpt")
         if classifier_ckpt is not None:
             classifier_ckpt = normalize_path(classifier_ckpt)
-        localizer_ckpt = normalize_path(localizer_ckpt)
-        config = normalize_path(config)
-
-        localizer_cfg = DictConfig(OmegaConf.load(config))  
-        localizer_cfg.weights = localizer_ckpt
-
+        
         #print("\n--- DEBUG INFO ---")
-        #print(f"[DEBUG] Loading localizer from {localizer_ckpt}, classifier from {classifier_ckpt}\n")
+        #print(f"[DEBUG] localizer: {localizer_ckpt}")
+        #print(f"[DEBUG] classifier: {classifier_ckpt}")
         #print(f"[DEBUG] localizer config: {localizer_cfg}")
         
         self.model = Detector.from_config(localizer_config=localizer_cfg,
