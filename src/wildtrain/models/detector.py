@@ -93,6 +93,11 @@ class Detector(object):
             bbox[:, 3] = np.clip(bbox[:, 3], 0, images_height - 1)
             return bbox
           
+    def _to_dict(self,results:List[sv.Detections])->List[Dict]:
+        results = [vars(result) for result in results]
+        results = [{k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in result.items()} for result in results]
+        return results
+
     @staticmethod
     def predict_inference_service(
         batch: torch.Tensor,url:str="http://localhost:4141/predict",timeout:int=15
@@ -116,6 +121,9 @@ class Detector(object):
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
 
         if self.classifier is None:
+            print(f"[DEBUG] classifier is None")
+            if return_as_dict:
+                detections = self._to_dict(detections)
             return detections
 
         roi_size = self.classifier.input_size.item()
@@ -132,7 +140,10 @@ class Detector(object):
             )
             boxes.append(roi_boxes)
         
+        # If no boxes are found, return the detections as is
         if len(boxes)==0:
+            if return_as_dict:
+                detections = self._to_dict(detections)
             return detections
         
         boxes = torch.cat(boxes, dim=0)
@@ -170,8 +181,7 @@ class Detector(object):
             )
         
         if return_as_dict:
-            results = [vars(result) for result in results]
-            results = [{k:v.tolist() if isinstance(v,np.ndarray) else v for k,v in result.items()} for result in results]
+            results = self._to_dict(results)
             return results
 
         return results
