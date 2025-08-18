@@ -16,6 +16,7 @@ from wildtrain.models.classifier import GenericClassifier
 from wildtrain.models.detector import Detector
 from wildtrain.utils.logging import get_logger
 
+from omegaconf import OmegaConf
 
 # Disable torch XNNPACK for compatibility
 os.environ["TORCH_XNNPACK_DISABLE"] = "1"
@@ -150,7 +151,7 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         for a in [localizer_ckpt,classifier_ckpt,config]:
             a = normalize_path(a)
         
-        config = ConfigLoader.load_detector_registration_config(config)
+        config = OmegaConf.load(config)
 
         assert (config.localizer.yolo is None) + (config.localizer.mmdet is None) == 1, f"Exactly one should be given"
         localizer_cfg = config.localizer.yolo or config.localizer.mmdet
@@ -159,10 +160,7 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         self.model = Detector.from_config(localizer_config=localizer_cfg,
                                         classifier_ckpt=classifier_ckpt)
         self.artifacts = context.artifacts
-    
-    #def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input:List[List[float]]):
-    #    torch_input = torch.tensor(model_input)
-    #    return self.model.predict(torch_input,return_as_dict=True)
+
 
 
 def get_experiment_id(name: str) -> str:
@@ -238,12 +236,17 @@ class ModelRegistrar:
             dynamic=localizer_processing.dynamic,
             task=localizer_cfg.task,
         )
+
+        classifier_ckpt = self._export_classifier(
+            model_path=config.classifier.weights_path,
+            batch_size=config.classifier.processing.batch_size,
+        )
         
         self.model = Detector.from_config(localizer_config=localizer_cfg,
                                         classifier_ckpt=str(config.classifier.weights_path))
           
         artifacts = {"localizer_ckpt": str(localizer_ckpt),
-                    "classifier_ckpt":str(config.classifier.weights_path),
+                    "classifier_ckpt":str(classifier_ckpt),
                     "config":str(config_path)
         }
 
