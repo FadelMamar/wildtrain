@@ -2,9 +2,7 @@
 classifier:
   weights_path: checkpoints/classification/unified_classifier/best.ckpt
   processing:
-    export_format: "pt"
     batch_size: 8
-    dynamic: false
 
 localizer:
   yolo:
