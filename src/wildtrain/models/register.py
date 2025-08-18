@@ -148,15 +148,18 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         config = context.artifacts["localizer_config"]
 
         classifier_ckpt = context.artifacts.get("classifier_ckpt")
+        if classifier_ckpt is not None:
+            classifier_ckpt = normalize_path(classifier_ckpt)
+        localizer_ckpt = normalize_path(localizer_ckpt)
+        config = normalize_path(config)
 
-        for a in [localizer_ckpt,classifier_ckpt,config]:
-            a = normalize_path(Path(a))
+        localizer_cfg = DictConfig(OmegaConf.load(config))  
+        localizer_cfg.weights = localizer_ckpt
 
-        print("\n--- DEBUG INFO ---")
-        print(f"[DEBUG] Loading localizer from {localizer_ckpt}, classifier from {classifier_ckpt}\n")
-
-
-        localizer_cfg = DictConfig(OmegaConf.load(normalize_path(config)))   
+        #print("\n--- DEBUG INFO ---")
+        #print(f"[DEBUG] Loading localizer from {localizer_ckpt}, classifier from {classifier_ckpt}\n")
+        #print(f"[DEBUG] localizer config: {localizer_cfg}")
+        
         self.model = Detector.from_config(localizer_config=localizer_cfg,
                                         classifier_ckpt=classifier_ckpt)
         self.artifacts = context.artifacts
@@ -252,10 +255,9 @@ class ModelRegistrar:
         }        
         save_yaml(dict(localizer_cfg),save_path=localizer_config_path)
         
-        model = Detector.from_config(localizer_config=localizer_cfg,
-                                        classifier_ckpt=classifier_ckpt)
-
-        #print("[DEBUG]",model.localizer is None, model.classifier is None)            
+        # Check if the model can be loaded
+        Detector.from_config(localizer_config=localizer_cfg,
+                                       classifier_ckpt=classifier_ckpt)
 
         if classifier_ckpt is not None:
             artifacts["classifier_ckpt"] = str(classifier_ckpt)
