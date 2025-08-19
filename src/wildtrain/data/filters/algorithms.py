@@ -11,6 +11,7 @@ from collections import defaultdict
 import random
 from PIL import Image 
 import torch 
+from tqdm import tqdm
 
 from ...utils.logging import get_logger
 from ...models.feature_extractor import FeatureExtractor
@@ -77,16 +78,16 @@ class ClusteringFilter(BaseFilter):
 
     def __init__(
         self,
-        feature_extractor: Optional[FeatureExtractor] = None,
+        feature_extractor: FeatureExtractor = FeatureExtractor(),
         batch_size: int = 64,
-        sampling_strategy: Optional[SamplingStrategy] = None,
+        sampling_strategy: SamplingStrategy = UniformDistanceRandomSamplingStrategy(),
         reduction_factor: float = 0.3
     ):
-        self.feature_extractor = feature_extractor or FeatureExtractor()
+        self.feature_extractor = FeatureExtractor()
         self.batch_size = batch_size
         self.x_percent = reduction_factor  # Default to 30% if not set
         self.sampling_strategy = (
-            sampling_strategy or UniformDistanceRandomSamplingStrategy()
+            UniformDistanceRandomSamplingStrategy()
         )
         self.last_silhouette_scores = None
         self.last_samples_per_cluster = None
@@ -96,6 +97,7 @@ class ClusteringFilter(BaseFilter):
             logger.warning("No images found in images")
             return images
 
+        logger.info(f"Adding embeddings to {len(images)} images")
         images = self.add_embeddings(images)
 
         embeddings = np.stack([img["_embedding"] for img in images])
@@ -204,7 +206,7 @@ class ClusteringFilter(BaseFilter):
         self, image_paths: List[Union[str, Path]]
     ) -> np.ndarray:
         all_embeddings = []
-        for i in range(0, len(image_paths), self.batch_size):
+        for i in tqdm(range(0, len(image_paths), self.batch_size),unit="batch",desc="Computing embeddings"):
             batch_paths = image_paths[i : i + self.batch_size]
             batch_embeddings = self.feature_extractor(batch_paths)  # type: ignore
             all_embeddings.append(batch_embeddings)
@@ -443,7 +445,7 @@ class CropClusteringFilter(ClusteringFilter):
         
         # Extract crop images and compute embeddings
         crop_images = []
-        for img in images:
+        for img in tqdm(images,desc="Extracting crops",unit="img"):
             crop_info = img.get("_crop_info")
             if crop_info is not None:
                 # Extract the actual crop image
@@ -473,29 +475,15 @@ class CropClusteringFilter(ClusteringFilter):
             Array of embeddings
         """
         all_embeddings = []
-        
-        for i in range(0, len(crop_images), self.batch_size):
+        for i in tqdm(range(0, len(crop_images), self.batch_size),desc="Computing embeddings",unit="batch"):
             batch_images = crop_images[i:i + self.batch_size]
-            
             # Convert to PIL Images for the feature extractor
-            batch_pil_images = []
-            for img_array in batch_images:
-                pil_image = Image.fromarray(img_array)
-                batch_pil_images.append(pil_image)
-            
-            # Compute embeddings for this batch using the feature extractor's transform
-            batch_tensors = torch.stack([
-                self.feature_extractor.transform(pil_image).float().to(self.feature_extractor.device) 
-                for pil_image in batch_pil_images
-            ])
-            
+            batch = torch.stack([torch.from_numpy(img_array).permute(2,0,1) for img_array in batch_images])
             # Get embeddings from the model
             with torch.no_grad():
-                outputs = self.feature_extractor.model(batch_tensors)
-                batch_embeddings = outputs.cpu().reshape(len(batch_pil_images), -1).numpy()
-            
+                batch_embeddings = self.feature_extractor(batch).cpu().numpy()
+                #batch_embeddings = outputs.cpu().reshape(len(batch_pil_images), -1).numpy()
             all_embeddings.append(batch_embeddings)
-        
         return np.vstack(all_embeddings)
 
 

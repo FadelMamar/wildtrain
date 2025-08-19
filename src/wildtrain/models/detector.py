@@ -149,9 +149,9 @@ class Detector(object):
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
         
         # scripting classifier for faster predictions
-        if not self.is_scripted and self.classifier is not None:
-            self.classifier.to_torchscript()
-            self.is_scripted = True
+        #if not self.is_scripted and self.classifier is not None:
+        #    self.classifier.to_torchscript()
+        #    self.is_scripted = True
 
         if self.classifier is None:
             if return_as_dict:
