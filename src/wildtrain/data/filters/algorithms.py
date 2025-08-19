@@ -62,7 +62,6 @@ class UniformDistanceRandomSamplingStrategy(SamplingStrategy):
         return chosen
 
 
-#TODO: make it work for object detection and classification -> subclassing
 class ClusteringFilter(BaseFilter):
     """
     Clustering-based filter. Ensures embeddings are present in each image as image['_embedding'].
@@ -191,10 +190,11 @@ class ClusteringFilter(BaseFilter):
         return base.tolist()  
 
     def add_embeddings(self, images: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        if not images:
+        if len(images) == 0:
             logger.warning("No images found in images")
             return images
-        image_paths: List[Union[str, Path]] = [
+        
+        image_paths = [
             Path(img["file_name"]).resolve() for img in images
         ]
         embeddings = self._compute_embeddings_in_batches(image_paths)
@@ -208,7 +208,8 @@ class ClusteringFilter(BaseFilter):
         all_embeddings = []
         for i in tqdm(range(0, len(image_paths), self.batch_size),unit="batch",desc="Computing embeddings"):
             batch_paths = image_paths[i : i + self.batch_size]
-            batch_embeddings = self.feature_extractor(batch_paths)  # type: ignore
+            batch_images = [Image.open(path) for path in batch_paths]
+            batch_embeddings = self.feature_extractor(batch_images)  # type: ignore
             all_embeddings.append(batch_embeddings)
         return np.vstack(all_embeddings)
 
