@@ -3,7 +3,7 @@
 # ----------------------
 disable_train: false
 train:
-  config: configs\detection\yolo_configs\yolo.yaml
+  config: configs/detection/yolo_configs/yolo.yaml
   debug: true
 
 # ----------------------
@@ -11,7 +11,7 @@ train:
 # ----------------------
 disable_eval: false
 eval:
-  config: configs\detection\yolo_configs\yolo_eval.yaml
+  config: configs/detection/yolo_configs/yolo_eval.yaml
   debug: true
 
 # ----------------------
