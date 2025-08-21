@@ -19,7 +19,7 @@ from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-class Detector(object):
+class Detector(torch.nn.Module):
     """
     Two-stage detector for inference: localizes objects and classifies each ROI.
     Args:
@@ -28,6 +28,7 @@ class Detector(object):
     """
 
     def __init__(self, localizer: ObjectLocalizer, classifier: Optional[GenericClassifier]=None):
+        super().__init__()
         self.localizer = localizer
         self.classifier = classifier
         self.metadata: Optional[Dict[str,Any]] = None
@@ -217,3 +218,6 @@ class Detector(object):
             return results
 
         return results
+
+    def forward(self,images:torch.Tensor)->List[Dict]:
+        return self.predict(images,return_as_dict=True)

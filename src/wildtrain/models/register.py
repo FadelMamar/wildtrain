@@ -9,10 +9,12 @@ from enum import Enum
 import numpy as np
 import torch
 import mlflow
+from mlflow.models import infer_signature,ModelSignature
 from ultralytics import YOLO
 from pydantic import BaseModel, Field
 
 from wildtrain.models.classifier import GenericClassifier
+from wildtrain.models.localizer import UltralyticsLocalizer
 from wildtrain.models.detector import Detector
 from wildtrain.utils.logging import get_logger
 from wildtrain.utils.io import save_yaml
@@ -257,8 +259,10 @@ class ModelRegistrar:
         save_yaml(dict(localizer_cfg),save_path=localizer_config_path)
         
         # Check if the model can be loaded
-        Detector.from_config(localizer_config=localizer_cfg,
+        model =  Detector.from_config(localizer_config=localizer_cfg,
                                        classifier_ckpt=classifier_ckpt)
+        x = torch.rand(localizer_processing.batch_size,3,localizer_cfg.imgsz,localizer_cfg.imgsz)
+        signature = infer_signature(x, model(x))
 
         if classifier_ckpt is not None:
             artifacts["classifier_ckpt"] = str(classifier_ckpt)
@@ -279,67 +283,13 @@ class ModelRegistrar:
             artifacts=artifacts,
             metadata=metadata.to_dict(),
             name=config.processing.name,
-            python_model=DetectorWrapper(),
+            #python_model=DetectorWrapper(),
+            pytorch_model=model,
+            signature=signature,
         )
         
         logger.info(f"Successfully registered detector model: {config.processing.name}")
-    
-    
-    def register_localizer(
-        self,
-        weights_path: Union[str, Path],
-        name: str = "detector",
-        export_format: str = "torchscript",
-        image_size: int = 800,
-        batch_size: int = 8,
-        device: str = "cpu",
-        dynamic: bool = False,
-        task: str = "detect",
-        model_type: str = "yolo"
-    ) -> None:
-        """Register a YOLO detection model to MLflow Model Registry.
         
-        Args:
-            weights_path: Path to the model weights
-            name: Model name for registration
-            export_format: Export format (torchscript, openvino, etc.)
-            image_size: Input image size
-            batch_size: Batch size for inference
-            device: Device to use for export
-            dynamic: Whether to use dynamic batching
-            task: YOLO task type
-            model_type: yolo or MMDet
-        """
-
-        if model_type != "yolo":
-            raise NotImplementedError(f"Supports only 'yolo' not '{model_type}'")
-        model_path = Path(weights_path)
-        if not model_path.exists():
-            raise FileNotFoundError(f"Model weights not found: {model_path}")
-        
-        export_path = self._export_localizer(
-            model_path, export_format, image_size, batch_size, device, dynamic, task
-        )
-        
-        artifacts = {"localizer_ckpt": str(export_path)}
-        
-        # Create metadata using the new ModelMetadata class
-        metadata = ModelMetadata(
-            batch=batch_size,
-            imgsz=image_size,
-            task=ModelTask(task) if isinstance(task, str) else task,
-            model_type=ModelType.LOCALIZER,
-        )
-        
-        self._register_model(
-            artifacts=artifacts,
-            metadata=metadata.to_dict(),
-            name=name,
-            python_model=UltralyticsWrapper(),
-        )
-        
-        logger.info(f"Successfully registered detector model: {name}")
-    
     def register_classifier(
         self,
         weights_path: Union[str, Path],
@@ -359,6 +309,9 @@ class ModelRegistrar:
         
         # Load the model
         model = GenericClassifier.load_from_checkpoint(str(model_path))
+
+        x = torch.rand(batch_size,3,model.input_size.item(),model.input_size.item())
+        signature = infer_signature(x.cpu(), model.predict(x))
         
         #classifier_ckpt = self._export_classifier(
         #    model_path=model_path,
@@ -373,14 +326,16 @@ class ModelRegistrar:
             imgsz=model.input_size.item(),
             task=ModelTask.CLASSIFY,
             num_classes=model.num_classes.item(),
-            model_type=ModelType.CLASSIFIER
+            model_type=ModelType.CLASSIFIER,
         )
         
         self._register_model(
             artifacts=artifacts,
             metadata=metadata.to_dict(),
             name=name,
-            python_model=ClassifierWrapper(),
+            #python_model=ClassifierWrapper(),
+            pytorch_model=model,
+            signature=signature,
         )
         
         logger.info(f"Successfully registered classifier model: {name}")
@@ -446,6 +401,8 @@ class ModelRegistrar:
         metadata: Dict[str, Any],
         name: str,
         python_model: mlflow.pyfunc.PythonModel,
+        pytorch_model: Optional[torch.nn.Module] = None,
+        signature: Optional[ModelSignature] = None,
     ) -> None:
         """Register a model to MLflow Model Registry."""
         mlflow.set_tracking_uri(self.mlflow_tracking_uri)
@@ -453,12 +410,22 @@ class ModelRegistrar:
         exp_id = get_experiment_id(name)
         
         with mlflow.start_run(experiment_id=exp_id):
-            mlflow.pyfunc.log_model(
-                "model",
-                python_model=python_model,
-                conda_env=get_conda_env(),
-                artifacts=artifacts,
-                registered_model_name=name,
-                metadata=metadata,
-            )
+            if pytorch_model is not None:
+                mlflow.pytorch.log_model(
+                    pytorch_model,
+                    "model",
+                    conda_env=get_conda_env(),
+                    registered_model_name=name,
+                    signature=signature,
+                )
+            else:
+                mlflow.pyfunc.log_model(
+                    "model",
+                    python_model=python_model,
+                    conda_env=get_conda_env(),
+                    artifacts=artifacts,
+                    registered_model_name=name,
+                    metadata=metadata,
+                    signature=signature
+                )
 
