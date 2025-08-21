@@ -7,23 +7,21 @@ from omegaconf import OmegaConf
 def load_detector():
     model,metadata = load_registered_model(alias='demo',name='detector',load_unwrapped=True)
 
-    print(model.classifier)
     print(metadata)
+    #print(model.localizer is None,model.classifier is None)
 
-    try:
-        print(model.predict(torch.rand(1,3,640,640)))
-    except Exception as e:
-        print(model(torch.rand(1,3,640,640)))
+    print(model.predict(torch.rand(1,3,640,640),return_as_dict=True))
+    
 
 def load_from_config():
-    cfg = OmegaConf.load("models-registry/detector/9/artifacts/detector_registration_example.yaml")
-    localizer_cfg = cfg.localizer.yolo
-    localizer_cfg.weights = "models-registry/detector/9/artifacts/best.pt"
+    localizer_cfg = OmegaConf.load("models-registry/detector/10/artifacts/localizer_config.yaml")
+    localizer_cfg.weights = "models-registry/detector/10/artifacts/best.pt"
     model = Detector.from_config(localizer_config=localizer_cfg,
-                                        classifier_ckpt=r"models-registry\detector\9\artifacts\best.ckpt")
+                                        classifier_ckpt="models-registry/detector/10/artifacts/best.ckpt")
     print(model.localizer is None,model.classifier is None)
 
+    print(model.predict(torch.rand(1,3,640,640),return_as_dict=False))
 
-# load_from_config()
+load_from_config()
 
-load_detector()
+#load_detector()
