@@ -3,6 +3,7 @@ import traceback
 from pathlib import Path
 from typing import Optional, Union
 from ..utils.logging import get_logger,ROOT
+import torch
 
 logger = get_logger(__name__)
 
@@ -30,9 +31,9 @@ def load_registered_model(
     Path(dwnd_location).mkdir(parents=True, exist_ok=True)
 
     try:
-        model = mlflow.pyfunc.load_model(str(dwnd_location))
+        model = mlflow.pytorch.load_model(str(dwnd_location))
     except:
-        model = mlflow.pyfunc.load_model(modelURI, dst_path=str(dwnd_location))
+        model = mlflow.pytorch.load_model(modelURI, dst_path=str(dwnd_location))
 
     metadata = dict(version=modelversion, modeluri=modelURI)
     try:
@@ -43,17 +44,8 @@ def load_registered_model(
         )
 
     if load_unwrapped:
-        try:
-            model = model.unwrap_python_model().model
-            metadata["detection_model_type"] = "ultralytics"
-        except:
-            try:
-                model = model.unwrap_python_model().detection_model
-                metadata["detection_model_type"] = "ultralytics"
-            except:
-                model = model.unwrap_python_model().classifier
-                metadata["detection_model_type"] = "classifier"
-
+        #model = model.unwrap_python_model().model
+        metadata["detection_model_type"] = "ultralytics"
     return model, metadata
 
 

@@ -14,10 +14,11 @@ from ultralytics import YOLO
 from pydantic import BaseModel, Field
 
 from wildtrain.models.classifier import GenericClassifier
-from wildtrain.models.localizer import UltralyticsLocalizer
 from wildtrain.models.detector import Detector
-from wildtrain.utils.logging import get_logger
+from wildtrain.utils.logging import get_logger, ROOT
 from wildtrain.utils.io import save_yaml
+
+import tomli as tomllib
 
 
 from omegaconf import OmegaConf, DictConfig
@@ -72,6 +73,11 @@ def normalize_path(model_path: Path) -> Path:
         return Path(resolved_path.as_posix().replace("\\", "/"))
     return resolved_path
 
+def read_dependencies():
+    with open(ROOT / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    dependencies = data["project"]["dependencies"]
+    return dependencies
 
 class UltralyticsWrapper(mlflow.pyfunc.PythonModel):
     """MLflow wrapper for YOLO detection models."""
@@ -92,7 +98,6 @@ class UltralyticsWrapper(mlflow.pyfunc.PythonModel):
         self.model = YOLO(str(model_path), task="detect")
         self.artifacts = context.artifacts
     
-
 class ClassifierWrapper(mlflow.pyfunc.PythonModel):
     """MLflow wrapper for classification models."""
     
@@ -122,7 +127,6 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
         
         self.model = GenericClassifier.load_from_checkpoint(str(model_path)) #torch.jit.load(str(model_path), map_location="cpu")
         self.artifacts = context.artifacts
-
 
 class DetectorWrapper(mlflow.pyfunc.PythonModel):
     """MLflow wrapper for Detector system."""
@@ -168,7 +172,6 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         self.artifacts = context.artifacts
 
 
-
 def get_experiment_id(name: str) -> str:
     """Get or create an MLflow experiment ID.
     
@@ -184,28 +187,6 @@ def get_experiment_id(name: str) -> str:
         logger.info(f"Created new experiment: {name} (ID: {exp_id})")
         return exp_id
     return exp.experiment_id
-
-
-def get_conda_env() -> Dict[str, Any]:
-    """Get the conda environment configuration for MLflow models."""
-    return {
-        "channels": ["defaults"],
-        "dependencies": [
-            "python>=3.11",
-            "pip",
-            {
-                "pip": [
-                    "pillow",
-                    "mlflow",
-                    "ultralytics",
-                    "torch",
-                    "pydantic"
-                ],
-            },
-        ],
-        "name": "wildtrain_env",
-    }
-
 
 class ModelRegistrar:
     """Handles model registration to MLflow Model Registry."""
@@ -253,7 +234,7 @@ class ModelRegistrar:
         #)
         classifier_ckpt = config.classifier.weights_path
 
-        artifacts = {"localizer_ckpt": localizer_cfg.weights,
+        artifacts = {#"localizer_ckpt": localizer_cfg.weights,
                     "localizer_config":localizer_config_path
         }        
         save_yaml(dict(localizer_cfg),save_path=localizer_config_path)
@@ -262,10 +243,10 @@ class ModelRegistrar:
         model =  Detector.from_config(localizer_config=localizer_cfg,
                                        classifier_ckpt=classifier_ckpt)
         x = torch.rand(localizer_processing.batch_size,3,localizer_cfg.imgsz,localizer_cfg.imgsz)
-        signature = infer_signature(x, model(x))
+        signature = infer_signature(x.cpu().numpy(), list(dict()))
 
-        if classifier_ckpt is not None:
-            artifacts["classifier_ckpt"] = str(classifier_ckpt)
+        #if classifier_ckpt is not None:
+        #    artifacts["classifier_ckpt"] = str(classifier_ckpt)
 
         if getattr(localizer_cfg,"config",None) is not None:
             artifacts["mmdet_config"] = getattr(localizer_cfg,"config",None)
@@ -280,12 +261,11 @@ class ModelRegistrar:
         )
         
         self._register_model(
-            artifacts=artifacts,
             metadata=metadata.to_dict(),
+            artifacts=artifacts,
             name=config.processing.name,
-            #python_model=DetectorWrapper(),
             pytorch_model=model,
-            signature=signature,
+            signature=signature, 
         )
         
         logger.info(f"Successfully registered detector model: {config.processing.name}")
@@ -317,9 +297,9 @@ class ModelRegistrar:
         #    model_path=model_path,
         #    batch_size=batch_size,
         #)
-        classifier_ckpt = model_path  # Use the original checkpoint path
+        #classifier_ckpt = model_path  # Use the original checkpoint path
         
-        artifacts = {"classifier_ckpt": str(classifier_ckpt)}
+        #artifacts = {"classifier_ckpt": str(classifier_ckpt)}
         
         metadata = ModelMetadata(
             batch=batch_size,
@@ -330,10 +310,8 @@ class ModelRegistrar:
         )
         
         self._register_model(
-            artifacts=artifacts,
             metadata=metadata.to_dict(),
             name=name,
-            #python_model=ClassifierWrapper(),
             pytorch_model=model,
             signature=signature,
         )
@@ -397,11 +375,10 @@ class ModelRegistrar:
     
     def _register_model(
         self,
-        artifacts: Dict[str, str],
         metadata: Dict[str, Any],
         name: str,
-        python_model: mlflow.pyfunc.PythonModel,
-        pytorch_model: Optional[torch.nn.Module] = None,
+        pytorch_model: torch.nn.Module,
+        artifacts: Optional[Dict[str, str]] = None,
         signature: Optional[ModelSignature] = None,
     ) -> None:
         """Register a model to MLflow Model Registry."""
@@ -410,22 +387,13 @@ class ModelRegistrar:
         exp_id = get_experiment_id(name)
         
         with mlflow.start_run(experiment_id=exp_id):
-            if pytorch_model is not None:
-                mlflow.pytorch.log_model(
-                    pytorch_model,
-                    "model",
-                    conda_env=get_conda_env(),
-                    registered_model_name=name,
-                    signature=signature,
-                )
-            else:
-                mlflow.pyfunc.log_model(
-                    "model",
-                    python_model=python_model,
-                    conda_env=get_conda_env(),
-                    artifacts=artifacts,
-                    registered_model_name=name,
-                    metadata=metadata,
-                    signature=signature
-                )
+            mlflow.pytorch.log_model(
+                pytorch_model,
+                "model",
+                pip_requirements=read_dependencies(),
+                registered_model_name=name,
+                signature=signature,
+                metadata=metadata,
+                #artifacts=artifacts or dict(),
+            )
 
