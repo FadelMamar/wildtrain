@@ -228,11 +228,8 @@ class ModelRegistrar:
         localizer_cfg.weights = str(localizer_ckpt)
         localizer_config_path = str(Path(localizer_cfg.weights).parent / "localizer_config.yaml")
 
-        #classifier_ckpt = self._export_classifier(
-        #    model_path=config.classifier.weights_path,
-        #    batch_size=config.classifier.processing.batch_size,
-        #)
         classifier_ckpt = config.classifier.weights_path
+
 
         artifacts = {#"localizer_ckpt": localizer_cfg.weights,
                     "localizer_config":localizer_config_path
@@ -244,9 +241,6 @@ class ModelRegistrar:
                                        classifier_ckpt=classifier_ckpt)
         x = torch.rand(localizer_processing.batch_size,3,localizer_cfg.imgsz,localizer_cfg.imgsz)
         signature = infer_signature(x.cpu().numpy(), list(dict()))
-
-        #if classifier_ckpt is not None:
-        #    artifacts["classifier_ckpt"] = str(classifier_ckpt)
 
         if getattr(localizer_cfg,"config",None) is not None:
             artifacts["mmdet_config"] = getattr(localizer_cfg,"config",None)
@@ -272,35 +266,27 @@ class ModelRegistrar:
         
     def register_classifier(
         self,
-        weights_path: Union[str, Path],
+        weights: Union[str, Path],
         name: str = "classifier",
+        export_format: str = "torchscript",
+        dynamic: bool = True,
         batch_size: int = 8,
     ) -> None:
         """Register a classification model to MLflow Model Registry.
-        
-        Args:
-            weights_path: Path to the model checkpoint
-            name: Model name for registration
-            batch_size: Batch size for inference
         """
-        model_path = Path(weights_path)
+        model_path = Path(weights)
         if not model_path.exists():
             raise FileNotFoundError(f"Model weights not found: {model_path}")
         
         # Load the model
         model = GenericClassifier.load_from_checkpoint(str(model_path))
+        model = model.export(mode=export_format,
+                             batch_size=batch_size,
+                             dynamic=dynamic)
 
         x = torch.rand(batch_size,3,model.input_size.item(),model.input_size.item())
         signature = infer_signature(x.cpu(), model.predict(x))
-        
-        #classifier_ckpt = self._export_classifier(
-        #    model_path=model_path,
-        #    batch_size=batch_size,
-        #)
-        #classifier_ckpt = model_path  # Use the original checkpoint path
-        
-        #artifacts = {"classifier_ckpt": str(classifier_ckpt)}
-        
+                
         metadata = ModelMetadata(
             batch=batch_size,
             imgsz=model.input_size.item(),
@@ -354,25 +340,7 @@ class ModelRegistrar:
         except Exception as e:
             logger.error(f"Failed to export model: {e}")
             raise
-    
-    def _export_classifier(
-        self,
-        model_path: Path,
-        batch_size: int,
-    ) -> Path:
-        """Export the classifier model in the specified format."""
         
-        try:
-            model = GenericClassifier.load_from_checkpoint(str(model_path))
-            model.eval()
-            scripted_model = torch.jit.script(model)
-            scripted_path = Path(model_path).with_suffix(".torchscript")
-            scripted_model.save(str(scripted_path))
-            return normalize_path(scripted_path)
-        except Exception as e:
-            logger.error(f"Failed to export model: {e}")
-            raise
-    
     def _register_model(
         self,
         metadata: Dict[str, Any],

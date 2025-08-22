@@ -6,10 +6,10 @@ dataset:
   root_data_directory: D:\workspace\data\demo-dataset
   
   # Dataset type: "roi" for pre-computed crops, "crop" for dynamic crop extraction
-  dataset_type: "crop"  # or "crop" or "roi" 
+  dataset_type: "roi"  # or "crop" or "roi" 
 
   curriculum_config:
-    enabled: true
+    enabled: false
     type: "difficulty"
     difficulty_strategy: "linear"
     start_difficulty: 0.0
@@ -23,7 +23,7 @@ dataset:
   
   input_size: 384
 
-  batch_size: 64
+  batch_size: 8
 
   transforms:
     train:
@@ -68,7 +68,7 @@ dataset:
   preserve_aspect_ratio: true
 
 model:
-  backbone: timm/vit_small_patch14_dinov2.lvd142m
+  backbone: timm/vit_base_patch14_reg4_dinov2.lvd142m
   pretrained: true
   backbone_source: timm
   dropout: 0.2
@@ -76,6 +76,9 @@ model:
   input_size: ${dataset.input_size}
   mean: ${dataset.stats.mean}
   std: ${dataset.stats.std}
+  hidden_dim: 128
+  num_layers: 2
+  weights: null
 
 train:
   batch_size: ${dataset.batch_size}

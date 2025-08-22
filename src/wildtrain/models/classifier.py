@@ -17,6 +17,7 @@ class ResizeNormalize(nn.Module):
         self.register_buffer('mean', mean.view(1, 3, 1, 1))
         self.register_buffer('std', std.view(1, 3, 1, 1))
         self.input_size = input_size
+        assert isinstance(self.input_size,int), f"input_size must be an integer, received {type(self.input_size)}"
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.interpolate(
@@ -90,6 +91,9 @@ class GenericClassifier(nn.Module):
         self.register_buffer(
             "num_classes", torch.tensor([len(label_to_class_map)]).int()
         )
+        self.register_buffer("num_layers", torch.tensor([num_layers]).int())
+        self.register_buffer("hidden_dim", torch.tensor([hidden_dim]).int())
+        self.register_buffer("dropout", torch.tensor([dropout]).float())
 
         self._check_arguments()
 
@@ -100,12 +104,12 @@ class GenericClassifier(nn.Module):
         self.backbone_trfs,self.feature_extractor = self._get_backbone()
         self.fc = ClassifierHead(input_dim=self.feature_extractor.num_features, 
                                 num_classes=self.num_classes.item(), 
-                                dropout=dropout, 
-                                hidden_dim=hidden_dim, 
-                                num_layers=num_layers)
+                                dropout=self.dropout.item(), 
+                                hidden_dim=self.hidden_dim.item(), 
+                                num_layers=self.num_layers.item())
 
         # Initialize preprocessing
-        self.preprocessing = ResizeNormalize(input_size=input_size, mean=self.mean, std=self.std)
+        self.preprocessing = ResizeNormalize(input_size=self.input_size.item(), mean=self.mean, std=self.std)
 
         self._onnx_program: Optional[torch.onnx.ONNXProgram] = None
         self._onnx_initialized = False
@@ -162,9 +166,19 @@ class GenericClassifier(nn.Module):
             x = self.feature_extractor(x)
         return self.fc(x)
     
-    def to_torchscript(self):
-        self.feature_extractor = torch.jit.script(self.feature_extractor)
-        self.fc = torch.jit.script(self.fc)
+    def export(self,mode:str,batch_size:int=8,dynamic:bool=True)->"GenericClassifier":
+        if mode == "torchscript":
+            return self.to_torchscript()
+        elif mode == "onnx":
+            return self.to_onnx(batch_size=batch_size,dynamic=dynamic)
+        else:
+            raise ValueError(f"Unsupported export mode: {mode}")
+
+    def to_torchscript(self)->"GenericClassifier":
+        self.eval()
+        for module in [self.feature_extractor, self.fc, self.preprocessing, self.backbone_trfs]:
+            if isinstance(module, nn.Module):
+                module = torch.jit.script(module)
         return self
     
     def to_onnx(self, 
@@ -172,15 +186,18 @@ class GenericClassifier(nn.Module):
                 input_names=["input"],
                 output_names=["output"],
                 report:bool=False,
-    ):
+                batch_size:int=8,
+                dynamic:bool=True
+    )->"GenericClassifier":
         self.eval()
-        x = torch.rand(1, 3, self.input_size.item(), self.input_size.item(),dtype=torch.float32)
+        x = torch.rand(batch_size, 3, self.input_size.item(), self.input_size.item(),dtype=torch.float32)
         self.forward(x)
+        cfg = dict(dynamic_shapes={"input": {0: Dim("batch_size")}}) if dynamic else {}
         onnx_program = torch.onnx.export(self, x, output_path, input_names=input_names,
                         output_names=output_names,
-                        dynamic_shapes={"input": {0: Dim("batch_size")}},
                         dynamo=True,
-                        report=report
+                        report=report,
+                        **cfg
                         )
         onnx_program.optimize()
         if output_path is not None:
@@ -190,7 +207,6 @@ class GenericClassifier(nn.Module):
     
     def _predict_onnx(self, x: torch.Tensor) -> torch.Tensor:
         assert self._onnx_program is not None, "ONNX program not created. Call to_onnx() first."
-        x = self.preprocessing(x.float())
         if not self._onnx_initialized:
             self._onnx_program.initialize_inference_session()
             self._onnx_initialized = True
@@ -242,6 +258,10 @@ class GenericClassifier(nn.Module):
                 input_size=hparams['input_size'],
                 mean=hparams['mean'],
                 std=hparams['std'],
+                dropout=hparams['dropout'],
+                freeze_backbone=hparams['freeze_backbone'],
+                num_layers=hparams['num_layers'],
+                hidden_dim=hparams['hidden_dim'],
             )
             # Initialize the model
             model(torch.rand(1, 3, hparams['input_size'], hparams['input_size']))  

@@ -101,7 +101,7 @@ class SingleClassConfig(BaseConfig):
             raise ValueError("Class name cannot be empty")
         return v.strip()
 
-class DatasetConfig(BaseConfig):
+class ClassificationDatasetConfig(BaseConfig):
     """Dataset configuration."""
     root_data_directory: str = Field(description="Root data directory path")
     dataset_type: Literal["roi", "crop"] = Field(description="Dataset type")
@@ -137,7 +137,7 @@ class DatasetConfig(BaseConfig):
         return v
 
 
-class ModelConfig(BaseConfig):
+class ClassifierModelConfig(BaseConfig):
     """Model configuration."""
     backbone: str = Field(description="Model backbone")
     pretrained: bool = Field(default=True, description="Use pretrained weights")
@@ -147,6 +147,9 @@ class ModelConfig(BaseConfig):
     input_size: int = Field(gt=0, description="Model input size")
     mean: List[float] = Field(description="Normalization mean values")
     std: List[float] = Field(description="Normalization std values")
+    weights: Optional[str] = Field(default=None, description="Model weights path")
+    hidden_dim: int = Field(default=128, gt=0, description="Hidden dimension")
+    num_layers: int = Field(default=2, gt=0, description="Number of layers")
     
     @field_validator('mean', 'std')
     @classmethod
@@ -156,7 +159,7 @@ class ModelConfig(BaseConfig):
         return v
 
 
-class TrainingConfig(BaseConfig):
+class ClassifierTrainingConfig(BaseConfig):
     """Training configuration."""
     batch_size: int = Field(gt=0, description="Training batch size")
     epochs: int = Field(gt=0, description="Number of training epochs")
@@ -168,7 +171,7 @@ class TrainingConfig(BaseConfig):
     accelerator: str = Field(default="auto", description="Training accelerator")
 
 
-class CheckpointConfig(BaseConfig):
+class ClassifierCheckpointConfig(BaseConfig):
     """Checkpoint configuration."""
     monitor: str = Field(description="Metric to monitor")
     save_top_k: int = Field(default=1, ge=0, description="Number of best models to save")
@@ -189,10 +192,10 @@ class MLflowConfig(BaseConfig):
 
 class ClassificationConfig(BaseConfig):
     """Complete classification configuration."""
-    dataset: DatasetConfig = Field(description="Dataset configuration")
-    model: ModelConfig = Field(description="Model configuration")
-    train: TrainingConfig = Field(description="Training configuration")
-    checkpoint: CheckpointConfig = Field(description="Checkpoint configuration")
+    dataset: ClassificationDatasetConfig = Field(description="Dataset configuration")
+    model: ClassifierModelConfig = Field(description="Model configuration")
+    train: ClassifierTrainingConfig = Field(description="Training configuration")
+    checkpoint: ClassifierCheckpointConfig = Field(description="Checkpoint configuration")
     mlflow: MLflowConfig = Field(description="MLflow configuration")
     
     @field_validator('model')
@@ -818,22 +821,11 @@ class LocalizerRegistrationConfig(BaseConfig):
 
 
 class ClassifierRegistrationConfig(BaseConfig):
-    """Configuration for registering a classification model to MLflow Model Registry.
-    
-    This configuration is specifically for registering classification models.
-    
-    Example:
-        config = ClassifierRegistrationConfig(
-            weights_path="path/to/checkpoint.ckpt",
-            name="my-classifier",
-            batch_size=8,
-            mlflow_tracking_uri="http://localhost:5000"
-        )
-    """
-    weights_path: str = Field(description="Path to the model checkpoint file")
+    """Configuration for registering a classification model to MLflow Model Registry."""
+    weights: str = Field(description="Path to the model checkpoint file")
     processing: RegistrationBase = Field(description="processing information")
     
-    @field_validator('weights_path')
+    @field_validator('weights')
     @classmethod
     def validate_weights_path(cls, v):
         if not Path(v).exists():

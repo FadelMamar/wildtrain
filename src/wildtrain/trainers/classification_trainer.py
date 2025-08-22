@@ -71,11 +71,13 @@ class ClassifierModule(L.LightningModule):
             'label_to_class_map': model.label_to_class_map,
             'backbone': model.backbone,
             'backbone_source': model.backbone_source,
-            'input_size': model.input_size,
-            'dropout': getattr(model, 'dropout', 0.1),
-            'freeze_backbone': getattr(model, 'freeze_backbone', False),
-            'mean': getattr(model, 'mean'),
-            'std': getattr(model, 'std'),
+            'input_size': model.input_size.item(),
+            'dropout': model.dropout.item(),
+            'freeze_backbone': model.freeze_backbone,
+            'mean': model.mean.tolist(),
+            'std': model.std.tolist(),
+            'num_layers': model.num_layers.item(),
+            'hidden_dim': model.hidden_dim.item(),
         })
         
         self.mlflow_run_id = None
@@ -259,17 +261,22 @@ class ClassifierTrainer(ModelTrainer):
 
         # Model
         model_cfg = self.config.model
-        cls_model = GenericClassifier(
-            backbone=model_cfg.backbone,
-            pretrained=model_cfg.pretrained,
-            backbone_source=model_cfg.backbone_source,
-            label_to_class_map=datamodule.class_mapping,
-            dropout=model_cfg.dropout,
-            freeze_backbone=model_cfg.freeze_backbone,
-            input_size=model_cfg.input_size,
-            mean=model_cfg.mean,
-            std=model_cfg.std,
-        )
+        if model_cfg.weights is not None:
+            cls_model = GenericClassifier.load_from_checkpoint(model_cfg.weights)
+        else:
+            cls_model = GenericClassifier(
+                backbone=model_cfg.backbone,
+                pretrained=model_cfg.pretrained,
+                backbone_source=model_cfg.backbone_source,
+                label_to_class_map=datamodule.class_mapping,
+                dropout=model_cfg.dropout,
+                freeze_backbone=model_cfg.freeze_backbone,
+                input_size=model_cfg.input_size,
+                mean=model_cfg.mean,
+                std=model_cfg.std,
+                num_layers=model_cfg.num_layers,
+                hidden_dim=model_cfg.hidden_dim,
+            )
         model = ClassifierModule(
             epochs=self.config.train.epochs,
             model=cls_model,

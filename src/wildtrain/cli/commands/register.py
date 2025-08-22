@@ -41,13 +41,13 @@ def classifier(
             console.print(f"[bold green]✓[/bold green] Classifier registration configuration validated successfully")
             
             # Use config values
-            weights_path = Path(validated_config.weights_path)
+            weights_path = Path(validated_config.weights)
             name = validated_config.processing.name
             batch_size = validated_config.processing.batch_size
             mlflow_tracking_uri = validated_config.processing.mlflow_tracking_uri
             
         except Exception as e:
-            console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+            console.print(f"[bold red]✗[/bold red] Configuration error: {traceback.format_exc()}")
             raise typer.Exit(1)
     else:
         # Use command line arguments
@@ -66,7 +66,7 @@ def classifier(
         
         # Register the classifier
         registrar.register_classifier(
-            weights_path=weights_path,
+            weights=weights_path,
             name=name,
             batch_size=batch_size
         )

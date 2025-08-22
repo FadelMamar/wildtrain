@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
-from ..shared.models import YoloConfig, MMDetConfig
+from ..shared.models import YoloConfig, MMDetConfig, RegistrationBase
 from ..utils.mlflow import load_registered_model
 from ..utils.logging import get_logger
 
@@ -32,7 +32,6 @@ class Detector(torch.nn.Module):
         self.localizer = localizer
         self.classifier = classifier
         self.metadata: Optional[Dict[str,Any]] = None
-        self.is_scripted:bool = False
     
     @property
     def input_shape(self,)->Tuple:
@@ -45,14 +44,24 @@ class Detector(torch.nn.Module):
         return self.localizer.class_mapping
     
     @classmethod
-    def from_config(cls,localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],classifier_ckpt:Optional[Union[str,Path]]=None):
+    def from_config(cls,
+    localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],
+    classifier_ckpt:Optional[Union[str,Path]]=None,
+    classifier_export_kwargs:Optional[RegistrationBase]=None
+    ):
         if isinstance(localizer_config,MMDetConfig):
             raise NotImplementedError("Support only Yolo.")
         localizer = UltralyticsLocalizer.from_config(localizer_config)
         classifier = None
         if classifier_ckpt is not None:
             assert isinstance(classifier_ckpt,(Path,str)), "classifier_ckpt must be a Path object or a string"
-            classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device) 
+            classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device)
+            if classifier_export_kwargs is not None:
+                assert isinstance(classifier_export_kwargs,RegistrationBase), f"classifier_export_kwargs must be a RegistrationBase object. Received {type(classifier_export_kwargs)}"
+                classifier = classifier.export(mode=classifier_export_kwargs.export_format,
+                                              batch_size=classifier_export_kwargs.batch_size,
+                                              dynamic=classifier_export_kwargs.dynamic)
+
         return cls(localizer=localizer,classifier=classifier)
     
     @classmethod
@@ -149,11 +158,6 @@ class Detector(torch.nn.Module):
         b = images.shape[0]
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
         
-        # scripting classifier for faster predictions
-        #if not self.is_scripted and self.classifier is not None:
-        #    self.classifier.to_torchscript()
-        #    self.is_scripted = True
-
         if self.classifier is None:
             if return_as_dict:
                 detections = self._to_dict(detections)
