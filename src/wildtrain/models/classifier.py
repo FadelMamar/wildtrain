@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms.v2 as T
+import torch.nn.functional as F
+from torch.export import Dim
+
 import timm
 from typing import Optional,Tuple
 
@@ -8,6 +11,54 @@ from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+class ResizeNormalize(nn.Module):
+    def __init__(self, input_size: int, mean: torch.Tensor, std: torch.Tensor):
+        super().__init__()
+        self.register_buffer('mean', mean.view(1, 3, 1, 1))
+        self.register_buffer('std', std.view(1, 3, 1, 1))
+        self.input_size = input_size
+    
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = F.interpolate(
+            x, 
+            size=(self.input_size, self.input_size), 
+            mode='bicubic', 
+            align_corners=False
+        )
+        # Normalize using registered buffers
+        x = (x - self.mean) / self.std
+        return x
+
+class BackboneNormalize(nn.Module):
+    def __init__(self, mean, std):
+        super().__init__()
+        self.register_buffer('mean', mean.view(1, 3, 1, 1))
+        self.register_buffer('std', std.view(1, 3, 1, 1))
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return (x - self.mean) / self.std
+
+class ClassifierHead(nn.Module):
+    def __init__(self, input_dim: int, num_classes: int, dropout: float = 0.2,hidden_dim:int=128,num_layers:int=2):
+        super().__init__()
+        layers = []
+        for i in range(num_layers-1):
+            if i == 0:
+                layers.append(nn.Sequential(
+                    nn.Linear(input_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(p=dropout)
+                ))
+            else:
+                layers.append(nn.Sequential(
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.ReLU(),
+                    nn.Dropout(p=dropout)
+                ))
+        layers.append(nn.Linear(hidden_dim, num_classes))
+        self.fc = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.fc(x)
 
 class GenericClassifier(nn.Module):
     """
@@ -25,6 +76,8 @@ class GenericClassifier(nn.Module):
         input_size: int = 224,
         mean: list[float] = [0.554, 0.469, 0.348],
         std: list[float] = [0.203, 0.173, 0.144],
+        hidden_dim: int = 128,
+        num_layers: int = 2,
     ):
         super().__init__()
         self.freeze_backbone = freeze_backbone
@@ -45,24 +98,18 @@ class GenericClassifier(nn.Module):
         self.pretrained = pretrained
 
         self.backbone_trfs,self.feature_extractor = self._get_backbone()
-        self.fc = torch.nn.Sequential(
-            torch.nn.LazyLinear(128),
-            torch.nn.ReLU(),
-            torch.nn.Dropout(p=dropout),
-            torch.nn.LazyLinear(self.num_classes.item()),
-        )
-        # Initialize preprocessing
-        self.preprocessing = self._set_preprocessing()
-        return None
+        self.fc = ClassifierHead(input_dim=self.feature_extractor.num_features, 
+                                num_classes=self.num_classes.item(), 
+                                dropout=dropout, 
+                                hidden_dim=hidden_dim, 
+                                num_layers=num_layers)
 
-    def _set_preprocessing(
-        self,
-    ):
-        preprocessing = torch.nn.Sequential(
-            T.Resize([self.input_size.item(), self.input_size.item()], interpolation=T.InterpolationMode.BICUBIC),
-            T.Normalize(mean=self.mean.tolist(), std=self.std.tolist()),
-        )
-        return preprocessing
+        # Initialize preprocessing
+        self.preprocessing = ResizeNormalize(input_size=input_size, mean=self.mean, std=self.std)
+
+        self._onnx_program: Optional[torch.onnx.ONNXProgram] = None
+        self._onnx_initialized = False
+        return None
 
     def _check_arguments(
         self,
@@ -79,22 +126,26 @@ class GenericClassifier(nn.Module):
     def _get_backbone(
         self,
     ) -> Tuple[nn.Module,nn.Module]:
-        if self.backbone_source == "timm":
-            model = timm.create_model(
-                self.backbone, pretrained=self.pretrained, num_classes=0
-            )
-            data_cfg = timm.data.resolve_data_config(model.pretrained_cfg)
-            transform = timm.data.create_transform(**data_cfg)
-            trfs = nn.Sequential(*[t for t in transform.transforms if isinstance(t, T.Normalize)])
 
-            try:
-                model.set_input_size((self.input_size.item(),self.input_size.item()))
-            except Exception:
-                logger.info(f"Backbone {self.backbone} does not support setting input size")
-                pass
-        else:
-            raise ValueError(f"Unsupported backbone source: {self.backbone_source}")
+        if self.backbone_source != "timm":
+            ValueError(f"Unsupported backbone source: {self.backbone_source}")
 
+        # Create timm model
+        model = timm.create_model(
+            self.backbone, pretrained=self.pretrained, num_classes=0,global_pool=''
+        )
+        data_cfg = timm.data.resolve_data_config(model.pretrained_cfg)
+        norm_mean = torch.tensor(data_cfg.get('mean', self.mean))
+        norm_std = torch.tensor(data_cfg.get('std', self.std))
+        trfs = BackboneNormalize(norm_mean, norm_std)
+
+        # Set input size    
+        try:
+            model.set_input_size((self.input_size.item(),self.input_size.item()))
+        except Exception:
+            logger.info(f"Backbone {self.backbone} does not support setting input size")
+
+        # Freeze backbone
         if self.freeze_backbone:
             for param in model.parameters():
                 param.requires_grad = False
@@ -106,7 +157,7 @@ class GenericClassifier(nn.Module):
         x = self.preprocessing(x.float())
         x = self.backbone_trfs(x)
         if "vit" in self.backbone: # get CLS token for ViT models
-            x = self.feature_extractor.forward_features(x)[:,0,:]
+            x = self.feature_extractor(x)[:,0]
         else:
             x = self.feature_extractor(x)
         return self.fc(x)
@@ -115,13 +166,44 @@ class GenericClassifier(nn.Module):
         self.feature_extractor = torch.jit.script(self.feature_extractor)
         self.fc = torch.jit.script(self.fc)
         return self
-
-    @torch.no_grad()
-    def predict(self, x: torch.Tensor) -> list[dict]:
+    
+    def to_onnx(self, 
+                output_path: Optional[str]=None,
+                input_names=["input"],
+                output_names=["output"],
+                report:bool=False,
+    ):
         self.eval()
-        logits = self.forward(x)
-        probs = torch.softmax(logits, dim=1)
-        labels = probs.argmax(dim=1).cpu().tolist()
+        x = torch.rand(1, 3, self.input_size.item(), self.input_size.item(),dtype=torch.float32)
+        self.forward(x)
+        onnx_program = torch.onnx.export(self, x, output_path, input_names=input_names,
+                        output_names=output_names,
+                        dynamic_shapes={"input": {0: Dim("batch_size")}},
+                        dynamo=True,
+                        report=report
+                        )
+        onnx_program.optimize()
+        if output_path is not None:
+            onnx_program.save(output_path)
+        self._onnx_program = onnx_program
+        return self
+    
+    def _predict_onnx(self, x: torch.Tensor) -> torch.Tensor:
+        assert self._onnx_program is not None, "ONNX program not created. Call to_onnx() first."
+        x = self.preprocessing(x.float())
+        if not self._onnx_initialized:
+            self._onnx_program.initialize_inference_session()
+            self._onnx_initialized = True
+        return self._onnx_program(x)
+
+    def predict(self, x: torch.Tensor) -> list[dict]:
+        if self._onnx_program is not None:
+            return self._predict_onnx(x)
+        self.eval()
+        with torch.no_grad():
+            logits = self.forward(x)
+            probs = torch.softmax(logits, dim=1)
+            labels = probs.argmax(dim=1).cpu().tolist()
         classes = [
             self.label_to_class_map[i] for i in labels
         ]
