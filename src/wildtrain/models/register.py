@@ -54,6 +54,7 @@ class ModelMetadata(BaseModel):
     task: ModelTask = Field(default=ModelTask.DETECT, description="Model task type")
     num_classes: Optional[int] = Field(default=None, ge=2, description="Number of classes")
     model_type: ModelType = Field(description="Type of model (detector or classifier)")
+    cls_export_format: Optional[str] = Field(default=None, description="Export format for the model")
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for MLflow metadata."""
@@ -62,7 +63,8 @@ class ModelMetadata(BaseModel):
             "imgsz": self.imgsz,
             "task": self.task.value,
             "num_classes": self.num_classes,
-            "model_type": self.model_type.value
+            "model_type": self.model_type.value,
+            "cls_export_format": self.cls_export_format
         }
 
 
@@ -209,9 +211,6 @@ class ModelRegistrar:
         ConfigLoader.load_detector_registration_config(config_path)
         config = OmegaConf.load(config_path)
 
-        if config.classifier.processing.export_format == "onnx":
-            raise NotImplementedError("Onnx export for classifier is not supported yet for registration.")
-
         assert (config.localizer.yolo is None) + (config.localizer.mmdet is None) == 1, f"Exactly one should be given"
         localizer_cfg = config.localizer.yolo or config.localizer.mmdet
         localizer_processing = config.localizer.processing
@@ -240,11 +239,13 @@ class ModelRegistrar:
         #save_yaml(dict(config),save_path=localizer_config_path)
         OmegaConf.save(config,config_path)
         
-        
         # Check if the model can be loaded
         model =  Detector.from_config(localizer_config=localizer_cfg,
                                        classifier_ckpt=classifier_ckpt,
                                        classifier_export_kwargs=config.classifier.processing)
+        if config.classifier.processing.export_format == "onnx":
+            model.classifier.set_onnx_program(onnx_program=None)
+        
         x = torch.rand(localizer_processing.batch_size,3,localizer_cfg.imgsz,localizer_cfg.imgsz)
         signature = infer_signature(x.cpu().numpy(), list(dict()))
 
@@ -258,6 +259,7 @@ class ModelRegistrar:
             imgsz=localizer_cfg.imgsz,
             task=ModelTask(task),
             model_type=ModelType.DETECTOR,
+            cls_export_format=config.classifier.processing.export_format
         )
         
         self._register_model(
@@ -299,6 +301,7 @@ class ModelRegistrar:
             task=ModelTask.CLASSIFY,
             num_classes=model.num_classes.item(),
             model_type=ModelType.CLASSIFIER,
+            cls_export_format=export_format
         )
         
         self._register_model(

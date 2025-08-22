@@ -58,9 +58,10 @@ class Detector(torch.nn.Module):
             classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device)
             if classifier_export_kwargs is not None:
                 assert isinstance(classifier_export_kwargs,(RegistrationBase,DictConfig)), f"classifier_export_kwargs must be a RegistrationBase object. Received {type(classifier_export_kwargs)}"
+                export_path = Path(classifier_ckpt).with_suffix(f".{classifier_export_kwargs.export_format}").as_posix()
                 classifier = classifier.export(mode=classifier_export_kwargs.export_format,
                                               batch_size=classifier_export_kwargs.batch_size,
-                                              output_path = Path(classifier_ckpt).with_suffix(f".{classifier_export_kwargs.export_format}").as_posix()
+                                              output_path = export_path
                                             )
 
         return cls(localizer=localizer,classifier=classifier)
@@ -72,6 +73,14 @@ class Detector(torch.nn.Module):
                                                 dwnd_location=dwnd_location,
                                                 mlflow_tracking_url=mlflow_tracking_uri)
         model.metadata = metadata
+
+        export_format = metadata.get("cls_export_format")
+        if export_format is not None:
+            export_path = Path(metadata.get("model_path")).with_suffix(f".{export_format}").as_posix()
+            model.classifier.export(mode=export_format,
+                                    batch_size=metadata.get("batch"),
+                                    output_path=export_path
+                                    )
         return model
     
     def _pad_if_needed(self, batch: torch.Tensor) -> torch.Tensor:

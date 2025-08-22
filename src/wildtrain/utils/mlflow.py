@@ -35,7 +35,8 @@ def load_registered_model(
     except:
         model = mlflow.pytorch.load_model(modelURI, dst_path=str(dwnd_location))
 
-    metadata = dict(version=modelversion, modeluri=modelURI)
+    metadata = dict(version=modelversion, modeluri=modelURI,
+                    model_path=str(dwnd_location))
     try:
         metadata.update(model.metadata.metadata)
     except:

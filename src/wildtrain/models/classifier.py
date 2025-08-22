@@ -120,6 +120,10 @@ class GenericClassifier(nn.Module):
             self._onnx_providers=['CUDAExecutionProvider']
         self._onnx_providers.append('CPUExecutionProvider')
         return None
+    
+    def set_onnx_program(self,
+                    onnx_program:Optional[ort.InferenceSession]=None):
+        self._onnx_program = onnx_program
 
     def _check_arguments(
         self,
@@ -186,7 +190,7 @@ class GenericClassifier(nn.Module):
             if isinstance(module, nn.Module):
                 module = torch.jit.script(module)
         if output_path is not None:
-            torch.jit.save(self,output_path)
+            torch.jit.save(module,output_path)
         return self
     
     def to_onnx(self, 
@@ -227,6 +231,8 @@ class GenericClassifier(nn.Module):
                         **cfg
                         )
         onnx_program.optimize()
+        self.load_as_onnx = True
+        self._onnx_batch_size = b
         return onnx_program
         
     def _save_onnx_program(self,onnx_program:torch.onnx.ONNXProgram,
