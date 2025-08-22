@@ -2,9 +2,9 @@
 
 processing:
   name: "classifier"
-  export_format: "pt"
   batch_size: 8
   mlflow_tracking_uri: "http://localhost:5000"
-  dynamic: false
+  export_format: "torchscript" # torchscript, onnx
+  dynamic: true
 
-weights_path: models/classifier_demo.pt
+weights: checkpoints\classification\unified_classifier\best.ckpt

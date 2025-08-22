@@ -3,9 +3,12 @@ import torch.nn as nn
 import torchvision.transforms.v2 as T
 import torch.nn.functional as F
 from torch.export import Dim
-
+from pathlib import Path
 import timm
-from typing import Optional,Tuple
+from typing import Optional,Tuple,Union
+import traceback
+import json
+import onnxruntime as ort
 
 from ..utils.logging import get_logger
 
@@ -111,8 +114,11 @@ class GenericClassifier(nn.Module):
         # Initialize preprocessing
         self.preprocessing = ResizeNormalize(input_size=self.input_size.item(), mean=self.mean, std=self.std)
 
-        self._onnx_program: Optional[torch.onnx.ONNXProgram] = None
-        self._onnx_initialized = False
+        self._onnx_program: Optional[ort.InferenceSession] = None
+        self._onnx_providers=[]
+        if torch.cuda.is_available():
+            self._onnx_providers=['CUDAExecutionProvider']
+        self._onnx_providers.append('CPUExecutionProvider')
         return None
 
     def _check_arguments(
@@ -166,68 +172,99 @@ class GenericClassifier(nn.Module):
             x = self.feature_extractor(x)
         return self.fc(x)
     
-    def export(self,mode:str,batch_size:int=8,dynamic:bool=True)->"GenericClassifier":
+    def export(self,mode:str,output_path:str,batch_size:int=8)->"GenericClassifier":
         if mode == "torchscript":
-            return self.to_torchscript()
+            return self.to_torchscript(output_path=output_path)
         elif mode == "onnx":
-            return self.to_onnx(batch_size=batch_size,dynamic=dynamic)
+            return self.to_onnx(output_path=output_path,batch_size=batch_size)
         else:
             raise ValueError(f"Unsupported export mode: {mode}")
 
-    def to_torchscript(self)->"GenericClassifier":
+    def to_torchscript(self,output_path:Optional[str]=None)->"GenericClassifier":
         self.eval()
         for module in [self.feature_extractor, self.fc, self.preprocessing, self.backbone_trfs]:
             if isinstance(module, nn.Module):
                 module = torch.jit.script(module)
+        if output_path is not None:
+            torch.jit.save(self,output_path)
         return self
     
     def to_onnx(self, 
-                output_path: Optional[str]=None,
-                input_names=["input"],
-                output_names=["output"],
+                output_path:str,
                 report:bool=False,
                 batch_size:int=8,
-                dynamic:bool=True
     )->"GenericClassifier":
         self.eval()
-        x = torch.rand(batch_size, 3, self.input_size.item(), self.input_size.item(),dtype=torch.float32)
+        b,c,h,w = batch_size,3,self.input_size.item(),self.input_size.item()
+        x = torch.rand(b,c,h,w,dtype=torch.float32)
         self.forward(x)
-        cfg = dict(dynamic_shapes={"input": {0: Dim("batch_size")}}) if dynamic else {}
-        onnx_program = torch.onnx.export(self, x, output_path, input_names=input_names,
-                        output_names=output_names,
+        
+        # export program
+        dynamic_shapes={"x": {0: Dim("batch_size",min=1,max=b),
+                                1:c,
+                                2:h,
+                                3:w
+                            }
+                        }
+        #exported_program = torch.export.export(self,(x,),dynamic_shapes=dynamic_shapes)
+
+        # export onnx
+        onnx_program = self._export_onnx(shape=(b,c,h,w),report=report)
+        self._save_onnx_program(onnx_program,output_path=output_path)
+        self._onnx_program = ort.InferenceSession(output_path,providers=self._onnx_providers)
+        return self
+
+    def _export_onnx(self,shape:Tuple[int,int,int,int],
+                    report:bool=False)->torch.onnx.ONNXProgram:
+        b,c,h,w = shape
+        x = torch.rand(b,c,h,w,dtype=torch.float32)
+        cfg = dict(dynamic_shapes={"input": {0: Dim("batch_size",min=1,max=b)},
+                   "output": {0: Dim("batch_size",min=1,max=b)}})
+        onnx_program = torch.onnx.export(self, x, input_names=["input"],
+                        output_names=["output"],
                         dynamo=True,
                         report=report,
                         **cfg
                         )
         onnx_program.optimize()
-        if output_path is not None:
-            onnx_program.save(output_path)
-        self._onnx_program = onnx_program
-        return self
+        return onnx_program
+        
+    def _save_onnx_program(self,onnx_program:torch.onnx.ONNXProgram,
+                        #exported_program:torch.export.ExportedProgram,
+                        #shape:Tuple[int,int,int,int],
+                        output_path:Union[str,Path]):
+        try:
+            onnx_program.save(Path(output_path).with_suffix(".onnx"))
+            #exported_program_path = Path(output_path).with_suffix(".exported_program.pt")
+            #torch.export.save(exported_program, exported_program_path,extra_files={"shape":json.dumps(list(shape))})
+        except Exception:
+            logger.error(f"Failed to save ONNX program to {output_path}. {traceback.format_exc()}")
     
     def _predict_onnx(self, x: torch.Tensor) -> torch.Tensor:
-        assert self._onnx_program is not None, "ONNX program not created. Call to_onnx() first."
-        if not self._onnx_initialized:
-            self._onnx_program.initialize_inference_session()
-            self._onnx_initialized = True
-        return self._onnx_program(x)
+        assert isinstance(self._onnx_program, ort.InferenceSession), "ONNX program not created. Call to_onnx() first."
+        out = self._onnx_program.run(['output'], {'input': x.cpu().numpy()})
+        return torch.from_numpy(out[0])
 
     def predict(self, x: torch.Tensor) -> list[dict]:
         if self._onnx_program is not None:
-            return self._predict_onnx(x)
-        self.eval()
-        with torch.no_grad():
-            logits = self.forward(x)
-            probs = torch.softmax(logits, dim=1)
-            labels = probs.argmax(dim=1).cpu().tolist()
+            logits = self._predict_onnx(x)
+        else:
+            self.eval()
+            with torch.no_grad():
+                logits = self.forward(x)
+        
+        probs = torch.softmax(logits, dim=1)
+        labels = probs.argmax(dim=1).cpu().tolist()
         classes = [
-            self.label_to_class_map[i] for i in labels
+            self.label_to_class_map.get(i,"None") for i in labels
         ]
         scores = probs.max(dim=1).values.cpu().tolist()
         return [{"class": c, "score": s, "class_id":l} for c, s, l in zip(classes, scores, labels)]
     
     @classmethod
     def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = "cpu"):
+        if str(checkpoint_path).endswith(".onnx"):
+            raise ValueError("ONNX checkpoints are not supported yet.")
         try:
             return cls._load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
         except Exception as e:
@@ -295,4 +332,11 @@ class GenericClassifier(nn.Module):
 
         model.load_state_dict(state_dict)
 
+        return model
+    
+    @classmethod
+    def _load_onnx(cls,onnx_path:str,label_to_class_map: dict)->"GenericClassifier":
+        model = cls(label_to_class_map=label_to_class_map,pretrained=False)
+        ort_sess = ort.InferenceSession(onnx_path,providers=model._onnx_providers)
+        model._onnx_program = ort_sess
         return model

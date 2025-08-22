@@ -209,6 +209,9 @@ class ModelRegistrar:
         ConfigLoader.load_detector_registration_config(config_path)
         config = OmegaConf.load(config_path)
 
+        if config.classifier.processing.export_format == "onnx":
+            raise NotImplementedError("Onnx export for classifier is not supported yet for registration.")
+
         assert (config.localizer.yolo is None) + (config.localizer.mmdet is None) == 1, f"Exactly one should be given"
         localizer_cfg = config.localizer.yolo or config.localizer.mmdet
         localizer_processing = config.localizer.processing
@@ -226,19 +229,22 @@ class ModelRegistrar:
         )
         
         localizer_cfg.weights = str(localizer_ckpt)
-        localizer_config_path = str(Path(localizer_cfg.weights).parent / "localizer_config.yaml")
+        config_path = str(Path(localizer_cfg.weights).parent / "config.yaml")
 
-        classifier_ckpt = config.classifier.weights_path
+        classifier_ckpt = config.classifier.weights
 
 
         artifacts = {#"localizer_ckpt": localizer_cfg.weights,
-                    "localizer_config":localizer_config_path
+                    "config":config_path
         }        
-        save_yaml(dict(localizer_cfg),save_path=localizer_config_path)
+        #save_yaml(dict(config),save_path=localizer_config_path)
+        OmegaConf.save(config,config_path)
+        
         
         # Check if the model can be loaded
         model =  Detector.from_config(localizer_config=localizer_cfg,
-                                       classifier_ckpt=classifier_ckpt)
+                                       classifier_ckpt=classifier_ckpt,
+                                       classifier_export_kwargs=config.classifier.processing)
         x = torch.rand(localizer_processing.batch_size,3,localizer_cfg.imgsz,localizer_cfg.imgsz)
         signature = infer_signature(x.cpu().numpy(), list(dict()))
 
@@ -269,7 +275,6 @@ class ModelRegistrar:
         weights: Union[str, Path],
         name: str = "classifier",
         export_format: str = "torchscript",
-        dynamic: bool = True,
         batch_size: int = 8,
     ) -> None:
         """Register a classification model to MLflow Model Registry.
@@ -282,7 +287,8 @@ class ModelRegistrar:
         model = GenericClassifier.load_from_checkpoint(str(model_path))
         model = model.export(mode=export_format,
                              batch_size=batch_size,
-                             dynamic=dynamic)
+                             output_path=Path(weights).with_suffix(f".{export_format}").as_posix()
+                            )
 
         x = torch.rand(batch_size,3,model.input_size.item(),model.input_size.item())
         signature = infer_signature(x.cpu(), model.predict(x))

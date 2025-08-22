@@ -57,10 +57,11 @@ class Detector(torch.nn.Module):
             assert isinstance(classifier_ckpt,(Path,str)), "classifier_ckpt must be a Path object or a string"
             classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device)
             if classifier_export_kwargs is not None:
-                assert isinstance(classifier_export_kwargs,RegistrationBase), f"classifier_export_kwargs must be a RegistrationBase object. Received {type(classifier_export_kwargs)}"
+                assert isinstance(classifier_export_kwargs,(RegistrationBase,DictConfig)), f"classifier_export_kwargs must be a RegistrationBase object. Received {type(classifier_export_kwargs)}"
                 classifier = classifier.export(mode=classifier_export_kwargs.export_format,
                                               batch_size=classifier_export_kwargs.batch_size,
-                                              dynamic=classifier_export_kwargs.dynamic)
+                                              output_path = Path(classifier_ckpt).with_suffix(f".{classifier_export_kwargs.export_format}").as_posix()
+                                            )
 
         return cls(localizer=localizer,classifier=classifier)
     
