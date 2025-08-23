@@ -23,17 +23,20 @@ def load_registered_model(
     modelURI = f"models:/{name}/{version}"
 
     if dwnd_location is None:
-        dwnd_location = ROOT / Path(f"models-registry/{name}")
-        dwnd_location.mkdir(parents=True, exist_ok=True)
-        dwnd_location = dwnd_location / version
-        dwnd_location = str(dwnd_location.resolve())
+        dwnd_location = Path(f"models-registry/{name}")
+    else:
+        dwnd_location = Path(dwnd_location)/name
+    
+    dwnd_location.mkdir(parents=True, exist_ok=True)
+    dwnd_location = dwnd_location / version
+    dwnd_location = str(dwnd_location.resolve())
 
     Path(dwnd_location).mkdir(parents=True, exist_ok=True)
 
     try:
-        model = mlflow.pytorch.load_model(str(dwnd_location))
+        model = mlflow.pyfunc.load_model(str(dwnd_location))
     except:
-        model = mlflow.pytorch.load_model(modelURI, dst_path=str(dwnd_location))
+        model = mlflow.pyfunc.load_model(modelURI, dst_path=str(dwnd_location))
 
     metadata = dict(version=modelversion, modeluri=modelURI,
                     model_path=str(dwnd_location))
@@ -45,9 +48,9 @@ def load_registered_model(
         )
 
     if load_unwrapped:
-        #model = model.unwrap_python_model().model
-        metadata["detection_model_type"] = "ultralytics"
-    return model, metadata
+        model = model.unwrap_python_model().model
+    model.metadata = metadata
+    return model
 
 
 def get_experiment_id(name: str):

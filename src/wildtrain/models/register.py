@@ -144,7 +144,6 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
 
         localizer_ckpt = context.artifacts["localizer_ckpt"]
         localizer_ckpt = normalize_path(localizer_ckpt)
-        
 
         # Validate and load config
         ConfigLoader.load_detector_registration_config(config)
@@ -152,13 +151,12 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
 
         localizer_cfg = config.localizer.yolo or config.localizer.mmdet
         localizer_cfg.weights = localizer_ckpt
-        localizer_cfg.device = "cuda" if torch.cuda.is_available() else "cpu"
-
 
         # Check if the model can be loaded
         self.model =  Detector.from_config(localizer_config=localizer_cfg,
                                        classifier_ckpt=classifier_ckpt,
                                        classifier_export_kwargs=config.classifier.processing)
+        self.model.set_device("cuda" if torch.cuda.is_available() else "cpu")
     
     def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input):
         """Predict from the model."""

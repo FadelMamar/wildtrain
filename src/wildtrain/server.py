@@ -81,7 +81,7 @@ class InferenceService(ls.LitAPI):
                                                     mlflow_tracking_uri=mlflow_tracking_uri,
                                                     dwnd_location=dwnd_location
                                                     )
-        self.device = device
+        self.detection_system.set_device(device)
 
     def decode_request(self, request: Request) -> dict:
         """

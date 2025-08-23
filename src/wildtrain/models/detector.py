@@ -32,13 +32,19 @@ class Detector(torch.nn.Module):
         self.localizer = localizer
         self.classifier = classifier
         self.metadata: Optional[Dict[str,Any]] = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
     
     @property
     def input_shape(self,)->Tuple:
         if self.metadata is None:
             return None
         return (self.metadata["batch"],3,self.metadata['imgsz'],self.metadata['imgsz'])
+    
+    def set_device(self,device:str):
+        if hasattr(self.localizer,"device"):
+            self.localizer.device = device
+        if self.classifier is not None:
+            self.classifier.to(device)
+        logger.info(f"Detector set to device: {device}")
     
     @property
     def class_mapping(self):
@@ -68,18 +74,17 @@ class Detector(torch.nn.Module):
         return cls(localizer=localizer,classifier=classifier)
     
     @classmethod
-    def from_mlflow(cls,name:str,alias:str,dwnd_location:str=None,mlflow_tracking_uri:str="http://localhost:5000")->"Detector":
-        model,metadata = load_registered_model(alias=alias,name=name,
+    def from_mlflow(cls,name:str,alias:str,dwnd_location:Optional[str]=None,mlflow_tracking_uri:str="http://localhost:5000")->"Detector":
+        model = load_registered_model(alias=alias,name=name,
                                                 load_unwrapped=True,
                                                 dwnd_location=dwnd_location,
                                                 mlflow_tracking_url=mlflow_tracking_uri)
-        model.metadata = metadata
 
-        export_format = metadata.get("cls_export_format")
+        export_format = model.metadata.get("cls_export_format")
         if export_format is not None:
-            export_path = Path(metadata.get("model_path")).with_suffix(f".{export_format}").as_posix()
+            export_path = Path(model.metadata.get("model_path")).with_suffix(f".{export_format}").as_posix()
             model.classifier.export(mode=export_format,
-                                    batch_size=metadata.get("batch"),
+                                    batch_size=model.metadata.get("batch"),
                                     output_path=export_path
                                     )
         return model

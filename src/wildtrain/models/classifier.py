@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.export import Dim
 from pathlib import Path
 import timm
-from typing import Optional,Tuple,Union
+from typing import Optional,Tuple,Union,Dict,Any
 import traceback
 import json
 import onnxruntime as ort
@@ -86,6 +86,8 @@ class GenericClassifier(nn.Module):
         super().__init__()
         self.freeze_backbone = freeze_backbone
         self.label_to_class_map = label_to_class_map
+        self.metadata: Optional[Dict[str,Any]] = None
+
 
         # register buffers
         self.register_buffer("mean", torch.tensor(mean))
