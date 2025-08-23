@@ -32,6 +32,7 @@ class Detector(torch.nn.Module):
         self.localizer = localizer
         self.classifier = classifier
         self.metadata: Optional[Dict[str,Any]] = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
     
     @property
     def input_shape(self,)->Tuple:
@@ -167,7 +168,7 @@ class Detector(torch.nn.Module):
         """Detects objects in a batch of images and classifies each ROI."""
         b = images.shape[0]
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
-        
+                
         if self.classifier is None:
             if return_as_dict:
                 detections = self._to_dict(detections)
@@ -203,7 +204,9 @@ class Detector(torch.nn.Module):
             aligned=True,
         )
 
-        cls_results = self.classifier.predict(crops)  # (N, num_classes)
+        with torch.autocast(device_type=self.device):
+            cls_results = self.classifier.predict(crops)  # (N, num_classes)
+        
         results = deepcopy(detections)
         class_mapping = self.classifier.label_to_class_map
 

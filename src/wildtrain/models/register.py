@@ -81,24 +81,6 @@ def read_dependencies():
     dependencies = data["project"]["dependencies"]
     return dependencies
 
-class UltralyticsWrapper(mlflow.pyfunc.PythonModel):
-    """MLflow wrapper for YOLO detection models."""
-    
-    def __init__(self):
-        super().__init__()
-        self.model: Optional[YOLO] = None
-        self.artifacts: Optional[Dict[str, Any]] = None
-
-    def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
-        """Load the YOLO model from the artifacts."""
-        model_path = Path(context.artifacts["localizer_ckpt"]).resolve()
-        
-        # Handle Windows path issues
-        if platform.system().lower() != "windows":
-            model_path = Path(normalize_path(model_path))
-        
-        self.model = YOLO(str(model_path), task="detect")
-        self.artifacts = context.artifacts
     
 class ClassifierWrapper(mlflow.pyfunc.PythonModel):
     """MLflow wrapper for classification models."""
@@ -110,8 +92,8 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
         """Handle serialization - exclude model objects."""
         state = self.__dict__.copy()
         # Remove any model references that can't be serialized
-        state.pop('model', None)
-        state.pop('artifacts', None)
+        #state.pop('model', None)
+        #state.pop('artifacts', None)
         return state
 
     def __setstate__(self, state):
@@ -122,13 +104,14 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
         """Load the TorchScript classification model from the artifacts."""
         model_path = Path(context.artifacts["classifier_ckpt"]).resolve()
-        
-        # Handle Windows path issues
-        if platform.system().lower() != "windows":
-            model_path = Path(normalize_path(model_path))
-        
-        self.model = GenericClassifier.load_from_checkpoint(str(model_path)) #torch.jit.load(str(model_path), map_location="cpu")
-        self.artifacts = context.artifacts
+        model_path = normalize_path(model_path)
+        self.model = GenericClassifier.load_from_checkpoint(str(model_path))
+        self.model.to_torchscript()
+        if torch.cuda.is_available():
+            self.model.to("cuda")
+    
+    def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input):
+        return self.model.predict(torch.tensor(model_input))
 
 class DetectorWrapper(mlflow.pyfunc.PythonModel):
     """MLflow wrapper for Detector system."""
@@ -150,29 +133,36 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         # Model will be loaded in load_context
 
     def load_context(self, context: mlflow.pyfunc.PythonModelContext) -> None:
-        """Load the TorchScript classification model from the artifacts."""
+        """Load from the artifacts."""
+        from wildtrain.cli.config_loader import ConfigLoader # avoid curcular import
         
-        config = context.artifacts["localizer_config"]
+        config = context.artifacts["config"]
         config = normalize_path(config)
+
+        classifier_ckpt = context.artifacts["classifier_ckpt"]
+        classifier_ckpt = normalize_path(classifier_ckpt)
 
         localizer_ckpt = context.artifacts["localizer_ckpt"]
         localizer_ckpt = normalize_path(localizer_ckpt)
-        localizer_cfg = DictConfig(OmegaConf.load(config))  
-        localizer_cfg.weights = localizer_ckpt        
-
-        classifier_ckpt = context.artifacts.get("classifier_ckpt")
-        if classifier_ckpt is not None:
-            classifier_ckpt = normalize_path(classifier_ckpt)
         
-        #print("\n--- DEBUG INFO ---")
-        #print(f"[DEBUG] localizer: {localizer_ckpt}")
-        #print(f"[DEBUG] classifier: {classifier_ckpt}")
-        #print(f"[DEBUG] localizer config: {localizer_cfg}")
-        
-        self.model = Detector.from_config(localizer_config=localizer_cfg,
-                                        classifier_ckpt=classifier_ckpt)
-        self.artifacts = context.artifacts
 
+        # Validate and load config
+        ConfigLoader.load_detector_registration_config(config)
+        config = OmegaConf.load(config)
+
+        localizer_cfg = config.localizer.yolo or config.localizer.mmdet
+        localizer_cfg.weights = localizer_ckpt
+        localizer_cfg.device = "cuda" if torch.cuda.is_available() else "cpu"
+
+
+        # Check if the model can be loaded
+        self.model =  Detector.from_config(localizer_config=localizer_cfg,
+                                       classifier_ckpt=classifier_ckpt,
+                                       classifier_export_kwargs=config.classifier.processing)
+    
+    def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input):
+        """Predict from the model."""
+        return self.model.predict(torch.tensor(model_input),return_as_dict=True)
 
 def get_experiment_id(name: str) -> str:
     """Get or create an MLflow experiment ID.
@@ -232,11 +222,10 @@ class ModelRegistrar:
 
         classifier_ckpt = config.classifier.weights
 
-
-        artifacts = {#"localizer_ckpt": localizer_cfg.weights,
-                    "config":config_path
-        }        
-        #save_yaml(dict(config),save_path=localizer_config_path)
+        artifacts = {"config":config_path,
+                    "classifier_ckpt":str(classifier_ckpt),
+                    "localizer_ckpt":str(localizer_ckpt)
+                }        
         OmegaConf.save(config,config_path)
         
         # Check if the model can be loaded
@@ -266,7 +255,7 @@ class ModelRegistrar:
             metadata=metadata.to_dict(),
             artifacts=artifacts,
             name=config.processing.name,
-            pytorch_model=model,
+            model=DetectorWrapper(),
             signature=signature, 
         )
         
@@ -284,6 +273,8 @@ class ModelRegistrar:
         model_path = Path(weights)
         if not model_path.exists():
             raise FileNotFoundError(f"Model weights not found: {model_path}")
+        
+        artifacts = {"classifier_ckpt":str(model_path),}
         
         # Load the model
         model = GenericClassifier.load_from_checkpoint(str(model_path))
@@ -307,8 +298,9 @@ class ModelRegistrar:
         self._register_model(
             metadata=metadata.to_dict(),
             name=name,
-            pytorch_model=model,
+            model=ClassifierWrapper(),
             signature=signature,
+            artifacts=artifacts,
         )
         
         logger.info(f"Successfully registered classifier model: {name}")
@@ -354,7 +346,7 @@ class ModelRegistrar:
         self,
         metadata: Dict[str, Any],
         name: str,
-        pytorch_model: torch.nn.Module,
+        model: Union[torch.nn.Module,mlflow.pyfunc.PythonModel],
         artifacts: Optional[Dict[str, str]] = None,
         signature: Optional[ModelSignature] = None,
     ) -> None:
@@ -364,13 +356,26 @@ class ModelRegistrar:
         exp_id = get_experiment_id(name)
         
         with mlflow.start_run(experiment_id=exp_id):
-            mlflow.pytorch.log_model(
-                pytorch_model,
-                "model",
-                pip_requirements=read_dependencies(),
-                registered_model_name=name,
-                signature=signature,
-                metadata=metadata,
-                #artifacts=artifacts or dict(),
-            )
+            if isinstance(model,mlflow.pyfunc.PythonModel):
+                mlflow.pyfunc.log_model(
+                    python_model=model,
+                    artifact_path="model",
+                    pip_requirements=read_dependencies(),
+                    registered_model_name=name,
+                    signature=signature,
+                    metadata=metadata,
+                    artifacts=artifacts,
+                )
+            elif isinstance(model,torch.nn.Module):
+                mlflow.pytorch.log_model(
+                    pytorch_model=model,
+                    artifact_path="model",
+                    pip_requirements=read_dependencies(),
+                    registered_model_name=name,
+                    signature=signature,
+                    metadata=metadata,
+                    artifacts=artifacts,
+                )
+            else:
+                raise ValueError(f"Model type {type(model)} not supported")
 

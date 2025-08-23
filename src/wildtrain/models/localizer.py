@@ -12,8 +12,6 @@ class ObjectLocalizer(ABC):
     Abstract base class for object localizers.
     Should implement a forward method that returns bounding boxes for detected objects in a batch of images.
     """
-    def __init__(self):
-        super().__init__()
 
     @abstractmethod
     def predict(self, images: torch.Tensor) -> list[sv.Detections]:
