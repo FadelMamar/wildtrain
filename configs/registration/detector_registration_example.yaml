@@ -2,9 +2,8 @@
 classifier:
   weights: checkpoints/classification/unified_classifier/best.ckpt
   processing:
-    batch_size: 8
-    export_format: "torchscript"
-    dynamic: true
+    batch_size: 8 # used for onnx export
+    export_format: "torchscript" # torchscript or onnx
 
 localizer:
   yolo:
