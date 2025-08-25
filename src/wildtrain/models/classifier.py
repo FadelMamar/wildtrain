@@ -352,7 +352,7 @@ class GenericClassifier(nn.Module):
         model._onnx_program = ort_sess
         return model
     
-     @classmethod
+    @classmethod
     def from_mlflow(cls,name:str,alias:str,dwnd_location:Optional[str]=None,mlflow_tracking_uri:str="http://localhost:5000")->'GenericClassifier':
         model = load_registered_model(alias=alias,name=name,
                                     load_unwrapped=True,
