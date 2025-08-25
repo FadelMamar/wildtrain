@@ -163,7 +163,8 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
                 curriculum_config = None
         
         CurriculumDataModuleMixin.__init__(self, curriculum_config)
-        super().__init__()
+        L.LightningDataModule.__init__(self)
+        #super().__init__()
         
         self.batch_size = batch_size
         self.root_data_directory = Path(root_data_directory).resolve()

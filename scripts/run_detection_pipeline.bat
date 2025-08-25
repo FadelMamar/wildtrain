@@ -7,4 +7,4 @@ REM Set example config path
 set CONFIG_PATH=configs/detection/yolo_configs/yolo_pipeline_config.yaml
 
 REM Run the run_detection_pipeline CLI command
-call uv run wildtrain pipeline detection %CONFIG_PATH% 
+call uv run wildtrain pipeline detection -c %CONFIG_PATH% 

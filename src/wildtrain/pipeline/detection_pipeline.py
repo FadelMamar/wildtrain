@@ -16,14 +16,15 @@ class DetectionPipeline:
         self.config = OmegaConf.load(config_path)
         Path(self.config.results_dir).mkdir(parents=True, exist_ok=True)
         self.best_model_path: Optional[str] = None
+        self.run_name: Optional[str] = None
 
     def train(self):
         logger.info("[Pipeline] Starting training...")
         train_config = OmegaConf.load(self.config.train.config)
+        self.run_name = train_config.name
         trainer = UltralyticsDetectionTrainer(DictConfig(train_config))
         trainer.run(debug=self.config.train.debug)
         self.best_model_path = trainer.best_model_path
-        
         logger.info(f"[Pipeline] Best model path: {self.best_model_path}")
         logger.info("[Pipeline] Training completed.")
 
@@ -34,7 +35,7 @@ class DetectionPipeline:
 
         evaluator = UltralyticsEvaluator(config=DictConfig(eval_config))
         results = evaluator.evaluate(debug=self.config.eval.debug,
-                                     save_path=os.path.join(self.config.results_dir, "eval_report.json")
+                                     save_path=os.path.join(self.config.results_dir, f"{self.run_name}_eval_report.json")
                                     )
         logger.info("[Pipeline] Evaluation completed.")
         return results

@@ -34,8 +34,8 @@ class BaseEvaluator(ABC):
         self.metrics = self._get_metrics()
         self.per_image_metrics = deepcopy(self.metrics)
         self.per_image_results = dict()
-
         self._report: Dict[str, float] = dict()
+        
     
     def _get_metrics(self,):
         boxes = sv.metrics.core.MetricTarget.BOXES
@@ -81,7 +81,7 @@ class BaseEvaluator(ABC):
             logger.error(f"Error generating report: {traceback.format_exc()}")
 
         self._reset()
-        return results
+        return self._report
 
     @abstractmethod
     def _run_inference(self) -> Generator[Dict[str, List[sv.Detections]], None, None]:

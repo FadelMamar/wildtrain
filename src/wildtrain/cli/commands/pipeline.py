@@ -17,7 +17,7 @@ pipeline_app = typer.Typer(name="pipeline", help="Pipeline commands")
 
 @pipeline_app.command()
 def detection(
-    config: Path = typer.Option("","--config", "-c", help="Path to unified detection pipeline YAML config"),
+    config: Path = typer.Option(None,"--config", "-c", help="Path to unified detection pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full detection pipeline (train + eval) for object detection."""
@@ -61,7 +61,7 @@ def detection(
 
 @pipeline_app.command()
 def classification(
-    config: Path = typer.Option("","--config", "-c", help="Path to unified classification pipeline YAML config"),
+    config: Path = typer.Option(None,"--config", "-c", help="Path to unified classification pipeline YAML config"),
     template: bool = typer.Option(False, "--template", "-t", help="Show default configuration template instead of running pipeline")
 ) -> None:
     """Run the full classification pipeline (train + eval) for image classification."""

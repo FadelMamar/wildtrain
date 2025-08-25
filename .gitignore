@@ -28,6 +28,8 @@ work_dirs/
 *.egg
 MANIFEST
 
+/data/
+
 mlruns/
 runs/
 checkpoints/
