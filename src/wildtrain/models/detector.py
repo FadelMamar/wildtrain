@@ -11,6 +11,7 @@ import requests
 import base64
 from pathlib import Path
 import tempfile
+import fiftyone as fo
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
@@ -152,6 +153,60 @@ class Detector(torch.nn.Module):
                 metadata={"class_mapping":result["metadata"].get("class_mapping",{})},
             ))
         return detections
+    
+    @staticmethod
+    def to_fiftyone(detections:List[sv.Detections],images_width:int,images_height:int)->List[fo.Detection]:
+        fo_detections = []
+        for j in range(len(detections)):
+            bbox = detections.xyxy[j].copy()
+            bbox[[0,2]] = bbox[[0,2]]/images_width
+            bbox[[1,3]] = bbox[[1,3]]/images_height
+            x1, y1, x2, y2 = bbox.tolist()
+            confidence = float(detections.confidence[j])
+            class_id = int(detections.class_id[j])
+            class_name = detections.metadata["class_mapping"][class_id]
+            fo_detection = fo.Detection(
+                label=class_name,
+                bounding_box=[x1, y1, x2 - x1, y2 - y1],  # Convert to [x, y, width, height]
+                confidence=confidence
+            )
+            fo_detections.append(fo_detection)
+        return fo_detections
+
+    @staticmethod
+    def to_label_studio(
+        from_name:str, to_name:str, label_type:str, img_height: int, img_width: int, detection:sv.Detections
+    ) -> List[Dict]:
+        ls_predictions = []
+        num_detections = detection.xyxy.shape[0]
+        for i in range(num_detections):
+            x_min, y_min, x_max, y_max = detection.xyxy[i]
+            w = x_max - x_min
+            h = y_max - y_min
+            score = float(detection.confidence[i])
+            label = int(detection.class_id[i])
+            class_name = detection.metadata["class_mapping"][label]
+            template = {
+                "from_name": from_name,
+                "to_name": to_name,
+                "type": label_type,
+                "original_width": img_width,
+                "original_height": img_height,
+                "image_rotation": 0,
+                "value": {
+                    label_type: [
+                        class_name,
+                    ],
+                    "x": x_min / img_width * 100,
+                    "y": y_min / img_height * 100,
+                    "width": w / img_width * 100,
+                    "height": h / img_height * 100,
+                    "rotation": 0,
+                },
+                "score": score,
+            }
+            ls_predictions.append(template)
+        return ls_predictions
 
     @staticmethod
     def predict_inference_service(

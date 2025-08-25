@@ -186,8 +186,12 @@ class ClassifierCheckpointConfig(BaseConfig):
 
 class MLflowConfig(BaseConfig):
     """MLflow configuration."""
-    experiment_name: str = Field(description="MLflow experiment name")
-    run_name: str = Field(description="MLflow run name")
+    experiment_name: str = Field(default=None, description="MLflow experiment name")
+    run_name: str = Field(default=None, description="MLflow run name")
+    alias: str = Field(default=None, description="MLflow alias")
+    name: str = Field(default=None, description="MLflow name")
+    tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
+    dwnd_location: Optional[str] = Field(default=None, description="DWND location")
 
 
 class ClassificationConfig(BaseConfig):
@@ -350,6 +354,13 @@ class DetectionConfig(BaseConfig):
     custom_yolo_kwargs: YoloCustomConfig = Field(description="Custom YOLO configuration")
     train: YoloTrainConfig = Field(description="Training configuration")
 
+class LabelStudioConfig(BaseConfig):
+    """Label Studio configuration."""
+    url: str = Field(default="http://localhost:8080", description="Label Studio URL")
+    api_key: str = Field(default=None, description="Label Studio API key")
+    project_id: int = Field(default=1, description="Label Studio project ID")
+    model_tag: str = Field(default="version-demo", description="Model tag")
+
 class DetectionVisualizationConfig(BaseConfig):
     """Visualization configuration."""
     dataset_name: str = Field(description="FiftyOne dataset name")
@@ -358,13 +369,48 @@ class DetectionVisualizationConfig(BaseConfig):
     classifier_weights: Optional[str] = Field(default=None, description="Classifier weights path")
     batch_size: int = Field(gt=0, description="Processing batch size")
     debug: bool = Field(default=False, description="Debug mode")
-    num_workers: int = Field(default=0, ge=0, description="Number of workers")
-    mlflow_alias: str = Field(default=None, description="MLflow alias")
-    mlflow_name: str = Field(default=None, description="MLflow name")
-    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
-    mlflow_dwnd_location: Optional[str] = Field(default=None, description="DWND location")
+    mlflow: MLflowConfig = Field(description="MLflow configuration")
+    label_studio: LabelStudioConfig = Field(description="Label Studio configuration")
 
-
+class ClassificationVisualizationConfig(BaseConfig):
+    """Classification visualization configuration.
+    """
+    dataset_name: str = Field(description="Name of the FiftyOne dataset to use or create")
+    weights: str = Field(description="str to the classifier checkpoint (.ckpt) file")
+    prediction_field: str = Field(default="classification_predictions", description="Field name to store predictions in FiftyOne samples")
+    batch_size: int = Field(default=32, description="Batch size for prediction inference")
+    device: str = Field(default="cpu", description="Device to run inference on (e.g., 'cpu' or 'cuda')")
+    debug: bool = Field(default=False, description="If set, only process a small number of samples for debugging")
+    mlflow: MLflowConfig = Field(description="MLflow configuration")
+    label_to_class_map: Optional[dict] = Field(default=None, description="Label to class map")
+        
+    @field_validator('weights')
+    @classmethod
+    def validate_checkpoint_exists(cls, v):
+        if not Path(v).exists():
+            raise ValueError(f"Classifier checkpoint does not exist: {v}")
+        return v
+      
+    @field_validator('batch_size')
+    @classmethod
+    def validate_batch_size(cls, v):
+        if v <= 0:
+            raise ValueError(f"Batch size must be positive, got: {v}")
+        return v
+    
+    @field_validator('dataset_name')
+    @classmethod
+    def validate_dataset_name(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Dataset name cannot be empty")
+        return v.strip()
+    
+    @field_validator('prediction_field')
+    @classmethod
+    def validate_prediction_field(cls, v):
+        if not v or not v.strip():
+            raise ValueError("Prediction field name cannot be empty")
+        return v.strip()
 
 class TrainPipelineConfig(BaseConfig):
     """Training pipeline configuration."""
@@ -729,48 +775,7 @@ class DetectionEvalParamsConfig(BaseConfig):
         return v
 
 
-class ClassificationVisualizationConfig(BaseConfig):
-    """Classification visualization configuration.
-    """
-    dataset_name: str = Field(description="Name of the FiftyOne dataset to use or create")
-    weights: str = Field(description="str to the classifier checkpoint (.ckpt) file")
-    prediction_field: str = Field(default="classification_predictions", description="Field name to store predictions in FiftyOne samples")
-    batch_size: int = Field(default=32, description="Batch size for prediction inference")
-    device: str = Field(default="cpu", description="Device to run inference on (e.g., 'cpu' or 'cuda')")
-    debug: bool = Field(default=False, description="If set, only process a small number of samples for debugging")
-    mlflow_alias: str = Field(default=None, description="MLflow alias")
-    mlflow_name: str = Field(default=None, description="MLflow name")
-    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
-    mlflow_dwnd_location: Optional[str] = Field(default=None, description="DWND location")
-    label_to_class_map: Optional[dict] = Field(default=None, description="Label to class map")
-        
-    @field_validator('weights')
-    @classmethod
-    def validate_checkpoint_exists(cls, v):
-        if not Path(v).exists():
-            raise ValueError(f"Classifier checkpoint does not exist: {v}")
-        return v
-      
-    @field_validator('batch_size')
-    @classmethod
-    def validate_batch_size(cls, v):
-        if v <= 0:
-            raise ValueError(f"Batch size must be positive, got: {v}")
-        return v
-    
-    @field_validator('dataset_name')
-    @classmethod
-    def validate_dataset_name(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Dataset name cannot be empty")
-        return v.strip()
-    
-    @field_validator('prediction_field')
-    @classmethod
-    def validate_prediction_field(cls, v):
-        if not v or not v.strip():
-            raise ValueError("Prediction field name cannot be empty")
-        return v.strip()
+
 
 class RegistrationBase(BaseConfig):
     name: Optional[str] = Field(default=None, description="Model name for registration")

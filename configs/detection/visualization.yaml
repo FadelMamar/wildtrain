@@ -18,12 +18,18 @@ localizer:
 # classifier configuration (optional)
 classifier_weights: checkpoints/classification/demo/best_classifier.pt
 
-mlflow_alias: null
-mlflow_name: null
-mlflow_tracking_uri: "http://localhost:5000"
-mlflow_dwnd_location: null
+mlflow:
+  alias: null
+  name: null
+  tracking_uri: "http://localhost:5000"
+  dwnd_location: null
 
 # processing configuration
 batch_size: 8
 debug: false
-num_workers: 0
+
+label_studio:
+  url: "http://localhost:8080"
+  api_key: "1234567890"
+  project_id: 1
+  model_tag: "version-demo"

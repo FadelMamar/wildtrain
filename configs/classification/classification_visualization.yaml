@@ -8,10 +8,11 @@ device: "cpu"
 
 debug: false
 
-mlflow_alias: null
-mlflow_name: null
-mlflow_tracking_uri: "http://localhost:5000"
-mlflow_dwnd_location: null
+mlflow:
+  alias: null
+  name: null
+  tracking_uri: "http://localhost:5000"
+  dwnd_location: null
 
 # only when providing onnx path as weights
 label_to_class_map: null
