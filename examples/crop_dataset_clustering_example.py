@@ -10,24 +10,18 @@ This example shows how to:
 
 import torch
 from torchvision import transforms
-from tqdm import tqdm
 import traceback
-from pathlib import Path
-import numpy as np
-import os
-import tempfile
-import json
-from PIL import Image
+from torch.utils.data import DataLoader
 
-# Import our modules
 from wildtrain.data.curriculum.dataset import CurriculumDetectionDataset, PatchDataset
 from wildtrain.shared.models import CurriculumConfig
-from wildtrain.data.filters.algorithms import CropClusteringFilter
+from wildtrain.data.filters import CropClusteringFilter, ClassificationRebalanceFilter
 
 
 def main():
     """Main example function."""
     
+    print("=" * 70)
     print("PatchDataset with ClusteringFilter (Adapter Pattern) Example")
     print("=" * 70)
     
@@ -91,12 +85,22 @@ def main():
         # Create the base clustering filter
         clustering_filter = CropClusteringFilter(
             crop_dataset=crop_dataset,
-            batch_size=32,
+            batch_size=8,
             reduction_factor=0.5  # Keep 50% of crops
         )
+
+        #rebalance_filter = ClassificationRebalanceFilter(
+        #    class_key="class_id",
+        #    method="mean",
+        #     exclude_extremes=True,
+        #     random_seed=42
+        # )
         
         # Apply filter to create clustered dataset
-        clustered_crop_dataset = crop_dataset.apply_clustering_filter(clustering_filter)
+        clustered_crop_dataset = (crop_dataset
+                                    #.apply_rebalance_filter(rebalance_filter)
+                                    .apply_clustering_filter(clustering_filter)
+                                    )
 
         print(f"✅ Clustered PatchDataset created successfully!")
         print(f"✅ Number of crops after clustering: {len(clustered_crop_dataset)}")
@@ -115,8 +119,6 @@ def main():
 
         # 8. Test DataLoader compatibility
         print("\n🧪 Testing DataLoader compatibility...")
-        
-        from torch.utils.data import DataLoader
         
         # Create DataLoader with clustered dataset
         dataloader = DataLoader(
@@ -152,50 +154,6 @@ def main():
             crop_info = clustered_crop_dataset.get_crop_info(0)
             print(f"   First crop info keys: {list(crop_info.keys())}")
 
-        # 10. Demonstrate different clustering configurations
-        print("\n🔄 Testing different clustering configurations:")
-        
-        # More aggressive clustering (keep only 30%)
-        aggressive_filter = CropClusteringFilter(
-            crop_dataset=crop_dataset,
-            batch_size=32,
-            reduction_factor=0.3
-        )
-        
-        aggressive_clustered = crop_dataset.apply_clustering_filter(aggressive_filter)
-        print(f"   Aggressive clustering: {len(aggressive_clustered)} crops")
-        
-        # Less aggressive clustering (keep 70%)
-        conservative_filter = CropClusteringFilter(
-            crop_dataset=crop_dataset,
-            batch_size=32,
-            reduction_factor=0.7
-        )
-        
-        conservative_clustered = crop_dataset.apply_clustering_filter(conservative_filter)
-        print(f"   Conservative clustering: {len(conservative_clustered)} crops")
-
-        # 11. Show adapter information
-        print("\n📝 Adapter information:")
-        try:
-            # adapter_info = clustering_adapter.clustering_filter.get_filter_info() # This line is removed
-            # for key, value in adapter_info.items(): # This line is removed
-            #     print(f"   {key}: {value}") # This line is removed
-            pass # This line is added
-        except AttributeError:
-            print("   ClusteringFilter does not have a get_filter_info method.")
-
-        # 12. Show annotation format
-        print("\n📝 Example annotation format:")
-        if len(annotations_after) > 0:
-            example_ann = annotations_after[0]
-            print("   Example annotation:")
-            for key, value in example_ann.items():
-                print(f"     {key}: {value}")
-
-        print("\n✅ All tests completed successfully!")
-        
-        
 
     except FileNotFoundError:
         print(traceback.format_exc())
@@ -204,9 +162,6 @@ def main():
     except Exception as e:
         print(f"❌ Error: {e}")
         print(traceback.format_exc())
-
-
-
 
 
 if __name__ == "__main__":

@@ -13,19 +13,21 @@ import torch
 from PIL import Image
 import timm
 import torch.nn as nn
+import torchvision.transforms as T
 
 
 class FeatureExtractor(nn.Module):
     """
-    Feature extractor from timm (timm/vit_small_patch16_224.dino).
+    Feature extractor.
     """
 
     def __init__(
         self,
-        backbone: str = "timm/vit_small_patch16_224.dino",
+        backbone: str = "timm/vit_base_patch14_reg4_dinov2.lvd142m",
         backbone_source: str = "timm",
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         pretrained: bool = True,
+        use_cls_token: bool = True,
     ):
         """
         Initialize the feature extractor.
@@ -36,16 +38,20 @@ class FeatureExtractor(nn.Module):
         super().__init__()
         if backbone_source != "timm":
             raise ValueError(f"Backbone source must be 'timm', got {backbone_source}")
-
+        self.backbone = backbone
         self.model = timm.create_model(
                 backbone, pretrained=pretrained, num_classes=0
             )
         data_cfg = timm.data.resolve_data_config(self.model.pretrained_cfg)
-        self.transform = nn.Sequential(*timm.data.create_transform(**data_cfg))
+        transform = timm.data.create_transform(**data_cfg)
+        trfs = nn.Sequential(*[t for t in transform.transforms if isinstance(t, (T.Normalize,T.Resize))])
+        self.transform = trfs
         self.model.eval()
         self.model.to(device)
         self.device = device
-
+        self.use_cls_token = use_cls_token
+        self.pil_to_tensor = T.PILToTensor()
+        self.eval()
     @property
     def feature_dim(self) -> int:
         """
@@ -54,7 +60,7 @@ class FeatureExtractor(nn.Module):
         return self.model.num_features
 
     @torch.no_grad()
-    def forward(self, image_paths: List[Union[str, Path]]) -> np.ndarray:
+    def forward(self, images: Union[torch.Tensor, List[Image.Image]]) -> torch.Tensor:
         """
         Extract features from a list of images.
         Args:
@@ -62,8 +68,21 @@ class FeatureExtractor(nn.Module):
         Returns:
             Features as a numpy array
         """
-        images = [Image.open(image_path).convert("RGB") for image_path in image_paths]
-        images = torch.stack([self.transform(image).to(self.device) for image in images],dim=0)
-        outputs = self.model(images)
-        features = outputs.cpu().reshape(len(image_paths), -1).numpy()
-        return features
+        if isinstance(images, torch.Tensor):
+            images = images.float()
+            images = self.transform(images).to(self.device)
+        else:
+            for image in images:
+                assert isinstance(image, Image.Image), f"Image must be a PIL Image. Received {type(image)}"
+            images = torch.stack([self.pil_to_tensor(image) for image in images],dim=0)
+            images = images.float()
+            images = self.transform(images).to(self.device)
+        
+        return self._forward(images)
+    
+    def _forward(self,images:torch.Tensor) -> torch.Tensor:
+        if "vit" in self.backbone and self.use_cls_token: # get CLS token for ViT models
+            x = self.model.forward_features(images)[:,0,:]
+        else:
+            x = self.model(images)
+        return x.cpu()

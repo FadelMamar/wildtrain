@@ -135,13 +135,15 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         batch_size: int = 8,
         transforms: Optional[dict[str, Any]] = None,
         dataset_type: str = "roi",  # "roi" or "crop"
+        rebalance_method: str = "mean",
+        rebalance_exclude_extremes: bool = True,
+        rebalance: bool = False,
         # ROI dataset parameters
         load_as_single_class: bool = False,
         background_class_name: str = "background",
         single_class_name: str = "wildlife",
         keep_classes: Optional[list[str]] = None,
         discard_classes: Optional[list[str]] = None,
-        rebalance: bool = False,
         # Crop dataset parameters
         crop_size: int = 224,
         max_tn_crops: int = 1,
@@ -202,15 +204,13 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
 
         # Rebalancing
         if rebalance:
-            method = "mean"
-            exclude_extremes = True
-            self.resample_func: Optional[ClassificationRebalanceFilter] = ClassificationRebalanceFilter(
+            self.resample_func = ClassificationRebalanceFilter(
                 class_key="class_id", 
                 random_seed=41, 
-                method=method,
-                exclude_extremes=exclude_extremes
+                method=rebalance_method,
+                exclude_extremes=rebalance_exclude_extremes
             )
-            logger.info(f"Rebalancing dataset with {method} count and {'excluding' if exclude_extremes else 'including'} extremes")
+            logger.info(f"Rebalancing dataset with {rebalance_method} count and {'excluding' if rebalance_exclude_extremes else 'including'} extremes")
         else:
             self.resample_func: Optional[ClassificationRebalanceFilter] = None
 

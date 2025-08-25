@@ -7,7 +7,7 @@ samples based on difficulty levels.
 
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Dict, List, Tuple, Optional, Any, Union, Callable
 from PIL import Image
 import torch
 import logging
@@ -576,8 +576,6 @@ class PatchDataset(torch.utils.data.Dataset):
         # Debug: log the coordinates and image dimensions
         logger.debug(f"Image dimensions: {w}x{h}, Crop coordinates: {x1}, {y1}, {x2}, {y2}")
         
-
-        
         # Ensure coordinates are within bounds
         x1 = max(0, min(x1, w))
         y1 = max(0, min(y1, h))
@@ -655,7 +653,7 @@ class PatchDataset(torch.utils.data.Dataset):
         
         return annotations
     
-    def apply_rebalance_filter(self, filter_instance) -> 'PatchDataset':
+    def apply_rebalance_filter(self, filter_instance:Callable) -> 'PatchDataset':
         """
         Apply ClassificationRebalanceFilter to create a balanced dataset.
         
@@ -699,7 +697,7 @@ class PatchDataset(torch.utils.data.Dataset):
         
         return new_dataset
 
-    def apply_clustering_filter(self, filter_instance) -> 'PatchDataset':
+    def apply_clustering_filter(self, filter_instance:Callable) -> 'PatchDataset':
         """
         Apply ClusteringFilter (via adapter) to create a clustered dataset.
         

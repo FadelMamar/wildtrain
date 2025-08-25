@@ -3,6 +3,7 @@ import traceback
 from pathlib import Path
 from typing import Optional, Union
 from ..utils.logging import get_logger,ROOT
+import torch
 
 logger = get_logger(__name__)
 
@@ -22,10 +23,13 @@ def load_registered_model(
     modelURI = f"models:/{name}/{version}"
 
     if dwnd_location is None:
-        dwnd_location = ROOT / Path(f"models-registry/{name}")
-        dwnd_location.mkdir(parents=True, exist_ok=True)
-        dwnd_location = dwnd_location / version
-        dwnd_location = str(dwnd_location.resolve())
+        dwnd_location = Path(f"models-registry/{name}")
+    else:
+        dwnd_location = Path(dwnd_location)/name
+    
+    dwnd_location.mkdir(parents=True, exist_ok=True)
+    dwnd_location = dwnd_location / version
+    dwnd_location = str(dwnd_location.resolve())
 
     Path(dwnd_location).mkdir(parents=True, exist_ok=True)
 
@@ -34,7 +38,8 @@ def load_registered_model(
     except:
         model = mlflow.pyfunc.load_model(modelURI, dst_path=str(dwnd_location))
 
-    metadata = dict(version=modelversion, modeluri=modelURI)
+    metadata = dict(version=modelversion, modeluri=modelURI,
+                    model_path=str(dwnd_location))
     try:
         metadata.update(model.metadata.metadata)
     except:
@@ -43,18 +48,9 @@ def load_registered_model(
         )
 
     if load_unwrapped:
-        try:
-            model = model.unwrap_python_model().model
-            metadata["detection_model_type"] = "ultralytics"
-        except:
-            try:
-                model = model.unwrap_python_model().detection_model
-                metadata["detection_model_type"] = "ultralytics"
-            except:
-                model = model.unwrap_python_model().classifier
-                metadata["detection_model_type"] = "classifier"
-
-    return model, metadata
+        model = model.unwrap_python_model().model
+    model.metadata = metadata
+    return model
 
 
 def get_experiment_id(name: str):

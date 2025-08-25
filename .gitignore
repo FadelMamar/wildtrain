@@ -51,6 +51,7 @@ pip-delete-this-directory.txt
 
 /data/
 /results/
+/models/
 
 uv.lock
 # Unit test / coverage reports

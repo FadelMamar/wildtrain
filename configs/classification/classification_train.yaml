@@ -23,7 +23,7 @@ dataset:
   
   input_size: 384
 
-  batch_size: 64
+  batch_size: 8
 
   transforms:
     train:
@@ -82,6 +82,9 @@ model:
   input_size: ${dataset.input_size}
   mean: ${dataset.stats.mean}
   std: ${dataset.stats.std}
+  hidden_dim: 128
+  num_layers: 2
+  weights: null
 
 train:
   batch_size: ${dataset.batch_size}

@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from typing import List, Tuple, Dict, Any, Union   
+from typing import List, Tuple, Dict, Any, Union, Optional
 from abc import ABC, abstractmethod
 import supervision as sv
 from ultralytics import YOLO
@@ -12,12 +12,19 @@ class ObjectLocalizer(ABC):
     Abstract base class for object localizers.
     Should implement a forward method that returns bounding boxes for detected objects in a batch of images.
     """
+    def __init__(self):
+        self.metadata: Optional[Dict[str,Any]] = None
 
     @abstractmethod
     def predict(self, images: torch.Tensor) -> list[sv.Detections]:
         """ """
         pass
-    
+
+    def forward(self,images:torch.Tensor)->list[sv.Detections]:
+        """ """
+        return self.predict(images)
+        
+
     @property
     def class_mapping(self):
         raise NotImplementedError("Subclasses must implement class_mapping")

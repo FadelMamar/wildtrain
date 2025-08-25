@@ -3,6 +3,8 @@ classifier:
   weights_path: null #
   processing:
     batch_size: 8
+    export_format: "torchscript"
+    dynamic: true
 
 localizer:
   yolo:

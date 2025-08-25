@@ -10,16 +10,18 @@ from omegaconf import DictConfig
 import requests
 import base64
 from pathlib import Path
+import tempfile
+import fiftyone as fo
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
-from ..shared.models import YoloConfig, MMDetConfig
+from ..shared.models import YoloConfig, MMDetConfig, RegistrationBase
 from ..utils.mlflow import load_registered_model
 from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
-class Detector(object):
+class Detector(torch.nn.Module):
     """
     Two-stage detector for inference: localizes objects and classifies each ROI.
     Args:
@@ -28,10 +30,10 @@ class Detector(object):
     """
 
     def __init__(self, localizer: ObjectLocalizer, classifier: Optional[GenericClassifier]=None):
+        super().__init__()
         self.localizer = localizer
         self.classifier = classifier
         self.metadata: Optional[Dict[str,Any]] = None
-        self.is_scripted:bool = False
     
     @property
     def input_shape(self,)->Tuple:
@@ -39,28 +41,55 @@ class Detector(object):
             return None
         return (self.metadata["batch"],3,self.metadata['imgsz'],self.metadata['imgsz'])
     
+    def set_device(self,device:str):
+        if hasattr(self.localizer,"device"):
+            self.localizer.device = device
+        if self.classifier is not None:
+            self.classifier.to(device)
+        logger.info(f"Detector set to device: {device}")
+    
     @property
     def class_mapping(self):
         return self.localizer.class_mapping
     
     @classmethod
-    def from_config(cls,localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],classifier_ckpt:Optional[Union[str,Path]]=None):
+    def from_config(cls,
+    localizer_config:Union[YoloConfig,MMDetConfig, DictConfig],
+    classifier_ckpt:Optional[Union[str,Path]]=None,
+    classifier_export_kwargs:Optional[RegistrationBase]=None
+    ):
         if isinstance(localizer_config,MMDetConfig):
             raise NotImplementedError("Support only Yolo.")
         localizer = UltralyticsLocalizer.from_config(localizer_config)
         classifier = None
         if classifier_ckpt is not None:
             assert isinstance(classifier_ckpt,(Path,str)), "classifier_ckpt must be a Path object or a string"
-            classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device) 
+            classifier = GenericClassifier.load_from_checkpoint(classifier_ckpt,map_location=localizer_config.device)
+            if classifier_export_kwargs is not None:
+                assert isinstance(classifier_export_kwargs,(RegistrationBase,DictConfig)), f"classifier_export_kwargs must be a RegistrationBase object. Received {type(classifier_export_kwargs)}"
+                export_path = Path(classifier_ckpt).with_suffix(f".{classifier_export_kwargs.export_format}").as_posix()
+                classifier = classifier.export(mode=classifier_export_kwargs.export_format,
+                                              batch_size=classifier_export_kwargs.batch_size,
+                                              output_path = export_path
+                                            )
+
         return cls(localizer=localizer,classifier=classifier)
     
     @classmethod
-    def from_mlflow(cls,name:str,alias:str,dwnd_location:str=None,mlflow_tracking_uri:str="http://localhost:5000")->"Detector":
-        model,metadata = load_registered_model(alias=alias,name=name,
+    def from_mlflow(cls,name:str,alias:str,dwnd_location:Optional[str]=None,mlflow_tracking_uri:str="http://localhost:5000")->"Detector":
+        model = load_registered_model(alias=alias,name=name,
                                                 load_unwrapped=True,
                                                 dwnd_location=dwnd_location,
                                                 mlflow_tracking_url=mlflow_tracking_uri)
-        model.metadata = metadata
+
+        export_format = model.metadata.get("cls_export_format")
+        if export_format is not None:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / "classifier.onnx"
+                model.classifier.export(mode=export_format,
+                                        batch_size=model.metadata["batch"],
+                                        output_path=temp_path
+                                    )
         return model
     
     def _pad_if_needed(self, batch: torch.Tensor) -> torch.Tensor:
@@ -124,6 +153,60 @@ class Detector(object):
                 metadata={"class_mapping":result["metadata"].get("class_mapping",{})},
             ))
         return detections
+    
+    @staticmethod
+    def to_fiftyone(detections:List[sv.Detections],images_width:int,images_height:int)->List[fo.Detection]:
+        fo_detections = []
+        for j in range(len(detections)):
+            bbox = detections.xyxy[j].copy()
+            bbox[[0,2]] = bbox[[0,2]]/images_width
+            bbox[[1,3]] = bbox[[1,3]]/images_height
+            x1, y1, x2, y2 = bbox.tolist()
+            confidence = float(detections.confidence[j])
+            class_id = int(detections.class_id[j])
+            class_name = detections.metadata["class_mapping"][class_id]
+            fo_detection = fo.Detection(
+                label=class_name,
+                bounding_box=[x1, y1, x2 - x1, y2 - y1],  # Convert to [x, y, width, height]
+                confidence=confidence
+            )
+            fo_detections.append(fo_detection)
+        return fo_detections
+
+    @staticmethod
+    def to_label_studio(
+        from_name:str, to_name:str, label_type:str, img_height: int, img_width: int, detection:sv.Detections
+    ) -> List[Dict]:
+        ls_predictions = []
+        num_detections = detection.xyxy.shape[0]
+        for i in range(num_detections):
+            x_min, y_min, x_max, y_max = detection.xyxy[i]
+            w = x_max - x_min
+            h = y_max - y_min
+            score = float(detection.confidence[i])
+            label = int(detection.class_id[i])
+            class_name = detection.metadata["class_mapping"][label]
+            template = {
+                "from_name": from_name,
+                "to_name": to_name,
+                "type": label_type,
+                "original_width": img_width,
+                "original_height": img_height,
+                "image_rotation": 0,
+                "value": {
+                    label_type: [
+                        class_name,
+                    ],
+                    "x": x_min / img_width * 100,
+                    "y": y_min / img_height * 100,
+                    "width": w / img_width * 100,
+                    "height": h / img_height * 100,
+                    "rotation": 0,
+                },
+                "score": score,
+            }
+            ls_predictions.append(template)
+        return ls_predictions
 
     @staticmethod
     def predict_inference_service(
@@ -147,12 +230,7 @@ class Detector(object):
         """Detects objects in a batch of images and classifies each ROI."""
         b = images.shape[0]
         detections: list[sv.Detections] = self.localizer.predict(self._pad_if_needed(images))[:b]
-        
-        # scripting classifier for faster predictions
-        if not self.is_scripted and self.classifier is not None:
-            self.classifier.to_torchscript()
-            self.is_scripted = True
-
+                
         if self.classifier is None:
             if return_as_dict:
                 detections = self._to_dict(detections)
@@ -188,7 +266,9 @@ class Detector(object):
             aligned=True,
         )
 
-        cls_results = self.classifier.predict(crops)  # (N, num_classes)
+        with torch.autocast(device_type=self.device):
+            cls_results = self.classifier.predict(crops)  # (N, num_classes)
+        
         results = deepcopy(detections)
         class_mapping = self.classifier.label_to_class_map
 
@@ -217,3 +297,6 @@ class Detector(object):
             return results
 
         return results
+
+    def forward(self,images:torch.Tensor)->List[Dict]:
+        return self.predict(images,return_as_dict=True)
