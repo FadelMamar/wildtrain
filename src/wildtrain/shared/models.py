@@ -813,13 +813,13 @@ class LocalizerRegistrationConfig(BaseConfig):
 
 class ClassifierRegistrationConfig(BaseConfig):
     """Configuration for registering a classification model to MLflow Model Registry."""
-    weights: str = Field(description="Path to the model checkpoint file")
+    weights: Optional[str] = Field(default=None,description="Path to the model checkpoint file")
     processing: RegistrationBase = Field(description="processing information")
     
     @field_validator('weights')
     @classmethod
     def validate_weights_path(cls, v):
-        if not Path(v).exists():
+        if v is not None and not Path(v).exists():
             raise ValueError(f"Model checkpoint file does not exist: {v}")
         return v
     

@@ -139,8 +139,9 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         config = context.artifacts["config"]
         config = normalize_path(config)
 
-        classifier_ckpt = context.artifacts["classifier_ckpt"]
-        classifier_ckpt = normalize_path(classifier_ckpt)
+        classifier_ckpt = context.artifacts.get("classifier_ckpt",None)
+        if classifier_ckpt is not None:
+            classifier_ckpt = normalize_path(classifier_ckpt)
 
         localizer_ckpt = context.artifacts["localizer_ckpt"]
         localizer_ckpt = normalize_path(localizer_ckpt)
@@ -219,11 +220,12 @@ class ModelRegistrar:
         config_path = str(Path(localizer_cfg.weights).parent / "config.yaml")
 
         classifier_ckpt = config.classifier.weights
-
         artifacts = {"config":config_path,
-                    "classifier_ckpt":str(classifier_ckpt),
                     "localizer_ckpt":str(localizer_ckpt)
-                }        
+                }      
+        if classifier_ckpt is not None:
+            artifacts["classifier_ckpt"] = str(classifier_ckpt)
+
         OmegaConf.save(config,config_path)
         
         # Check if the model can be loaded
