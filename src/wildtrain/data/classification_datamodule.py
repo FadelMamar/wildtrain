@@ -152,6 +152,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         curriculum_config: Optional[Any] = None,
         compute_difficulties: bool = True,
         preserve_aspect_ratio: bool = True,
+        num_workers: int = 8,
     ):
         # Initialize the curriculum mixin first
         if curriculum_config is not None:
@@ -172,6 +173,8 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
 
         if not load_as_single_class:
             raise ValueError("Current workflow does not support multi-class datasets")
+        
+        self.num_workers = num_workers
 
         # ROI dataset configuration
         self.single_class_config = {
@@ -250,6 +253,8 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         
         # Extract parameters using helper method
         params = cls._extract_config_params(dataset_config)
+
+        params["num_workers"] = config.train.num_workers
                 
         return cls(**params)
 
@@ -304,7 +309,6 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
         curriculum_config = dataset_config.get("curriculum_config")
         compute_difficulties = dataset_config.get("compute_difficulties", True)
         preserve_aspect_ratio = dataset_config.get("preserve_aspect_ratio", True)
-        
         return {
             "root_data_directory": root_data_directory,
             "batch_size": batch_size,
@@ -507,7 +511,9 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             self.train_dataset, 
             batch_size=self.batch_size, 
             shuffle=False if self.is_curriculum_enabled() else True, 
-            num_workers=0 if sys.platform == "win32" else 3
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=self.num_workers > 0
         )
 
     def val_dataloader(self):
@@ -517,7 +523,9 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             self.val_dataset, 
             batch_size=self.batch_size, 
             shuffle=False, 
-            num_workers=0 if sys.platform == "win32" else 3
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=self.num_workers > 0
         )
 
     def test_dataloader(self):
@@ -527,5 +535,7 @@ class ClassificationDataModule(L.LightningDataModule, CurriculumDataModuleMixin)
             self.test_dataset, 
             batch_size=self.batch_size, 
             shuffle=False, 
-            num_workers=0 if sys.platform == "win32" else 3
+            num_workers=self.num_workers,
+            pin_memory=torch.cuda.is_available(),
+            persistent_workers=self.num_workers > 0
         )

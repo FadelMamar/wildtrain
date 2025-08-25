@@ -169,6 +169,7 @@ class ClassifierTrainingConfig(BaseConfig):
     lrf: float = Field(default=0.1, gt=0.0, description="Learning rate factor")
     precision: str = Field(default="32", description="Training precision")
     accelerator: str = Field(default="auto", description="Training accelerator")
+    num_workers: int = Field(default=0, ge=0, description="Number of workers")
 
 
 class ClassifierCheckpointConfig(BaseConfig):
