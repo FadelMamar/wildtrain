@@ -1,6 +1,6 @@
 
 classifier:
-  weights_path: checkpoints/classification/unified_classifier/best.ckpt
+  weights_path: null #
   processing:
     batch_size: 8
 
@@ -17,7 +17,7 @@ localizer:
   mmdet: null
   processing:
     export_format: "pt"
-    batch_size: 8
+    batch_size: 32
     dynamic: false
 
 processing:

@@ -4,15 +4,15 @@
 disable_train: false
 train:
   config: configs\detection\yolo_configs\yolo.yaml
-  debug: true
+  debug: false
 
 # ----------------------
 # Eval
 # ----------------------
-disable_eval: false
+disable_eval: true
 eval:
   config: configs\detection\yolo_configs\yolo_eval.yaml
-  debug: true
+  debug: false
 
 # ----------------------
 # Output

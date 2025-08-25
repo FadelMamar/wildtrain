@@ -3,13 +3,13 @@
 # with both ROI and crop dataset types
 
 dataset:
-  root_data_directory: D:\workspace\data\demo-dataset
+  root_data_directory: D:\PhD\workspace\data
   
   # Dataset type: "roi" for pre-computed crops, "crop" for dynamic crop extraction
-  dataset_type: "crop"  # or "crop" or "roi" 
+  dataset_type: "roi"  # or "crop" or "roi" 
 
   curriculum_config:
-    enabled: true
+    enabled: false
     type: "difficulty"
     difficulty_strategy: "linear"
     start_difficulty: 0.0
@@ -56,19 +56,25 @@ dataset:
     discard_classes: ["rocks","vegetation","other","termite mound"]
   
   # Rebalancing
-  rebalance: false
+  rebalance: true # rebalance class distribution
   
   # Crop dataset parameters (used when dataset_type = "crop")
   crop_size: ${dataset.input_size}
   max_tn_crops: 1
-  p_draw_annotations: 0.0
+  p_draw_annotations: 0.2
   
   # Curriculum parameters (used when dataset_type = "crop")
   compute_difficulties: true
   preserve_aspect_ratio: true
 
+mlflow:
+  experiment_name: wildtrain_classification
+  run_name: "base_dinov2"
+  log_model: true
+
+
 model:
-  backbone: timm/vit_small_patch14_dinov2.lvd142m
+  backbone: timm/vit_base_patch16_224.dino
   pretrained: true
   backbone_source: timm
   dropout: 0.2
@@ -79,7 +85,7 @@ model:
 
 train:
   batch_size: ${dataset.batch_size}
-  epochs: 1
+  epochs: 25
   lr: 0.0001
   label_smoothing: 0.0
   weight_decay: 0.0001
@@ -93,16 +99,10 @@ checkpoint:
   mode: max
   save_last: true
   dirpath: checkpoints/classification
-  patience: 10
+  patience: 10 # for early stopping based on val_f1score
   save_weights_only: true
   filename: "best" # "{epoch:02d}-{val_f1score:.2f}"
   min_delta: 0.001
-
-mlflow:
-  experiment_name: wildtrain_classification
-  run_name: "unified_classifier"
-  log_model: true
-
 
 # DVC dataset tracking configuration
 # track_dataset: false
