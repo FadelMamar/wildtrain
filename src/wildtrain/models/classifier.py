@@ -9,8 +9,10 @@ from typing import Optional,Tuple,Union,Dict,Any
 import traceback
 import json
 import onnxruntime as ort
+import tempfile
 
 from ..utils.logging import get_logger
+from ..utils.mlflow import load_registered_model
 
 logger = get_logger(__name__)
 
@@ -270,9 +272,10 @@ class GenericClassifier(nn.Module):
         return [{"class": c, "score": s, "class_id":l} for c, s, l in zip(classes, scores, labels)]
     
     @classmethod
-    def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = "cpu"):
+    def load_from_checkpoint(cls, checkpoint_path: str, map_location: str = "cpu",label_to_class_map:Optional[dict]=None):
         if str(checkpoint_path).endswith(".onnx"):
-            raise ValueError("ONNX checkpoints are not supported yet.")
+            assert isinstance(label_to_class_map,dict), "label_to_class_map must be provided if checkpoint_path is an ONNX file"
+            return cls._load_onnx(onnx_path=checkpoint_path,label_to_class_map=label_to_class_map)
         try:
             return cls._load_from_lightning_ckpt(checkpoint_path=checkpoint_path, map_location=map_location)
         except Exception as e:
@@ -347,4 +350,20 @@ class GenericClassifier(nn.Module):
         model = cls(label_to_class_map=label_to_class_map,pretrained=False)
         ort_sess = ort.InferenceSession(onnx_path,providers=model._onnx_providers)
         model._onnx_program = ort_sess
+        return model
+    
+     @classmethod
+    def from_mlflow(cls,name:str,alias:str,dwnd_location:Optional[str]=None,mlflow_tracking_uri:str="http://localhost:5000")->'GenericClassifier':
+        model = load_registered_model(alias=alias,name=name,
+                                    load_unwrapped=True,
+                                    dwnd_location=dwnd_location,
+                                    mlflow_tracking_url=mlflow_tracking_uri)
+
+        export_format = model.metadata.get("cls_export_format")
+        if export_format is not None:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / "classifier.onnx"
+                model.export(mode=export_format,
+                                        batch_size=model.metadata["batch"],
+                                        output_path=temp_path)
         return model

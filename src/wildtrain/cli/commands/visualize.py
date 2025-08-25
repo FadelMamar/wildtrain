@@ -46,10 +46,8 @@ def classifier_predictions(
         
         # Extract configuration values
         dataset_name = cfg.dataset_name
-        checkpoint_path = cfg.checkpoint_path
         prediction_field = cfg.prediction_field
         batch_size = cfg.batch_size
-        device = cfg.device
         debug = cfg.debug
         
         console.print(f"[bold green]Uploading classifier predictions to FiftyOne dataset:[/bold green] {dataset_name}")
@@ -57,12 +55,23 @@ def classifier_predictions(
         log_file = log_file_path("visualize_classifier_predictions")
         setup_logging(log_file=log_file)
 
+        if cfg.mlflow_alias is not None and cfg.mlflow_name is not None:
+            assert cfg.weights is None, "weights should not be provided when using mlflow"
+            console.print(f"[bold green]Loading classifier from MLflow:[/bold green] {cfg.mlflow_name} {cfg.mlflow_alias}")
+            model = GenericClassifier.from_mlflow(name=cfg.mlflow_name,
+                                                    alias=cfg.mlflow_alias,
+                                                    dwnd_location=cfg.mlflow_dwnd_location,
+                                                    mlflow_tracking_uri=cfg.mlflow_tracking_uri
+                                                )
+        else:
+            console.print(f"[bold green]Loading classifier from config:[/bold green] {cfg.weights}")
+            model = GenericClassifier.load_from_checkpoint(cfg.weights,map_location=cfg.device,label_to_class_map=cfg.label_to_class_map)
+
         add_predictions_from_classifier(
             dataset_name=dataset_name,
-            checkpoint_path=str(checkpoint_path),
+            model=model,
             prediction_field=prediction_field,
             batch_size=batch_size,
-            device=device,
             debug=debug,
         )
         console.print(f"[bold blue]Classifier predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
@@ -106,23 +115,22 @@ def detector_predictions(
         # Extract configuration values
         dataset_name = cfg.dataset_name
         prediction_field = cfg.prediction_field
-        
-        localizer_cfg = cfg.localizer
-        classifier_cfg = cfg.classifier
-        
+                
         console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
-        
-        # Create localizer with config
-        localizer = UltralyticsLocalizer.from_config(localizer_cfg)
-        
-        # Create classifier if checkpoint provided
-        classifier = None
-        if classifier_cfg.checkpoint is not None:
-            console.print(f"[bold blue]Loading classifier from:[/bold blue] {classifier_cfg.checkpoint}")
-            classifier = GenericClassifier.load_from_checkpoint(str(classifier_cfg.checkpoint))
-        
+                
         # Create detector
-        detector = Detector(localizer=localizer, classifier=classifier)
+        if cfg.mlflow_alias is not None and cfg.mlflow_name is not None:
+            console.print(f"[bold green]Loading detector from MLflow:[/bold green] {cfg.mlflow_name} {cfg.mlflow_alias}")
+            detector = Detector.from_mlflow(name=cfg.mlflow_name,
+                                            alias=cfg.mlflow_alias,
+                                            dwnd_location=cfg.mlflow_dwnd_location,
+                                            mlflow_tracking_uri=cfg.mlflow_tracking_uri
+                                        )
+        else:
+            console.print(f"[bold green]Loading detector from config:[/bold green] {cfg.localizer} {cfg.classifier_weights}")
+            detector = Detector.from_config(localizer_config=cfg.localizer,
+                                            classifier_ckpt=cfg.classifier_weights
+                                        )
         
         log_file = log_file_path("visualize_detector_predictions")
         setup_logging(log_file=log_file)
@@ -130,7 +138,7 @@ def detector_predictions(
         add_predictions_from_detector(
             dataset_name=dataset_name,
             detector=detector,
-            imgsz=localizer_cfg.imgsz,
+            imgsz=cfg.localizer.imgsz,
             prediction_field=prediction_field,
             batch_size=cfg.batch_size,
             debug=cfg.debug,

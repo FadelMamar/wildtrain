@@ -28,10 +28,9 @@ logger = logging.getLogger(__name__)
 
 
 def add_predictions_from_classifier(dataset_name: str, 
-                                    checkpoint_path: str, 
+                                    model: GenericClassifier, 
                                     prediction_field: str = "classification_predictions", 
                                     batch_size: int = 32,
-                                    device: str = "cpu",
                                     debug: bool = False
                                     ):
 
@@ -42,12 +41,7 @@ def add_predictions_from_classifier(dataset_name: str,
         raise ValueError(f"Dataset {dataset_name} not found")
 
     dataset = fo.load_dataset(dataset_name)
-    try:
-        model = GenericClassifier.load_from_checkpoint(checkpoint_path,map_location=device)
-    except Exception:
-        model = GenericClassifier.load_from_checkpoint(checkpoint_path,map_location="cpu")
-    model.to(device)
-
+    
     samples = list(dataset)
     num_samples = len(samples)
     if debug:
@@ -115,15 +109,11 @@ def add_predictions_from_detector(dataset_name: str,
         for sample, detections in zip(batch_samples, detections_list):
             if detections is None or len(detections) == 0:
                 # No detections found
-                #sample[prediction_field] = fo.Detections()
                 pass
             else:
                 # Convert supervision detections to FiftyOne detections
                 fo_detections = []
                 
-                # Check if detections has the required attributes and they are not None
-                #if (hasattr(detections, 'xyxy') and hasattr(detections, 'confidence') and hasattr(detections, 'class_id') and
-                #    detections.xyxy is not None and detections.confidence is not None and detections.class_id is not None):
                 for j in range(len(detections)):
                     # Get bounding box (xyxy format)
                     bbox = detections.xyxy[j].copy()

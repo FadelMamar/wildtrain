@@ -8,7 +8,7 @@ prediction_field: "detection_predictions"
 # localizer configuration (at root level as expected by DetectionVisualizationConfig)
 localizer:
   weights: models/best.pt
-  imgsz: 640
+  imgsz: 800
   device: "cpu"
   conf_thres: 0.2
   iou_thres: 0.3
@@ -16,13 +16,14 @@ localizer:
   overlap_metric: "IOU"
 
 # classifier configuration (optional)
-classifier:
-  checkpoint: checkpoints/classification/demo/best_classifier.pt
+classifier_weights: checkpoints/classification/demo/best_classifier.pt
+
+mlflow_alias: null
+mlflow_name: null
+mlflow_tracking_uri: "http://localhost:5000"
+mlflow_dwnd_location: null
 
 # processing configuration
 batch_size: 8
-debug: true
+debug: false
 num_workers: 0
-
-# Optional: Add your class names here
-class_names: null

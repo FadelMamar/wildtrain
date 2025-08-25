@@ -1,8 +1,17 @@
 # Example configuration for classifier visualization
 
 dataset_name: "savmap-train"
-checkpoint_path: checkpoints/classification/best_classifier.pt
+weights: checkpoints/classification/best_classifier.pt
 prediction_field: "classification_predictions"
 batch_size: 32
 device: "cpu"
-debug: true
+
+debug: false
+
+mlflow_alias: null
+mlflow_name: null
+mlflow_tracking_uri: "http://localhost:5000"
+mlflow_dwnd_location: null
+
+# only when providing onnx path as weights
+label_to_class_map: null

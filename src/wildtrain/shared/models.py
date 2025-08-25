@@ -350,19 +350,20 @@ class DetectionConfig(BaseConfig):
     custom_yolo_kwargs: YoloCustomConfig = Field(description="Custom YOLO configuration")
     train: YoloTrainConfig = Field(description="Training configuration")
 
-class ClassifierConfig(BaseConfig):
-    """Classifier configuration for visualization."""
-    checkpoint: Optional[str] = Field(default=None, description="Classifier checkpoint path")
-
 class DetectionVisualizationConfig(BaseConfig):
     """Visualization configuration."""
     dataset_name: str = Field(description="FiftyOne dataset name")
     prediction_field: str = Field(description="Prediction field name")
     localizer: YoloConfig = Field(description="Localizer configuration")
-    classifier: Optional[ClassifierConfig] = Field(default=None, description="Classifier configuration")
+    classifier_weights: Optional[str] = Field(default=None, description="Classifier weights path")
     batch_size: int = Field(gt=0, description="Processing batch size")
     debug: bool = Field(default=False, description="Debug mode")
     num_workers: int = Field(default=0, ge=0, description="Number of workers")
+    mlflow_alias: str = Field(default=None, description="MLflow alias")
+    mlflow_name: str = Field(default=None, description="MLflow name")
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
+    mlflow_dwnd_location: Optional[str] = Field(default=None, description="DWND location")
+
 
 
 class TrainPipelineConfig(BaseConfig):
@@ -730,41 +731,26 @@ class DetectionEvalParamsConfig(BaseConfig):
 
 class ClassificationVisualizationConfig(BaseConfig):
     """Classification visualization configuration.
-    
-    This configuration is specifically for classifier visualization workflows.
-    
-    Example:
-        config = ClassificationVisualizationConfig(
-            dataset_name="my_dataset",
-            checkpoint_path="path/to/checkpoint.ckpt",
-            prediction_field="classification_predictions",
-            batch_size=32,
-            device="cpu",
-            debug=False
-        )
     """
     dataset_name: str = Field(description="Name of the FiftyOne dataset to use or create")
-    checkpoint_path: str = Field(description="str to the classifier checkpoint (.ckpt) file")
+    weights: str = Field(description="str to the classifier checkpoint (.ckpt) file")
     prediction_field: str = Field(default="classification_predictions", description="Field name to store predictions in FiftyOne samples")
     batch_size: int = Field(default=32, description="Batch size for prediction inference")
     device: str = Field(default="cpu", description="Device to run inference on (e.g., 'cpu' or 'cuda')")
     debug: bool = Field(default=False, description="If set, only process a small number of samples for debugging")
-    
-    @field_validator('checkpoint_path')
+    mlflow_alias: str = Field(default=None, description="MLflow alias")
+    mlflow_name: str = Field(default=None, description="MLflow name")
+    mlflow_tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
+    mlflow_dwnd_location: Optional[str] = Field(default=None, description="DWND location")
+    label_to_class_map: Optional[dict] = Field(default=None, description="Label to class map")
+        
+    @field_validator('weights')
     @classmethod
     def validate_checkpoint_exists(cls, v):
         if not Path(v).exists():
             raise ValueError(f"Classifier checkpoint does not exist: {v}")
         return v
-    
-    @field_validator('device')
-    @classmethod
-    def validate_device(cls, v):
-        valid_devices = ["cpu", "cuda", "cuda:0", "cuda:1"]
-        if v not in valid_devices:
-            raise ValueError(f"Device must be one of {valid_devices}, got: {v}")
-        return v
-    
+      
     @field_validator('batch_size')
     @classmethod
     def validate_batch_size(cls, v):

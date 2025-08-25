@@ -10,6 +10,7 @@ from omegaconf import DictConfig
 import requests
 import base64
 from pathlib import Path
+import tempfile
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
@@ -82,10 +83,11 @@ class Detector(torch.nn.Module):
 
         export_format = model.metadata.get("cls_export_format")
         if export_format is not None:
-            export_path = Path(model.metadata.get("model_path")).with_suffix(f".{export_format}").as_posix()
-            model.classifier.export(mode=export_format,
-                                    batch_size=model.metadata.get("batch"),
-                                    output_path=export_path
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_path = Path(temp_dir) / "classifier.onnx"
+                model.classifier.export(mode=export_format,
+                                        batch_size=model.metadata["batch"],
+                                        output_path=temp_path
                                     )
         return model
     
