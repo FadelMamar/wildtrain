@@ -227,19 +227,12 @@ class ClassifierTrainer(ModelTrainer):
         if model.mlflow_run_id and self.best_model_path:
             with mlflow.start_run(run_id=model.mlflow_run_id):
                 try:
-                    best_model = GenericClassifier.load_from_checkpoint(
-                        str(self.best_model_path),
-                        map_location=str(model.device)
-                    )
-                    path = Path(self.best_model_path).with_name("best_classifier.pt")
-                    torch.save(best_model, path)
-                    mlflow.log_artifact(str(path), "checkpoint")
+                    mlflow.log_artifact(str(self.best_model_path), "checkpoint")
+                    cfg_path = Path(self.best_model_path).with_name("config.yaml")
+                    OmegaConf.save(self.config, cfg_path)
+                    mlflow.log_artifact(str(cfg_path), "config")
                 except Exception:
                     logger.error(f"Error logging best model: {traceback.format_exc()}")
-
-                cfg_path = Path(self.best_model_path).with_name("config.yaml")
-                OmegaConf.save(self.config, cfg_path)
-                mlflow.log_artifact(str(cfg_path), "config")
 
                 if self.config.get("track_dataset"):
                     track_dataset(self.config)

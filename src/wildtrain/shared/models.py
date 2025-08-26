@@ -194,6 +194,7 @@ class MLflowConfig(BaseConfig):
     name: str = Field(default=None, description="MLflow name")
     tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
     dwnd_location: Optional[str] = Field(default=None, description="DWND location")
+    log_model: bool = Field(default=False, description="Log model")
 
 
 class ClassificationConfig(BaseConfig):
@@ -339,9 +340,6 @@ class YoloTrainConfig(BaseConfig):
     freeze: int = Field(default=9, description="Freeze layers")
     cache: bool = Field(default=False, description="Cache")
 
-class YoloMLflowConfig(BaseConfig):
-    """YOLO MLflow configuration."""
-    tracking_uri: str = Field(default="http://127.0.0.1:5000", description="MLflow tracking URI")
 
 class DetectionConfig(BaseConfig):
     """Complete detection configuration matching the YAML structure."""
@@ -351,7 +349,7 @@ class DetectionConfig(BaseConfig):
     model: YoloModelConfig = Field(description="Model configuration")
     name: str = Field(description="Run name")
     project: str = Field(description="Project name")
-    mlflow: YoloMLflowConfig = Field(description="MLflow configuration")
+    mlflow: MLflowConfig = Field(description="MLflow configuration")
     use_custom_yolo: bool = Field(default=False, description="Use custom YOLO")
     custom_yolo_kwargs: YoloCustomConfig = Field(description="Custom YOLO configuration")
     train: YoloTrainConfig = Field(description="Training configuration")
