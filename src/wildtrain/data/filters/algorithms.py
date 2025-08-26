@@ -9,13 +9,12 @@ from sklearn.cluster import MiniBatchKMeans
 from sklearn.metrics import silhouette_score
 from collections import defaultdict
 import random
-from PIL import Image 
 import torch 
 from tqdm import tqdm
 
 from ...utils.logging import get_logger
 from ...models.feature_extractor import FeatureExtractor
-from ...utils.io import save_yaml,load_yaml
+from ...utils.io import save_yaml,load_yaml,read_image
 from ..curriculum.dataset import PatchDataset 
 
 
@@ -208,7 +207,7 @@ class ClusteringFilter(BaseFilter):
         all_embeddings = []
         for i in tqdm(range(0, len(image_paths), self.batch_size),unit="batch",desc="Computing embeddings"):
             batch_paths = image_paths[i : i + self.batch_size]
-            batch_images = [Image.open(path) for path in batch_paths]
+            batch_images = [read_image(path) for path in batch_paths]
             batch_embeddings = self.feature_extractor(batch_images)  # type: ignore
             all_embeddings.append(batch_embeddings)
         return np.vstack(all_embeddings)

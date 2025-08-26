@@ -1,20 +1,20 @@
-from PIL import Image
 from torchvision import transforms as T
 import torch
-from omegaconf import DictConfig, OmegaConf
-import os
-from typing import Union, List, Tuple, Optional
 from wildata.datasets.detection import load_detection_dataset
 from wildata.pipeline.path_manager import PathManager
 from pathlib import Path
-from wildtrain.utils.logging import get_logger
 import supervision as sv
 import traceback
 
+from ..utils.logging import get_logger
+from ..utils.io import read_image
+
+
 logger = get_logger(__name__)
 
+
 def load_image(path: str) -> torch.Tensor:
-    image = Image.open(path).convert("RGB")
+    image = read_image(path).convert("RGB")
     return T.PILToTensor()(image)
 
 def load_all_detection_datasets(

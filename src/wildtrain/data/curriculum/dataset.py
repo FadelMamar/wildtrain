@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from ...shared.models import CurriculumConfig
 from ..utils import load_all_detection_datasets
+from ...utils.io import read_image
 
 logger = logging.getLogger(__name__)
 
@@ -408,8 +409,8 @@ class PatchDataset(torch.utils.data.Dataset):
 
         def iterator():
             for dataset_idx,image_path in enumerate(self.dataset.image_paths):
-                with Image.open(image_path) as img:
-                    w, h = img.size
+                img = read_image(image_path)
+                w, h = img.size
                 detections = self.dataset.annotations[image_path] 
                 yield w,h,detections,image_path,dataset_idx
 

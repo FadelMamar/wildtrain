@@ -29,7 +29,7 @@ from label_studio_tools.core.utils.io import get_local_path
 
 from urllib.parse import unquote
 
-
+from .utils.io import read_image
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ class Visualizer:
     def _load_as_batch(self,image_paths:List[str])->torch.Tensor:
         batch_images = []
         for image_path in image_paths:
-            image = Image.open(image_path).convert("RGB")
+            image = read_image(image_path).convert("RGB")
             image_tensor = T.PILToTensor()(image)
             batch_images.append(image_tensor)
         return torch.stack(batch_images)
