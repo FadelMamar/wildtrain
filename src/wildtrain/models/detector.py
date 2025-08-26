@@ -266,7 +266,8 @@ class Detector(torch.nn.Module):
             aligned=True,
         )
 
-        with torch.autocast(device_type=self.device):
+        with torch.autocast(device_type=self.localizer.device):
+            crops = crops.to(self.localizer.device)
             cls_results = self.classifier.predict(crops)  # (N, num_classes)
         
         results = deepcopy(detections)

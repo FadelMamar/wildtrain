@@ -227,19 +227,12 @@ class ClassifierTrainer(ModelTrainer):
         if model.mlflow_run_id and self.best_model_path:
             with mlflow.start_run(run_id=model.mlflow_run_id):
                 try:
-                    best_model = GenericClassifier.load_from_checkpoint(
-                        str(self.best_model_path),
-                        map_location=str(model.device)
-                    )
-                    path = Path(self.best_model_path).with_name("best_classifier.pt")
-                    torch.save(best_model, path)
-                    mlflow.log_artifact(str(path), "checkpoint")
+                    mlflow.log_artifact(str(self.best_model_path), "checkpoint")
+                    cfg_path = Path(self.best_model_path).with_name("config.yaml")
+                    OmegaConf.save(self.config, cfg_path)
+                    mlflow.log_artifact(str(cfg_path), "config")
                 except Exception:
                     logger.error(f"Error logging best model: {traceback.format_exc()}")
-
-                cfg_path = Path(self.best_model_path).with_name("config.yaml")
-                OmegaConf.save(self.config, cfg_path)
-                mlflow.log_artifact(str(cfg_path), "config")
 
                 if self.config.get("track_dataset"):
                     track_dataset(self.config)
@@ -263,6 +256,7 @@ class ClassifierTrainer(ModelTrainer):
         model_cfg = self.config.model
         if model_cfg.weights is not None:
             cls_model = GenericClassifier.load_from_checkpoint(model_cfg.weights)
+            logger.info(f"Loaded model from checkpoint: {model_cfg.weights}")
         else:
             cls_model = GenericClassifier(
                 backbone=model_cfg.backbone,
@@ -302,6 +296,7 @@ class ClassifierTrainer(ModelTrainer):
             precision=self.config.train.precision,
             logger=mlflow_logger,
             limit_train_batches=3 if debug else None,
+            check_val_every_n_epoch=self.config.train.val_check_interval,
             limit_val_batches=3 if debug else None,
             callbacks=callbacks,
             default_root_dir=ROOT / self.config.checkpoint.dirpath

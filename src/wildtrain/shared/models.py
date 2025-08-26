@@ -169,6 +169,8 @@ class ClassifierTrainingConfig(BaseConfig):
     lrf: float = Field(default=0.1, gt=0.0, description="Learning rate factor")
     precision: str = Field(default="32", description="Training precision")
     accelerator: str = Field(default="auto", description="Training accelerator")
+    num_workers: int = Field(default=0, ge=0, description="Number of workers")
+    val_check_interval: int = Field(default=1, ge=1, description="Validation check interval")
 
 
 class ClassifierCheckpointConfig(BaseConfig):
@@ -192,6 +194,7 @@ class MLflowConfig(BaseConfig):
     name: str = Field(default=None, description="MLflow name")
     tracking_uri: str = Field(default="http://localhost:5000", description="MLflow tracking URI")
     dwnd_location: Optional[str] = Field(default=None, description="DWND location")
+    log_model: bool = Field(default=False, description="Log model")
 
 
 class ClassificationConfig(BaseConfig):
@@ -337,9 +340,6 @@ class YoloTrainConfig(BaseConfig):
     freeze: int = Field(default=9, description="Freeze layers")
     cache: bool = Field(default=False, description="Cache")
 
-class YoloMLflowConfig(BaseConfig):
-    """YOLO MLflow configuration."""
-    tracking_uri: str = Field(default="http://127.0.0.1:5000", description="MLflow tracking URI")
 
 class DetectionConfig(BaseConfig):
     """Complete detection configuration matching the YAML structure."""
@@ -349,7 +349,7 @@ class DetectionConfig(BaseConfig):
     model: YoloModelConfig = Field(description="Model configuration")
     name: str = Field(description="Run name")
     project: str = Field(description="Project name")
-    mlflow: YoloMLflowConfig = Field(description="MLflow configuration")
+    mlflow: MLflowConfig = Field(description="MLflow configuration")
     use_custom_yolo: bool = Field(default=False, description="Use custom YOLO")
     custom_yolo_kwargs: YoloCustomConfig = Field(description="Custom YOLO configuration")
     train: YoloTrainConfig = Field(description="Training configuration")
@@ -813,13 +813,13 @@ class LocalizerRegistrationConfig(BaseConfig):
 
 class ClassifierRegistrationConfig(BaseConfig):
     """Configuration for registering a classification model to MLflow Model Registry."""
-    weights: str = Field(description="Path to the model checkpoint file")
+    weights: Optional[str] = Field(default=None,description="Path to the model checkpoint file")
     processing: RegistrationBase = Field(description="processing information")
     
     @field_validator('weights')
     @classmethod
     def validate_weights_path(cls, v):
-        if not Path(v).exists():
+        if v is not None and not Path(v).exists():
             raise ValueError(f"Model checkpoint file does not exist: {v}")
         return v
     
