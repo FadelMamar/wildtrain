@@ -170,6 +170,7 @@ class ClassifierTrainingConfig(BaseConfig):
     precision: str = Field(default="32", description="Training precision")
     accelerator: str = Field(default="auto", description="Training accelerator")
     num_workers: int = Field(default=0, ge=0, description="Number of workers")
+    val_check_interval: int = Field(default=1, ge=1, description="Validation check interval")
 
 
 class ClassifierCheckpointConfig(BaseConfig):

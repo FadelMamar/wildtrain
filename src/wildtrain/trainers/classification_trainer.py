@@ -263,6 +263,7 @@ class ClassifierTrainer(ModelTrainer):
         model_cfg = self.config.model
         if model_cfg.weights is not None:
             cls_model = GenericClassifier.load_from_checkpoint(model_cfg.weights)
+            logger.info(f"Loaded model from checkpoint: {model_cfg.weights}")
         else:
             cls_model = GenericClassifier(
                 backbone=model_cfg.backbone,
@@ -302,6 +303,7 @@ class ClassifierTrainer(ModelTrainer):
             precision=self.config.train.precision,
             logger=mlflow_logger,
             limit_train_batches=3 if debug else None,
+            check_val_every_n_epoch=self.config.train.val_check_interval,
             limit_val_batches=3 if debug else None,
             callbacks=callbacks,
             default_root_dir=ROOT / self.config.checkpoint.dirpath

@@ -23,7 +23,7 @@ dataset:
   
   input_size: 384
 
-  batch_size: 8
+  batch_size: 64
 
   transforms:
     train:
@@ -74,7 +74,7 @@ mlflow:
 
 
 model:
-  backbone: timm/vit_base_patch16_224.dino
+  backbone: timm/vit_base_patch14_reg4_dinov2.lvd142m
   pretrained: true
   backbone_source: timm
   dropout: 0.2
@@ -84,17 +84,19 @@ model:
   std: ${dataset.stats.std}
   hidden_dim: 128
   num_layers: 2
-  weights: null
+  weights: checkpoints\classification\base_dinov2\best-v3.ckpt
 
 train:
   batch_size: ${dataset.batch_size}
-  epochs: 25
-  lr: 0.0001
+  epochs: 20
+  lr: 1e-3
   label_smoothing: 0.0
-  weight_decay: 0.0001
-  lrf: 0.1
+  weight_decay: 1e-3
+  lrf: 1e-2
   precision: bf16-mixed
   accelerator: auto
+  num_workers: 4
+  val_check_interval: 2
 
 checkpoint:
   monitor: val_f1score
