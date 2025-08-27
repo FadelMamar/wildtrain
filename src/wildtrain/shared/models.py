@@ -226,14 +226,6 @@ class YoloConfig(BaseConfig):
     overlap_metric: str = Field(default="IOU", description="Overlap metric")
     task: str = Field(default="detect", description="YOLO task type (detect, classify, segment)")
     
-    @field_validator('device')
-    @classmethod
-    def validate_device(cls, v):
-        valid_devices = ['cpu', 'cuda']
-        if v not in valid_devices:
-            raise ValueError(f"Device must be one of {valid_devices}")
-        return v
-
 
 class MMDetConfig(BaseConfig):
     """MMDetection model configuration."""
@@ -819,14 +811,7 @@ class ClassifierRegistrationConfig(BaseConfig):
     """Configuration for registering a classification model to MLflow Model Registry."""
     weights: Optional[str] = Field(default=None,description="Path to the model checkpoint file")
     processing: RegistrationBase = Field(description="processing information")
-    
-    @field_validator('weights')
-    @classmethod
-    def validate_weights_path(cls, v):
-        if v is not None and not Path(v).exists():
-            raise ValueError(f"Model checkpoint file does not exist: {v}")
-        return v
-    
+        
     
 
 class DetectorRegistrationConfig(BaseConfig):
