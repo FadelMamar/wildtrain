@@ -2,10 +2,28 @@
 # Simple configuration for common use cases
 
 # Dataset configuration
-dataset_name: "savmap-train"
-prediction_field: "detection_predictions"
+fiftyone:
+  dataset_name: "savmap-train"
+  prediction_field: "detection_predictions"
 
-# localizer configuration (at root level as expected by DetectionVisualizationConfig)
+label_studio:
+  url: "http://localhost:8080"
+  api_key: "1234567890"
+  project_id: 1
+  model_tag: "version-demo"
+
+# processing configuration
+batch_size: 8
+debug: false
+
+mlflow:
+  alias: demo
+  name: detector
+  tracking_uri: "http://localhost:5000"
+  dwnd_location: null
+
+
+# localizer configuration
 localizer:
   weights: models/best.pt
   imgsz: 800
@@ -18,18 +36,7 @@ localizer:
 # classifier configuration (optional)
 classifier_weights: checkpoints/classification/demo/best_classifier.pt
 
-mlflow:
-  alias: null
-  name: null
-  tracking_uri: "http://localhost:5000"
-  dwnd_location: null
 
-# processing configuration
-batch_size: 8
-debug: false
 
-label_studio:
-  url: "http://localhost:8080"
-  api_key: "1234567890"
-  project_id: 1
-  model_tag: "version-demo"
+
+
