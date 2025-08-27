@@ -44,15 +44,17 @@ class Visualizer:
                  ):
 
         self.fiftyone_dataset_name = fiftyone_dataset_name
-        self.dataset = None
+        self.fiftyone_dataset = None
         self.label_studio_client = None
         self.project = None
         self.label_studio_url = None
+
+        assert (fiftyone_dataset_name is None) ^ (label_studio_url is None), "Either fiftyone_dataset_name or label_studio_url must be provided"
         
         if fiftyone_dataset_name is not None:
             if fiftyone_dataset_name not in fo.list_datasets():
                 raise ValueError(f"Dataset {fiftyone_dataset_name} not found")
-            self.dataset = fo.load_dataset(fiftyone_dataset_name)
+            self.fiftyone_dataset = fo.load_dataset(fiftyone_dataset_name)
         else:
             assert label_studio_url is not None
             assert label_studio_api_key is not None
@@ -71,7 +73,7 @@ class Visualizer:
         return torch.stack(batch_images)
         
     def get_fiftyone_samples(self,debug:bool=False,batch_size:int=32):
-        samples = list(self.dataset)
+        samples = list(self.fiftyone_dataset)
         num_samples = len(samples)
         if debug:
             num_samples = 25
@@ -122,7 +124,7 @@ class Visualizer:
 
         """Add predictions from a GenericClassifier to all samples in the FiftyOne dataset using batching."""
         
-        if self.dataset is None:
+        if self.fiftyone_dataset is None:
             raise ValueError("No dataset found")
         for batch_tensor,batch_samples in self.get_fiftyone_samples(debug=debug,batch_size=batch_size):
             preds = model.predict(batch_tensor)
@@ -130,7 +132,7 @@ class Visualizer:
                 if pred is not None:
                     sample[prediction_field] = fo.Classification(label=pred["class"], confidence=pred["score"])
                     sample.save()
-        self.dataset.save()
+        self.fiftyone_dataset.save()
         
     def add_predictions_from_detector(self, 
                                     detector: Detector, 
@@ -151,7 +153,7 @@ class Visualizer:
             return batch_tensor
 
 
-        if self.dataset is not None:
+        if self.fiftyone_dataset is not None:
             for batch_tensor,batch_samples in self.get_fiftyone_samples(debug=debug,batch_size=batch_size):
                 batch_tensor = normalize_and_resize(batch_tensor)
                 B,C,H,W = batch_tensor.shape
@@ -162,7 +164,7 @@ class Visualizer:
                     fo_detections = Detector.to_fiftyone(detections,images_width=W,images_height=H)
                     sample[prediction_field] = fo.Detections(detections=fo_detections)
                     sample.save()
-            self.dataset.save()
+            self.fiftyone_dataset.save()
 
         else:
             for batch_tensor,task_ids in self.get_label_studio_samples(debug=debug,batch_size=batch_size):

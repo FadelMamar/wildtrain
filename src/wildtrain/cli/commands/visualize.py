@@ -108,8 +108,8 @@ def detector_predictions(
         console.print("cfg:",cfg)
         
         # Extract configuration values
-        dataset_name = cfg.dataset_name
-        prediction_field = cfg.prediction_field
+        dataset_name = cfg.fiftyone.dataset_name
+        prediction_field = cfg.fiftyone.prediction_field
                 
         console.print(f"[bold green]Uploading detector predictions to FiftyOne dataset:[/bold green] {dataset_name}")
                 

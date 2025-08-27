@@ -361,10 +361,14 @@ class LabelStudioConfig(BaseConfig):
     project_id: int = Field(default=1, description="Label Studio project ID")
     model_tag: str = Field(default="version-demo", description="Model tag")
 
-class DetectionVisualizationConfig(BaseConfig):
-    """Visualization configuration."""
+class FiftyOneConfig(BaseConfig):
+    """FiftyOne configuration."""
     dataset_name: str = Field(description="FiftyOne dataset name")
     prediction_field: str = Field(description="Prediction field name")
+
+class DetectionVisualizationConfig(BaseConfig):
+    """Visualization configuration."""
+    fiftyone: FiftyOneConfig = Field(description="FiftyOne configuration")
     localizer: YoloConfig = Field(description="Localizer configuration")
     classifier_weights: Optional[str] = Field(default=None, description="Classifier weights path")
     batch_size: int = Field(gt=0, description="Processing batch size")
