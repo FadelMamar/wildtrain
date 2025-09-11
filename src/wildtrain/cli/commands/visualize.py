@@ -1,5 +1,6 @@
 """Visualization-related CLI commands."""
 
+import traceback
 import typer
 from pathlib import Path
 from omegaconf import OmegaConf
@@ -72,10 +73,10 @@ def classifier_predictions(
         console.print(f"[bold blue]Classifier predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
         
     except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
-        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Configuration error: {traceback.format_exc()}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]✗[/bold red] Visualization failed: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Visualization failed: {traceback.format_exc()}")
         raise typer.Exit(1)
 
 
@@ -145,8 +146,8 @@ def detector_predictions(
         console.print(f"[bold blue]Detector predictions uploaded to FiftyOne dataset:[/bold blue] {dataset_name}")
         
     except (ConfigFileNotFoundError, ConfigParseError, ConfigValidationError) as e:
-        console.print(f"[bold red]✗[/bold red] Configuration error: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Configuration error: {traceback.format_exc()}")
         raise typer.Exit(1)
     except Exception as e:
-        console.print(f"[bold red]✗[/bold red] Visualization failed: {str(e)}")
+        console.print(f"[bold red]✗[/bold red] Visualization failed: {traceback.format_exc()}")
         raise typer.Exit(1)
