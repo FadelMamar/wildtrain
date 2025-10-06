@@ -157,7 +157,7 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         self.model =  Detector.from_config(localizer_config=localizer_cfg,
                                        classifier_ckpt=classifier_ckpt,
                                        classifier_export_kwargs=config.classifier.processing)
-        self.model.set_device("cuda" if torch.cuda.is_available() else "cpu")
+        #self.model.set_device("cuda" if torch.cuda.is_available() else "cpu")
     
     def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input):
         """Predict from the model."""
