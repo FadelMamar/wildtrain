@@ -107,8 +107,6 @@ class ClassifierWrapper(mlflow.pyfunc.PythonModel):
         model_path = normalize_path(model_path)
         self.model = GenericClassifier.load_from_checkpoint(str(model_path))
         self.model.to_torchscript()
-        if torch.cuda.is_available():
-            self.model.to("cuda")
     
     def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input):
         return self.model.predict(torch.tensor(model_input))
@@ -157,7 +155,7 @@ class DetectorWrapper(mlflow.pyfunc.PythonModel):
         self.model =  Detector.from_config(localizer_config=localizer_cfg,
                                        classifier_ckpt=classifier_ckpt,
                                        classifier_export_kwargs=config.classifier.processing)
-        self.model.set_device("cuda" if torch.cuda.is_available() else "cpu")
+        #self.model.set_device("cuda" if torch.cuda.is_available() else "cpu")
     
     def predict(self,context: mlflow.pyfunc.PythonModelContext,model_input):
         """Predict from the model."""
@@ -233,7 +231,8 @@ class ModelRegistrar:
                                        classifier_ckpt=classifier_ckpt,
                                        classifier_export_kwargs=config.classifier.processing)
         if config.classifier.processing.export_format == "onnx":
-            model.classifier.set_onnx_program(onnx_program=None)
+            if model.classifier is not None:
+                model.classifier.set_onnx_program(onnx_program=None)
         
         x = torch.rand(localizer_processing.batch_size,3,localizer_cfg.imgsz,localizer_cfg.imgsz)
         signature = infer_signature(x.cpu().numpy(), list(dict()))

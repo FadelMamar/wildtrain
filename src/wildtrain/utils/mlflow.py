@@ -2,8 +2,7 @@ import mlflow
 import traceback
 from pathlib import Path
 from typing import Optional, Union
-from ..utils.logging import get_logger,ROOT
-import torch
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,7 +34,9 @@ def load_registered_model(
 
     try:
         model = mlflow.pyfunc.load_model(str(dwnd_location))
-    except:
+    except Exception as e:
+        logger.error(f"Error loading model from {dwnd_location}: {e}")
+        logger.info(f"Loading model from {modelURI}")
         model = mlflow.pyfunc.load_model(modelURI, dst_path=str(dwnd_location))
 
     metadata = dict(version=modelversion, modeluri=modelURI,

@@ -181,6 +181,7 @@ class Detector(torch.nn.Module):
         num_detections = detection.xyxy.shape[0]
         for i in range(num_detections):
             x_min, y_min, x_max, y_max = detection.xyxy[i]
+            x_min, y_min, x_max, y_max = float(x_min), float(y_min), float(x_max), float(y_max)
             w = x_max - x_min
             h = y_max - y_min
             score = float(detection.confidence[i])
