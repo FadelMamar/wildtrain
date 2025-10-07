@@ -256,7 +256,8 @@ class Detector(torch.nn.Module):
                 detections = self._to_dict(detections)
             return detections
         
-        boxes = torch.cat(boxes, dim=0)
+        boxes = torch.cat(boxes, dim=0).to(self.localizer.device,non_blocking=True)
+        images = images.to(self.localizer.device,non_blocking=True)
         crops = ops.roi_align(
             images,
             boxes,
@@ -267,7 +268,7 @@ class Detector(torch.nn.Module):
         )
 
         with torch.autocast(device_type=self.localizer.device):
-            crops = crops.to(self.localizer.device)
+            crops = crops.to(self.localizer.device,non_blocking=True)
             cls_results = self.classifier.predict(crops)  # (N, num_classes)
         
         results = deepcopy(detections)
