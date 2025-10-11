@@ -12,6 +12,7 @@ import base64
 from pathlib import Path
 import tempfile
 import fiftyone as fo
+from concurrent.futures import ThreadPoolExecutor
 
 from .classifier import GenericClassifier
 from .localizer import ObjectLocalizer, UltralyticsLocalizer
@@ -36,7 +37,7 @@ class Detector(torch.nn.Module):
         self.metadata: Optional[Dict[str,Any]] = None
     
     @property
-    def input_shape(self,)->Tuple:
+    def input_shape(self,)->Tuple[int,int,int,int]:
         if self.metadata is None:
             return None
         return (self.metadata["batch"],3,self.metadata['imgsz'],self.metadata['imgsz'])
@@ -272,7 +273,6 @@ class Detector(torch.nn.Module):
             cls_results = self.classifier.predict(crops)  # (N, num_classes)
         
         results = deepcopy(detections)
-        class_mapping = self.classifier.label_to_class_map
 
         # Map from image index to list of (detection index in boxes, classifier result)
         img_to_det_indices = defaultdict(list)
@@ -291,7 +291,7 @@ class Detector(torch.nn.Module):
                 xyxy=det.xyxy,
                 confidence=det.confidence * scores,
                 class_id=class_ids,
-                metadata={"class_mapping":class_mapping},
+                metadata={"class_mapping":self.classifier.label_to_class_map},
             )
         
         if return_as_dict:
@@ -299,6 +299,19 @@ class Detector(torch.nn.Module):
             return results
 
         return results
+
+
+    def predict_dataset(self,tensor_dataset:torch.Tensor,max_workers:int=3,return_as_dict:bool=False)->List[sv.Detections]:
+        b,c,_,_ = self.input_shape
+        assert tensor_dataset.ndim == 4, f"Expected 4D tensor but received {tensor_dataset.ndim}D tensor"
+        assert tensor_dataset.shape[1] == c, f"Expected {c} channels but received {tensor_dataset.shape[1]} channels"
+        assert tensor_dataset.shape[0] > b, f"Expected {tensor_dataset.shape[0]} > {b}, number of images in the dataset must be greater than the batch size"
+        detections = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(self.predict, tensor_dataset[i:i+b], return_as_dict=return_as_dict) for i in range(0,tensor_dataset.shape[0],b)]
+            for future in futures:
+                detections.extend(future.result())
+        return detections
 
     def forward(self,images:torch.Tensor)->List[Dict]:
         return self.predict(images,return_as_dict=True)
