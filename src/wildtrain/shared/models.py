@@ -355,8 +355,8 @@ class LabelStudioConfig(BaseConfig):
 
 class FiftyOneConfig(BaseConfig):
     """FiftyOne configuration."""
-    dataset_name: str = Field(description="FiftyOne dataset name")
-    prediction_field: str = Field(description="Prediction field name")
+    dataset_name: Optional[str] = Field(default=None, description="FiftyOne dataset name")
+    prediction_field: Optional[str] = Field(default=None, description="Prediction field name")
 
 class DetectionVisualizationConfig(BaseConfig):
     """Visualization configuration."""
