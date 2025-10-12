@@ -37,7 +37,7 @@ class Detector(torch.nn.Module):
         self.metadata: Optional[Dict[str,Any]] = None
     
     @property
-    def input_shape(self,)->Tuple[int,int,int,int]:
+    def input_shape(self,)->Tuple:
         if self.metadata is None:
             return None
         return (self.metadata["batch"],3,self.metadata['imgsz'],self.metadata['imgsz'])
