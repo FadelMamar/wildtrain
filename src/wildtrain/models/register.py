@@ -18,7 +18,7 @@ from wildtrain.models.detector import Detector
 from wildtrain.utils.logging import get_logger, ROOT
 from wildtrain.utils.io import save_yaml
 
-import tomli as tomllib
+import tomllib
 
 
 from omegaconf import OmegaConf, DictConfig
